@@ -45,6 +45,32 @@ def _append_audit(log_path: Path, line: str) -> None:
         fh.write(line + "\n")
 
 
+def _safe_rmtree(path: Path) -> bool:
+    """Remove *path* recursively, refusing to follow symlinks.
+
+    Returns True if the directory was removed, False if refused or absent.
+
+    Security: ``shutil.rmtree`` follows symlinks by default, which can lead
+    to unintentional destruction of the symlink *target* (e.g. if
+    ``~/.networking-agent/drafts`` is a symlink to ``~/Documents``). We
+    refuse such cases and print a stderr warning so the operator can
+    inspect manually. DB-level deletions still proceed.
+    """
+    if not path.exists() and not path.is_symlink():
+        return False
+    if path.is_symlink():
+        print(
+            f"Refusing to remove {str(path)!r}: it is a symlink. "
+            "Inspect manually and remove by hand if intended.",
+            file=sys.stderr,
+        )
+        return False
+    if path.is_dir():
+        shutil.rmtree(path)
+        return True
+    return False
+
+
 def _purge_contact(contact_id: int) -> None:
     """Hard-delete one contact and all dependent rows."""
     with with_writer() as conn:
@@ -97,8 +123,7 @@ def _purge_company(slug: str, drafts_dir: Path) -> None:
 
     # Remove draft artifacts directory (outside the DB transaction).
     slug_dir = drafts_dir / slug
-    if slug_dir.exists():
-        shutil.rmtree(slug_dir)
+    _safe_rmtree(slug_dir)
 
 
 def _purge_all(drafts_dir: Path) -> None:
@@ -110,8 +135,7 @@ def _purge_all(drafts_dir: Path) -> None:
         conn.execute("DELETE FROM companies")
 
     # Remove the entire drafts directory.
-    if drafts_dir.exists():
-        shutil.rmtree(drafts_dir)
+    _safe_rmtree(drafts_dir)
 
 
 # ---------------------------------------------------------------------------

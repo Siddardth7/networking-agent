@@ -344,6 +344,72 @@ class TestPurgeAll:
         finally:
             conn.close()
 
+    def test_all_refuses_symlinked_drafts_dir(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """If drafts_dir is a symlink, --all must refuse rmtree but still purge DB."""
+        import os
+
+        _, contact_id, _, _ = _seed_contact()
+
+        # Real target directory (e.g. ~/Documents stand-in) populated with a
+        # canary file that must NOT be deleted.
+        real_target = tmp_path / "real_target"
+        real_target.mkdir()
+        canary = real_target / "DO_NOT_DELETE.txt"
+        canary.write_text("important user data")
+
+        drafts_dir = tmp_path / "drafts"  # symlink → real_target
+        os.symlink(real_target, drafts_dir)
+
+        log_path = tmp_path / "purge.log"
+        args = _make_args(all=True, confirm=True)
+        rc = run_purge(args, _log_path=log_path, _drafts_dir=drafts_dir)
+
+        # Purge succeeded (DB cleared) but symlink target left intact.
+        assert rc == 0
+        assert _count("contacts", "id", contact_id) == 0
+        assert canary.exists(), "rmtree must NOT follow the symlink"
+        assert real_target.exists()
+        assert drafts_dir.is_symlink(), "symlink itself should remain untouched"
+
+        captured = capsys.readouterr()
+        assert "Refusing to remove" in captured.err
+        assert "symlink" in captured.err
+
+    def test_company_refuses_symlinked_slug_dir(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """If drafts/<slug>/ is a symlink, --company must refuse rmtree but still purge DB."""
+        import os
+
+        company_id, contact_id, _, _ = _seed_contact("northrop")
+
+        drafts_dir = tmp_path / "drafts"
+        drafts_dir.mkdir()
+
+        real_target = tmp_path / "real_slug_target"
+        real_target.mkdir()
+        canary = real_target / "canary.txt"
+        canary.write_text("keep me")
+
+        slug_dir = drafts_dir / "northrop"
+        os.symlink(real_target, slug_dir)
+
+        log_path = tmp_path / "purge.log"
+        args = _make_args(company="northrop")
+        rc = run_purge(args, _log_path=log_path, _drafts_dir=drafts_dir)
+
+        # DB rows gone; symlink target preserved.
+        assert rc == 0
+        assert _count("companies", "id", company_id) == 0
+        assert _count("contacts", "company_id", company_id) == 0
+        assert canary.exists(), "rmtree must NOT follow the per-company symlink"
+        assert slug_dir.is_symlink()
+
+        captured = capsys.readouterr()
+        assert "Refusing to remove" in captured.err
+
     def test_all_confirm_removes_drafts_dir(self, tmp_path: Path) -> None:
         """--all --confirm must remove the entire drafts directory."""
         _seed_contact()
