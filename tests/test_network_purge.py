@@ -376,6 +376,9 @@ class TestPurgeAll:
         captured = capsys.readouterr()
         assert "Refusing to remove" in captured.err
         assert "symlink" in captured.err
+        # Stdout summary and audit log must reflect the symlink refusal.
+        assert "symlink" in captured.out
+        assert "symlink-skipped" in log_path.read_text()
 
     def test_company_refuses_symlinked_slug_dir(
         self, tmp_path: Path, capsys
@@ -409,6 +412,8 @@ class TestPurgeAll:
 
         captured = capsys.readouterr()
         assert "Refusing to remove" in captured.err
+        assert "symlink" in captured.out
+        assert "symlink-skipped" in log_path.read_text()
 
     def test_all_confirm_removes_drafts_dir(self, tmp_path: Path) -> None:
         """--all --confirm must remove the entire drafts directory."""

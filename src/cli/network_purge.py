@@ -65,7 +65,10 @@ def _safe_rmtree(path: Path) -> bool:
             file=sys.stderr,
         )
         return False
-    if path.is_dir():
+    # Defensive: `is_dir()` follows symlinks, but the earlier early-return
+    # already eliminated that case. Re-asserting `not path.is_symlink()`
+    # keeps the helper safe against future refactors that reorder branches.
+    if path.is_dir() and not path.is_symlink():
         shutil.rmtree(path)
         return True
     return False
@@ -86,10 +89,19 @@ def _purge_contact(contact_id: int) -> None:
         )
 
 
-def _purge_company(slug: str, drafts_dir: Path) -> None:
+def _purge_company(slug: str, drafts_dir: Path) -> tuple[bool, bool]:
     """Hard-delete all contacts (and their dependents) for a company slug.
 
     Also removes the draft artifact directory at ``drafts_dir/<slug>/``.
+
+    Returns
+    -------
+    (db_purged, fs_purged):
+        ``db_purged`` is True if the company existed and its rows were
+        deleted; ``fs_purged`` is True if the drafts subdirectory was
+        actually removed (False if it was a symlink and refused, or
+        absent). Callers use this to report a truthful summary and
+        audit-log entry.
     """
     with with_writer() as conn:
         row = conn.execute(
@@ -97,7 +109,7 @@ def _purge_company(slug: str, drafts_dir: Path) -> None:
         ).fetchone()
         if row is None:
             # Nothing to delete — not an error.
-            return
+            return False, False
         company_id: int = row["id"]
 
         # Collect all contact IDs for this company.
@@ -123,11 +135,16 @@ def _purge_company(slug: str, drafts_dir: Path) -> None:
 
     # Remove draft artifacts directory (outside the DB transaction).
     slug_dir = drafts_dir / slug
-    _safe_rmtree(slug_dir)
+    fs_purged = _safe_rmtree(slug_dir)
+    return True, fs_purged
 
 
-def _purge_all(drafts_dir: Path) -> None:
-    """Hard-delete every row from contacts, drafts, outreach_log, and companies."""
+def _purge_all(drafts_dir: Path) -> bool:
+    """Hard-delete every row from contacts, drafts, outreach_log, and companies.
+
+    Returns True if the drafts directory was removed, False if it was a
+    symlink (refused) or absent.
+    """
     with with_writer() as conn:
         conn.execute("DELETE FROM outreach_log")
         conn.execute("DELETE FROM drafts")
@@ -135,7 +152,7 @@ def _purge_all(drafts_dir: Path) -> None:
         conn.execute("DELETE FROM companies")
 
     # Remove the entire drafts directory.
-    _safe_rmtree(drafts_dir)
+    return _safe_rmtree(drafts_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -213,18 +230,37 @@ def run_purge(
             print(f"Purged contact {contact_id}.")
 
         elif company_slug is not None:
-            _purge_company(company_slug, drafts_dir)
+            db_purged, fs_purged = _purge_company(company_slug, drafts_dir)
+            fs_note = "fs=ok" if fs_purged else "fs=symlink-skipped"
             audit_line = (
-                f"{_iso_now()} | purged company={company_slug} reason=user-request"
+                f"{_iso_now()} | purged company={company_slug} "
+                f"reason=user-request {fs_note}"
             )
             _append_audit(log_path, audit_line)
-            print(f"Purged company {company_slug!r}.")
+            if db_purged and not fs_purged and (drafts_dir / company_slug).is_symlink():
+                print(
+                    f"Purged company {company_slug!r}. "
+                    "Drafts directory was a symlink and was left in place; "
+                    "see stderr."
+                )
+            else:
+                print(f"Purged company {company_slug!r}.")
 
         else:  # purge_all
-            _purge_all(drafts_dir)
-            audit_line = f"{_iso_now()} | purged all reason=user-request"
+            fs_purged = _purge_all(drafts_dir)
+            fs_note = "fs=ok" if fs_purged else "fs=symlink-skipped"
+            audit_line = (
+                f"{_iso_now()} | purged all reason=user-request {fs_note}"
+            )
             _append_audit(log_path, audit_line)
-            print("Purged all data.")
+            if not fs_purged and drafts_dir.is_symlink():
+                print(
+                    "Purged all data. "
+                    "Drafts directory was a symlink and was left in place; "
+                    "see stderr."
+                )
+            else:
+                print("Purged all data.")
 
     except Exception as exc:  # noqa: BLE001
         print(f"Error during purge: {exc}")
