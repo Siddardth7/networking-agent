@@ -15,9 +15,108 @@ from src.providers.base import EmailProvider, register_provider
 from src.providers.quota_manager import QuotaManager
 from src.providers.retry import AuthError, with_retry
 
-__all__ = ["HunterProvider"]
+__all__ = ["HunterProvider", "scrub_api_key_in_exc"]
 
 _HUNTER_ENDPOINT = "https://api.hunter.io/v2/email-finder"
+
+_REDACTED = "***"
+
+
+def scrub_api_key_in_exc(exc: BaseException, api_key: Optional[str] = None) -> BaseException:
+    """Return a new exception of the same class with ``api_key`` redacted.
+
+    Hunter authenticates via ``?api_key=`` query parameter, so any
+    ``httpx`` exception carrying a ``request.url`` will leak the key if its
+    ``__repr__``/``__str__`` reaches stderr. This helper builds a sanitized
+    twin of ``exc``:
+
+    - For ``httpx.HTTPStatusError``: replaces ``api_key`` query param on
+      ``request.url`` (and the response's request URL) with ``***``.
+    - For ``httpx.RequestError`` (incl. ``TimeoutException``): same for
+      ``request.url`` when present.
+    - Always scrubs the message/args via literal key replacement and a
+      regex catch-all on ``api_key=<value>``.
+
+    The original exception is *not* chained (use ``raise scrubbed from None``)
+    to avoid the leak resurfacing via ``__cause__``/``__context__``.
+    """
+    import re
+
+    def _scrub_str(s):
+        if not isinstance(s, str):
+            return s
+        out = s
+        if api_key:
+            out = out.replace(api_key, _REDACTED)
+        out = re.sub(r"(api_key=)[^&\s'\"]+", r"\1" + _REDACTED, out)
+        return out
+
+    def _scrub_url(url):
+        try:
+            if "api_key" in url.params:
+                return url.copy_set_param("api_key", _REDACTED)
+        except Exception:
+            pass
+        return url
+
+    new_args = tuple(_scrub_str(a) if isinstance(a, str) else a for a in exc.args)
+
+    if isinstance(exc, httpx.HTTPStatusError):
+        req = exc.request
+        resp = exc.response
+        try:
+            req = httpx.Request(
+                method=req.method,
+                url=_scrub_url(req.url),
+                headers=req.headers,
+            )
+        except Exception:
+            pass
+        try:
+            resp_scrubbed = httpx.Response(
+                status_code=resp.status_code,
+                headers=resp.headers,
+                content=resp.content,
+                request=req,
+            )
+        except Exception:
+            resp_scrubbed = resp
+        return httpx.HTTPStatusError(
+            message=_scrub_str(str(exc)),
+            request=req,
+            response=resp_scrubbed,
+        )
+
+    if isinstance(exc, httpx.RequestError):
+        req = getattr(exc, "_request", None)
+        if req is None:
+            try:
+                req = exc.request
+            except RuntimeError:
+                req = None
+        scrubbed_req = None
+        if req is not None:
+            try:
+                scrubbed_req = httpx.Request(
+                    method=req.method,
+                    url=_scrub_url(req.url),
+                    headers=req.headers,
+                )
+            except Exception:
+                scrubbed_req = None
+        try:
+            new_exc = type(exc)(_scrub_str(str(exc)), request=scrubbed_req)
+        except TypeError:
+            try:
+                new_exc = type(exc)(_scrub_str(str(exc)))
+            except Exception:
+                new_exc = exc
+        return new_exc
+
+    try:
+        return type(exc)(*new_args)
+    except Exception:
+        return exc
 
 
 @register_provider(name="hunter", kind="email")
@@ -114,9 +213,12 @@ class HunterProvider(EmailProvider):
             "api_key": self._api_key,
         }
 
-        response = with_retry(
-            lambda: self._http_client.get(_HUNTER_ENDPOINT, params=params)
-        )
+        try:
+            response = with_retry(
+                lambda: self._http_client.get(_HUNTER_ENDPOINT, params=params)
+            )
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            raise scrub_api_key_in_exc(exc, self._api_key) from None
 
         # --- Parse response ---
         payload = response.json()

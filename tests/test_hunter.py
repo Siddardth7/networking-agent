@@ -234,3 +234,83 @@ def test_find_email_null_result() -> None:
     assert result.email is None
     assert result.verified is False
     assert result.source == "hunter"
+
+
+# ---------------------------------------------------------------------------
+# P9 — API key scrubbing in raised exceptions
+# ---------------------------------------------------------------------------
+
+
+_LEAKY_KEY = "46aa5fc7deadbeef0123456789abcdef01234567"
+
+
+def _make_5xx_client() -> httpx.Client:
+    """Return an httpx.Client that always returns HTTP 500."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="boom", request=request)
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def _make_timeout_client() -> httpx.Client:
+    """Return an httpx.Client whose transport raises ConnectTimeout with the leaky URL."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("connect timed out", request=request)
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_find_email_scrubs_key_on_http_error(monkeypatch) -> None:
+    """After 5xx exhaustion, the raised HTTPStatusError must not contain the api_key."""
+    # Speed up retry sleeps so the test runs fast
+    import src.providers.retry as retry_mod
+    monkeypatch.setattr(retry_mod.time, "sleep", lambda *_a, **_k: None)
+
+    client = _make_5xx_client()
+    provider = HunterProvider(api_key=_LEAKY_KEY, http_client=client)
+
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        provider.find_email("Jane Doe", "boeing.com")
+
+    exc = exc_info.value
+    rendered = repr(exc) + " " + str(exc) + " " + str(exc.request.url)
+    assert _LEAKY_KEY not in rendered
+    assert "api_key=" + _LEAKY_KEY not in rendered
+    url_str = str(exc.request.url)
+    assert "api_key=***" in url_str or "api_key=%2A%2A%2A" in url_str
+    # __cause__/__context__ should be broken to prevent leak resurfacing
+    assert exc.__cause__ is None
+
+
+def test_find_email_scrubs_key_on_timeout(monkeypatch) -> None:
+    """After timeout-retry exhaustion, raised TimeoutException must not contain the api_key."""
+    import src.providers.retry as retry_mod
+    monkeypatch.setattr(retry_mod.time, "sleep", lambda *_a, **_k: None)
+
+    client = _make_timeout_client()
+    provider = HunterProvider(api_key=_LEAKY_KEY, http_client=client)
+
+    with pytest.raises(httpx.RequestError) as exc_info:
+        provider.find_email("Jane Doe", "boeing.com")
+
+    exc = exc_info.value
+    rendered = repr(exc) + " " + str(exc)
+    try:
+        rendered += " " + str(exc.request.url)
+    except (RuntimeError, AttributeError):
+        pass
+    assert _LEAKY_KEY not in rendered
+    assert exc.__cause__ is None
+
+
+def test_find_email_happy_path_no_scrubbing() -> None:
+    """Regression: happy path with leaky-looking key still returns a valid result."""
+    client = _make_client(HUNTER_VERIFIED)
+    provider = HunterProvider(api_key=_LEAKY_KEY, http_client=client)
+
+    result = provider.find_email("Jane Doe", "boeing.com")
+
+    assert result.email == "jane.doe@boeing.com"
+    assert result.verified is True
