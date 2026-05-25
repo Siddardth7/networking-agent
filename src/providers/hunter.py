@@ -6,7 +6,9 @@ Traceability: DESIGN.md §4 (Provider Layer), §8.12 (Hard-stop quota enforcemen
 
 from __future__ import annotations
 
-from typing import Optional
+import re
+from contextlib import contextmanager
+from typing import Iterator, Optional
 
 import httpx
 
@@ -15,14 +17,32 @@ from src.providers.base import EmailProvider, register_provider
 from src.providers.quota_manager import QuotaManager
 from src.providers.retry import AuthError, with_retry
 
-__all__ = ["HunterProvider", "scrub_api_key_in_exc"]
+__all__ = ["HunterProvider", "scrub_api_key_in_exc", "scrubbed_hunter_call"]
 
 _HUNTER_ENDPOINT = "https://api.hunter.io/v2/email-finder"
 
 _REDACTED = "***"
 
 
-def scrub_api_key_in_exc(exc: BaseException, api_key: Optional[str] = None) -> BaseException:
+@contextmanager
+def scrubbed_hunter_call(api_key: str) -> Iterator[None]:
+    """Context manager that scrubs ``api_key`` from any httpx exception raised.
+
+    Use at every Hunter call site so the wire-level ``?api_key=`` value
+    cannot leak into stderr tracebacks. Intentionally re-raises with
+    ``from None`` to break the ``__cause__``/``__context__`` chain — the
+    original unscrubbed exception must not surface.
+    """
+    try:
+        yield
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        # `from None` is deliberate: the original exception's repr would
+        # leak the api_key via request.url. Traceback chain is intentionally
+        # broken for security.
+        raise scrub_api_key_in_exc(exc, api_key) from None
+
+
+def scrub_api_key_in_exc(exc: BaseException, api_key: str) -> BaseException:
     """Return a new exception of the same class with ``api_key`` redacted.
 
     Hunter authenticates via ``?api_key=`` query parameter, so any
@@ -39,8 +59,10 @@ def scrub_api_key_in_exc(exc: BaseException, api_key: Optional[str] = None) -> B
 
     The original exception is *not* chained (use ``raise scrubbed from None``)
     to avoid the leak resurfacing via ``__cause__``/``__context__``.
+
+    ``api_key`` is required — passing ``""`` to disable literal replacement
+    is intentional and supported by the regex fallback.
     """
-    import re
 
     def _scrub_str(s):
         if not isinstance(s, str):
@@ -213,12 +235,10 @@ class HunterProvider(EmailProvider):
             "api_key": self._api_key,
         }
 
-        try:
+        with scrubbed_hunter_call(self._api_key):
             response = with_retry(
                 lambda: self._http_client.get(_HUNTER_ENDPOINT, params=params)
             )
-        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-            raise scrub_api_key_in_exc(exc, self._api_key) from None
 
         # --- Parse response ---
         payload = response.json()

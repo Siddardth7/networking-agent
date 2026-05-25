@@ -314,3 +314,43 @@ def test_find_email_happy_path_no_scrubbing() -> None:
 
     assert result.email == "jane.doe@boeing.com"
     assert result.verified is True
+
+
+def test_scrub_api_key_in_exc_unit() -> None:
+    """Direct unit test for the scrubber so call-site refactors can't silently
+    break it."""
+    from src.providers.hunter import scrub_api_key_in_exc
+
+    leaky_url = f"https://api.hunter.io/v2/email-finder?api_key={_LEAKY_KEY}&domain=boeing.com"
+    request = httpx.Request("GET", leaky_url)
+    response = httpx.Response(500, request=request, content=b"server error")
+    original = httpx.HTTPStatusError("500 Server Error", request=request, response=response)
+
+    scrubbed = scrub_api_key_in_exc(original, _LEAKY_KEY)
+
+    # Key value is gone from every public surface.
+    assert _LEAKY_KEY not in str(scrubbed)
+    assert _LEAKY_KEY not in repr(scrubbed)
+    assert _LEAKY_KEY not in str(scrubbed.request.url)
+    # And the redaction marker is present in the URL.
+    url = str(scrubbed.request.url)
+    assert "api_key=***" in url or "api_key=%2A%2A%2A" in url
+
+
+def test_scrubbed_hunter_call_context_manager() -> None:
+    """The shared context manager scrubs at any call site — exercises the CLI
+    path's reuse of the helper."""
+    from src.providers.hunter import scrubbed_hunter_call
+
+    leaky_url = f"https://api.hunter.io/v2/account?api_key={_LEAKY_KEY}"
+    request = httpx.Request("GET", leaky_url)
+    response = httpx.Response(500, request=request, content=b"oops")
+
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with scrubbed_hunter_call(_LEAKY_KEY):
+            raise httpx.HTTPStatusError("500 Server Error", request=request, response=response)
+
+    exc = exc_info.value
+    rendered = repr(exc) + " " + str(exc) + " " + str(exc.request.url)
+    assert _LEAKY_KEY not in rendered
+    assert exc.__cause__ is None  # `from None` broke the chain

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.core.config import HAIKU_MODEL
+from src.providers.hunter import scrubbed_hunter_call
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -241,17 +242,12 @@ def _check_hunter() -> tuple[list[str], bool]:
             ))
             return lines, True
 
-        import httpx  # noqa: PLC0415
-        from src.providers.hunter import scrub_api_key_in_exc  # noqa: PLC0415
-
         client, should_close = _get_http_client()
         try:
-            try:
+            with scrubbed_hunter_call(key):
                 resp = client.get(
                     f"https://api.hunter.io/v2/account?api_key={key}",
                 )
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                raise scrub_api_key_in_exc(exc, key) from None
         finally:
             if should_close:
                 client.close()
