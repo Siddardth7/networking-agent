@@ -215,3 +215,102 @@ class TestDraftForContacts:
         result = draft_for_contacts([], anthropic_client=client)
         assert result == {}
         client.messages.create.assert_not_called()
+
+
+class TestAtomicDraftSequence:
+    """P6 — per-contact draft sequence must be atomic.
+
+    If any insert fails mid-sequence, the entire transaction (DELETE of prior
+    v1 drafts, all channel INSERTs, and the DRAFTED state transition) must be
+    rolled back. The contact must remain in SELECTED state with NO partial
+    draft rows visible.
+    """
+
+    def test_failure_mid_insert_rolls_back_entire_sequence(self, db_path, monkeypatch):
+        _, contact_ids = _seed_contacts(1)
+        cid = contact_ids[0]
+        responses = [f"Draft {i}" for i in range(3)]
+        client = _make_anthropic(responses)
+
+        # Monkeypatch _insert_draft so the SECOND insert raises. The first
+        # insert should have been written to the shared transaction but rolled
+        # back when with_writer() catches the exception.
+        from src.agents import drafter as drafter_mod
+
+        real_insert = drafter_mod._insert_draft
+        call_state = {"n": 0}
+
+        def flaky_insert(contact_id, channel, body, subject, quality_flag, conn=None):
+            call_state["n"] += 1
+            if call_state["n"] == 2:
+                raise RuntimeError("simulated crash mid-sequence")
+            return real_insert(contact_id, channel, body, subject, quality_flag, conn=conn)
+
+        monkeypatch.setattr(drafter_mod, "_insert_draft", flaky_insert)
+
+        with pytest.raises(RuntimeError, match="Drafting failed for contact"):
+            draft_for_contacts([cid], anthropic_client=client)
+
+        # Verify atomicity: contact stayed SELECTED, no draft rows exist.
+        conn = get_connection()
+        try:
+            state_row = conn.execute(
+                "SELECT state FROM contacts WHERE id = ?", (cid,)
+            ).fetchone()
+            draft_rows = conn.execute(
+                "SELECT id FROM drafts WHERE contact_id = ?", (cid,)
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert state_row["state"] == "SELECTED", (
+            "Contact must NOT be marked DRAFTED when the draft sequence failed"
+        )
+        assert len(draft_rows) == 0, (
+            "No partial draft rows should remain after a rolled-back sequence"
+        )
+
+    def test_failure_rolls_back_v1_delete_too(self, db_path, monkeypatch):
+        """The DELETE of prior v1 drafts must also roll back so re-running
+        the contact later still sees the original drafts (no data loss)."""
+        _, contact_ids = _seed_contacts(1)
+        cid = contact_ids[0]
+
+        # Pre-seed an existing v1 draft for this contact (simulating a prior
+        # successful run that we're about to re-attempt).
+        with with_writer() as conn:
+            conn.execute(
+                "INSERT INTO drafts (contact_id, channel, body, subject, version, quality_flag) "
+                "VALUES (?, 'LINKEDIN_CONNECTION', 'pre-existing body', NULL, 1, 0)",
+                (cid,),
+            )
+
+        responses = [f"Draft {i}" for i in range(3)]
+        client = _make_anthropic(responses)
+
+        # Make the first insert raise so the DELETE that ran just before it
+        # within the same transaction must be rolled back as well.
+        from src.agents import drafter as drafter_mod
+
+        def always_fail(contact_id, channel, body, subject, quality_flag, conn=None):
+            raise RuntimeError("simulated failure before any insert")
+
+        monkeypatch.setattr(drafter_mod, "_insert_draft", always_fail)
+
+        with pytest.raises(RuntimeError):
+            draft_for_contacts([cid], anthropic_client=client)
+
+        conn = get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT body FROM drafts WHERE contact_id = ?", (cid,)
+            ).fetchall()
+            state = conn.execute(
+                "SELECT state FROM contacts WHERE id = ?", (cid,)
+            ).fetchone()["state"]
+        finally:
+            conn.close()
+
+        assert len(rows) == 1, "Pre-existing v1 draft must survive a rolled-back attempt"
+        assert rows[0]["body"] == "pre-existing body"
+        assert state == "SELECTED"

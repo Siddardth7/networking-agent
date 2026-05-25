@@ -186,9 +186,21 @@ def _draft_one_channel(
     return body, subject, quality_flag
 
 
-def _insert_draft(contact_id: int, channel: Channel, body: str, subject: Optional[str], quality_flag: bool) -> int:
-    """Insert a draft row and return its id."""
-    with with_writer() as conn:
+def _insert_draft(
+    contact_id: int,
+    channel: Channel,
+    body: str,
+    subject: Optional[str],
+    quality_flag: bool,
+    conn=None,
+) -> int:
+    """Insert a draft row and return its id.
+
+    If ``conn`` is provided, the INSERT is executed on the supplied connection
+    (the caller is responsible for the surrounding transaction / WRITE_LOCK).
+    Otherwise a new ``with_writer()`` block is opened.
+    """
+    if conn is not None:
         cursor = conn.execute(
             "INSERT INTO drafts (contact_id, channel, body, subject, version, quality_flag) "
             "VALUES (?, ?, ?, ?, 1, ?)",
@@ -196,10 +208,31 @@ def _insert_draft(contact_id: int, channel: Channel, body: str, subject: Optiona
         )
         return cursor.lastrowid
 
+    with with_writer() as new_conn:
+        cursor = new_conn.execute(
+            "INSERT INTO drafts (contact_id, channel, body, subject, version, quality_flag) "
+            "VALUES (?, ?, ?, ?, 1, ?)",
+            (contact_id, channel.value, body, subject, int(quality_flag)),
+        )
+        return cursor.lastrowid
 
-def _mark_contact_drafted(contact_id: int) -> None:
-    with with_writer() as conn:
+
+def _mark_contact_drafted(contact_id: int, conn=None) -> None:
+    """Mark a contact as DRAFTED.
+
+    If ``conn`` is provided, the UPDATE runs on the supplied connection
+    (caller manages the transaction). Otherwise a new ``with_writer()`` block
+    is opened.
+    """
+    if conn is not None:
         conn.execute(
+            "UPDATE contacts SET state = 'DRAFTED' WHERE id = ?",
+            (contact_id,),
+        )
+        return
+
+    with with_writer() as new_conn:
+        new_conn.execute(
             "UPDATE contacts SET state = 'DRAFTED' WHERE id = ?",
             (contact_id,),
         )
@@ -213,16 +246,6 @@ def _draft_all_channels_for_contact(
     contact = _load_contact(contact_id)
     if contact is None:
         return []
-
-    # Idempotency: clear any partial v1 drafts from a previously killed run.
-    # The contact is in SELECTED state when we start; v2+ revisions only exist
-    # after the marketer loop, which can't run until DRAFTED. So any v1 rows
-    # here are debris from an interrupted prior attempt.
-    with with_writer() as conn:
-        conn.execute(
-            "DELETE FROM drafts WHERE contact_id = ? AND version = 1",
-            (contact_id,),
-        )
 
     try:
         persona = Persona(contact["persona"])
@@ -245,23 +268,47 @@ def _draft_all_channels_for_contact(
     persona_template = _load_persona_template(persona)
     voice_doc = _load_voice_doc()
 
-    drafts: list[Draft] = []
+    # Generate all drafts via the LLM BEFORE acquiring the writer lock.
+    # Anthropic calls are slow (network) and would needlessly serialize
+    # parallel workers if held inside with_writer().
+    generated: list[tuple[Channel, str, Optional[str], bool]] = []
     for channel in Channel:
         body, subject, quality_flag = _draft_one_channel(
             contact, channel, anthropic_client, persona_template, voice_doc, bullets
         )
-        draft_id = _insert_draft(contact_id, channel, body, subject, quality_flag)
-        drafts.append(Draft(
-            draft_id=draft_id,
-            contact_id=contact_id,
-            channel=channel.value,
-            body=body,
-            subject=subject,
-            version=1,
-            quality_flag=quality_flag,
-        ))
+        generated.append((channel, body, subject, quality_flag))
 
-    _mark_contact_drafted(contact_id)
+    # Atomic per-contact write: delete prior v1 drafts (idempotency from P2),
+    # insert all channel drafts, and transition the contact to DRAFTED in one
+    # transaction. If any step raises, with_writer() rolls back the whole
+    # sequence so we never end up in DRAFTED with missing drafts (P6).
+    #
+    # Note: with_writer() is NOT reentrant (WRITE_LOCK is a plain
+    # threading.Lock). The inserts/state-transition helpers therefore take an
+    # optional `conn` and reuse this connection rather than nesting locks.
+    drafts: list[Draft] = []
+    with with_writer() as conn:
+        conn.execute(
+            "DELETE FROM drafts WHERE contact_id = ? AND version = 1",
+            (contact_id,),
+        )
+
+        for channel, body, subject, quality_flag in generated:
+            draft_id = _insert_draft(
+                contact_id, channel, body, subject, quality_flag, conn=conn
+            )
+            drafts.append(Draft(
+                draft_id=draft_id,
+                contact_id=contact_id,
+                channel=channel.value,
+                body=body,
+                subject=subject,
+                version=1,
+                quality_flag=quality_flag,
+            ))
+
+        _mark_contact_drafted(contact_id, conn=conn)
+
     return drafts
 
 
