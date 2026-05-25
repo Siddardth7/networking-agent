@@ -9,7 +9,7 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from src.agents.drafter import Draft, draft_for_contacts
+from src.agents.drafter import Draft, DrafterPartialFailure, draft_for_contacts
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import Channel
 
@@ -314,3 +314,97 @@ class TestAtomicDraftSequence:
         assert len(rows) == 1, "Pre-existing v1 draft must survive a rolled-back attempt"
         assert rows[0]["body"] == "pre-existing body"
         assert state == "SELECTED"
+
+
+class TestPartialFailureAggregation:
+    """P7 — `draft_for_contacts` must drain every worker future to completion,
+    then raise a single `DrafterPartialFailure` carrying the partial results
+    map (cid → drafts for every worker that succeeded) and the per-contact
+    error list. Successful workers' DB writes are atomic from P6, so the
+    aggregated exception surfaces what actually got persisted.
+    """
+
+    def test_one_fails_others_succeed_aggregates_partial_results(self, db_path):
+        """One contact's worker raises; the other two complete and the
+        exception exposes the two successes via `.partial_results` and the
+        one failure via `.errors`."""
+        _, contact_ids = _seed_contacts(3)
+        failing_cid = contact_ids[1]
+
+        # 3 contacts × 3 channels = 9 LLM responses available. We only need
+        # responses for the 2 succeeding contacts (6), but we provide more
+        # because thread scheduling order isn't deterministic — extras are
+        # harmless since the mock is consumed in arrival order and the failing
+        # contact short-circuits before consuming all 3 of its responses.
+        responses = [f"Draft {i}" for i in range(9)]
+        client = _make_anthropic(responses)
+
+        from src.agents import drafter as drafter_mod
+
+        real_fn = drafter_mod._draft_all_channels_for_contact
+
+        def selective_fail(contact_id, anthropic_client, library_path):
+            if contact_id == failing_cid:
+                raise RuntimeError(f"boom for {contact_id}")
+            return real_fn(contact_id, anthropic_client, library_path)
+
+        # Patch the worker entrypoint so we can fail one contact deterministically
+        # without touching the LLM mock or the DB path.
+        import src.agents.drafter as drafter_module
+        original = drafter_module._draft_all_channels_for_contact
+        drafter_module._draft_all_channels_for_contact = selective_fail
+        try:
+            with pytest.raises(DrafterPartialFailure) as exc_info:
+                draft_for_contacts(contact_ids, anthropic_client=client)
+        finally:
+            drafter_module._draft_all_channels_for_contact = original
+
+        exc = exc_info.value
+        # Partial results cover ONLY the two successful contacts.
+        assert set(exc.partial_results.keys()) == set(contact_ids) - {failing_cid}
+        for cid, drafts in exc.partial_results.items():
+            assert len(drafts) == 3, f"contact {cid} should have all 3 channel drafts"
+        # Exactly one error recorded, for the failing contact.
+        assert len(exc.errors) == 1
+        err_cid, err_exc = exc.errors[0]
+        assert err_cid == failing_cid
+        assert isinstance(err_exc, RuntimeError)
+        assert "boom" in str(err_exc)
+        # Subclass of RuntimeError so legacy `except RuntimeError` still works.
+        assert isinstance(exc, RuntimeError)
+
+    def test_all_workers_fail_partial_results_empty(self, db_path):
+        """Every worker raises → `.partial_results` is an empty dict and
+        `.errors` lists every contact_id."""
+        _, contact_ids = _seed_contacts(3)
+        client = _make_anthropic(["unused"] * 9)
+
+        import src.agents.drafter as drafter_module
+        original = drafter_module._draft_all_channels_for_contact
+
+        def always_fail(contact_id, anthropic_client, library_path):
+            raise RuntimeError(f"fail-{contact_id}")
+
+        drafter_module._draft_all_channels_for_contact = always_fail
+        try:
+            with pytest.raises(DrafterPartialFailure) as exc_info:
+                draft_for_contacts(contact_ids, anthropic_client=client)
+        finally:
+            drafter_module._draft_all_channels_for_contact = original
+
+        exc = exc_info.value
+        assert exc.partial_results == {}
+        assert {cid for cid, _ in exc.errors} == set(contact_ids)
+        assert len(exc.errors) == 3
+
+    def test_all_workers_succeed_returns_dict_no_exception(self, db_path):
+        """Regression guard: happy path is unchanged — `draft_for_contacts`
+        returns a dict mapping every contact_id to its drafts, no exception."""
+        _, contact_ids = _seed_contacts(2)
+        responses = [f"Clean draft {i}" for i in range(6)]
+        client = _make_anthropic(responses)
+
+        result = draft_for_contacts(contact_ids, anthropic_client=client)
+
+        assert set(result.keys()) == set(contact_ids)
+        assert sum(len(v) for v in result.values()) == 6

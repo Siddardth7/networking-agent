@@ -18,7 +18,7 @@ from src.core.config import HAIKU_MODEL
 from src.core.db import get_connection, with_writer
 from src.core.schemas import Channel, FocusArea, Persona
 
-__all__ = ["Draft", "draft_for_contacts"]
+__all__ = ["Draft", "DrafterPartialFailure", "draft_for_contacts"]
 
 # Cap workers to avoid hitting Anthropic Tier 1 rate limits (50 RPM)
 _MAX_WORKERS = 6
@@ -48,6 +48,39 @@ _CHANNEL_CONSTRAINTS = {
         "Output format — first line: 'Subject: <subject text>', then a blank line, then the email body."
     ),
 }
+
+
+class DrafterPartialFailure(RuntimeError):
+    """Raised when one or more contact drafting workers failed.
+
+    Carries the partial successes so callers can see which contacts were
+    drafted vs which raised. Subclasses ``RuntimeError`` so existing callers
+    that catch ``RuntimeError`` continue to work (P7).
+
+    Attributes
+    ----------
+    partial_results:
+        Mapping of contact_id → list[Draft] for every worker that completed
+        successfully. Empty dict if all workers raised.
+    errors:
+        List of (contact_id, exception) tuples for every worker that raised.
+    """
+
+    def __init__(
+        self,
+        partial_results: "dict[int, list[Draft]]",
+        errors: "list[tuple[int, BaseException]]",
+    ) -> None:
+        self.partial_results = partial_results
+        self.errors = errors
+        failed_ids = [cid for cid, _ in errors]
+        # Keep the substring "Drafting failed for contact" in the message so
+        # downstream string matchers (and the existing P6 tests) keep working.
+        msg = (
+            f"Drafting failed for contact(s) {failed_ids}: "
+            f"{len(errors)} failed, {len(partial_results)} succeeded"
+        )
+        super().__init__(msg)
 
 
 @dataclass
@@ -333,7 +366,14 @@ def draft_for_contacts(
 
     workers = min(_MAX_WORKERS, max(1, len(contact_ids)))
     results: dict[int, list[Draft]] = {}
+    errors: list[tuple[int, BaseException]] = []
 
+    # Drain every dispatched future to completion before deciding whether to
+    # raise. P6 made each contact's DB write atomic, so allowing in-flight
+    # workers to commit-or-rollback fully is correct — we must NOT cancel
+    # them. On any worker exception we collect (cid, exc) and continue; the
+    # aggregated DrafterPartialFailure is raised after the loop so callers can
+    # see which contacts succeeded via `.partial_results`. (P7)
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_id = {
             executor.submit(
@@ -348,8 +388,10 @@ def draft_for_contacts(
             cid = future_to_id[future]
             try:
                 results[cid] = future.result()
-            except Exception as exc:
-                results[cid] = []
-                raise RuntimeError(f"Drafting failed for contact {cid}: {exc}") from exc
+            except BaseException as exc:
+                errors.append((cid, exc))
+
+    if errors:
+        raise DrafterPartialFailure(partial_results=results, errors=errors)
 
     return results
