@@ -7,6 +7,7 @@ Traceability: DESIGN.md §4 (Drafter phases), §6 (Drafting subsystem)
 from __future__ import annotations
 
 import concurrent.futures
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -192,50 +193,35 @@ def _insert_draft(
     body: str,
     subject: Optional[str],
     quality_flag: bool,
-    conn=None,
+    conn: sqlite3.Connection,
 ) -> int:
     """Insert a draft row and return its id.
 
-    If ``conn`` is provided, the INSERT is executed on the supplied connection
-    (the caller is responsible for the surrounding transaction / WRITE_LOCK).
-    Otherwise a new ``with_writer()`` block is opened.
+    ``conn`` is required: the INSERT executes on the supplied connection and
+    the caller is responsible for the surrounding transaction / WRITE_LOCK.
+    This helper deliberately does NOT open its own ``with_writer()`` block —
+    see the atomicity note in ``_draft_all_channels_for_contact``.
     """
-    if conn is not None:
-        cursor = conn.execute(
-            "INSERT INTO drafts (contact_id, channel, body, subject, version, quality_flag) "
-            "VALUES (?, ?, ?, ?, 1, ?)",
-            (contact_id, channel.value, body, subject, int(quality_flag)),
-        )
-        return cursor.lastrowid
-
-    with with_writer() as new_conn:
-        cursor = new_conn.execute(
-            "INSERT INTO drafts (contact_id, channel, body, subject, version, quality_flag) "
-            "VALUES (?, ?, ?, ?, 1, ?)",
-            (contact_id, channel.value, body, subject, int(quality_flag)),
-        )
-        return cursor.lastrowid
+    cursor = conn.execute(
+        "INSERT INTO drafts (contact_id, channel, body, subject, version, quality_flag) "
+        "VALUES (?, ?, ?, ?, 1, ?)",
+        (contact_id, channel.value, body, subject, int(quality_flag)),
+    )
+    return cursor.lastrowid
 
 
-def _mark_contact_drafted(contact_id: int, conn=None) -> None:
+def _mark_contact_drafted(contact_id: int, conn: sqlite3.Connection) -> None:
     """Mark a contact as DRAFTED.
 
-    If ``conn`` is provided, the UPDATE runs on the supplied connection
-    (caller manages the transaction). Otherwise a new ``with_writer()`` block
-    is opened.
+    ``conn`` is required: the UPDATE runs on the supplied connection and the
+    caller manages the transaction. This helper deliberately does NOT open
+    its own ``with_writer()`` block — see the atomicity note in
+    ``_draft_all_channels_for_contact``.
     """
-    if conn is not None:
-        conn.execute(
-            "UPDATE contacts SET state = 'DRAFTED' WHERE id = ?",
-            (contact_id,),
-        )
-        return
-
-    with with_writer() as new_conn:
-        new_conn.execute(
-            "UPDATE contacts SET state = 'DRAFTED' WHERE id = ?",
-            (contact_id,),
-        )
+    conn.execute(
+        "UPDATE contacts SET state = 'DRAFTED' WHERE id = ?",
+        (contact_id,),
+    )
 
 
 def _draft_all_channels_for_contact(
@@ -286,6 +272,11 @@ def _draft_all_channels_for_contact(
     # Note: with_writer() is NOT reentrant (WRITE_LOCK is a plain
     # threading.Lock). The inserts/state-transition helpers therefore take an
     # optional `conn` and reuse this connection rather than nesting locks.
+    #
+    # DO NOT call any helper that itself opens with_writer() from inside this
+    # block — WRITE_LOCK is non-reentrant and will deadlock. Helpers used here
+    # (_insert_draft, _mark_contact_drafted) require a conn argument for this
+    # reason.
     drafts: list[Draft] = []
     with with_writer() as conn:
         conn.execute(
