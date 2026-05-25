@@ -324,40 +324,31 @@ class TestPartialFailureAggregation:
     aggregated exception surfaces what actually got persisted.
     """
 
-    def test_one_fails_others_succeed_aggregates_partial_results(self, db_path):
+    def test_one_fails_others_succeed_aggregates_partial_results(self, db_path, monkeypatch):
         """One contact's worker raises; the other two complete and the
         exception exposes the two successes via `.partial_results` and the
         one failure via `.errors`."""
+        from src.agents import drafter as drafter_module
+
         _, contact_ids = _seed_contacts(3)
         failing_cid = contact_ids[1]
 
-        # 3 contacts × 3 channels = 9 LLM responses available. We only need
-        # responses for the 2 succeeding contacts (6), but we provide more
-        # because thread scheduling order isn't deterministic — extras are
-        # harmless since the mock is consumed in arrival order and the failing
-        # contact short-circuits before consuming all 3 of its responses.
-        responses = [f"Draft {i}" for i in range(9)]
+        # 6 responses for the 2 succeeding contacts (3 channels each). The
+        # failing contact raises before any LLM call, so it consumes zero.
+        responses = [f"Draft {i}" for i in range(6)]
         client = _make_anthropic(responses)
 
-        from src.agents import drafter as drafter_mod
-
-        real_fn = drafter_mod._draft_all_channels_for_contact
+        real_fn = drafter_module._draft_all_channels_for_contact
 
         def selective_fail(contact_id, anthropic_client, library_path):
             if contact_id == failing_cid:
                 raise RuntimeError(f"boom for {contact_id}")
             return real_fn(contact_id, anthropic_client, library_path)
 
-        # Patch the worker entrypoint so we can fail one contact deterministically
-        # without touching the LLM mock or the DB path.
-        import src.agents.drafter as drafter_module
-        original = drafter_module._draft_all_channels_for_contact
-        drafter_module._draft_all_channels_for_contact = selective_fail
-        try:
-            with pytest.raises(DrafterPartialFailure) as exc_info:
-                draft_for_contacts(contact_ids, anthropic_client=client)
-        finally:
-            drafter_module._draft_all_channels_for_contact = original
+        monkeypatch.setattr(drafter_module, "_draft_all_channels_for_contact", selective_fail)
+
+        with pytest.raises(DrafterPartialFailure) as exc_info:
+            draft_for_contacts(contact_ids, anthropic_client=client)
 
         exc = exc_info.value
         # Partial results cover ONLY the two successful contacts.
@@ -373,24 +364,21 @@ class TestPartialFailureAggregation:
         # Subclass of RuntimeError so legacy `except RuntimeError` still works.
         assert isinstance(exc, RuntimeError)
 
-    def test_all_workers_fail_partial_results_empty(self, db_path):
+    def test_all_workers_fail_partial_results_empty(self, db_path, monkeypatch):
         """Every worker raises → `.partial_results` is an empty dict and
         `.errors` lists every contact_id."""
+        from src.agents import drafter as drafter_module
+
         _, contact_ids = _seed_contacts(3)
         client = _make_anthropic(["unused"] * 9)
-
-        import src.agents.drafter as drafter_module
-        original = drafter_module._draft_all_channels_for_contact
 
         def always_fail(contact_id, anthropic_client, library_path):
             raise RuntimeError(f"fail-{contact_id}")
 
-        drafter_module._draft_all_channels_for_contact = always_fail
-        try:
-            with pytest.raises(DrafterPartialFailure) as exc_info:
-                draft_for_contacts(contact_ids, anthropic_client=client)
-        finally:
-            drafter_module._draft_all_channels_for_contact = original
+        monkeypatch.setattr(drafter_module, "_draft_all_channels_for_contact", always_fail)
+
+        with pytest.raises(DrafterPartialFailure) as exc_info:
+            draft_for_contacts(contact_ids, anthropic_client=client)
 
         exc = exc_info.value
         assert exc.partial_results == {}

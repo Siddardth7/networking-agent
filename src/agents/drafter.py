@@ -69,7 +69,7 @@ class DrafterPartialFailure(RuntimeError):
     def __init__(
         self,
         partial_results: "dict[int, list[Draft]]",
-        errors: "list[tuple[int, BaseException]]",
+        errors: "list[tuple[int, Exception]]",
     ) -> None:
         self.partial_results = partial_results
         self.errors = errors
@@ -366,7 +366,7 @@ def draft_for_contacts(
 
     workers = min(_MAX_WORKERS, max(1, len(contact_ids)))
     results: dict[int, list[Draft]] = {}
-    errors: list[tuple[int, BaseException]] = []
+    errors: list[tuple[int, Exception]] = []
 
     # Drain every dispatched future to completion before deciding whether to
     # raise. P6 made each contact's DB write atomic, so allowing in-flight
@@ -388,7 +388,10 @@ def draft_for_contacts(
             cid = future_to_id[future]
             try:
                 results[cid] = future.result()
-            except BaseException as exc:
+            except Exception as exc:
+                # Narrow to Exception so KeyboardInterrupt / SystemExit
+                # propagate immediately — we do NOT want Ctrl-C to be
+                # absorbed and deferred until all other workers finish.
                 errors.append((cid, exc))
 
     if errors:
