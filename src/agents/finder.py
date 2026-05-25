@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from src.core.config import load_config
+from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import ContactCandidate, EmailResult, FocusArea, Persona
 from src.providers.hunter import HunterProvider
@@ -94,7 +94,7 @@ def _classify_contact(
     ]
 
     response = anthropic_client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=HAIKU_MODEL,
         max_tokens=100,
         tools=tools,
         tool_choice={"type": "tool", "name": "classify_contact"},
@@ -216,11 +216,7 @@ def find_contacts(
         )
 
     if anthropic_client is None:
-        from anthropic import Anthropic
-
-        if not cfg.anthropic_api_key:
-            raise ValueError("ANTHROPIC_API_KEY not configured")
-        anthropic_client = Anthropic(api_key=cfg.anthropic_api_key)
+        anthropic_client = get_anthropic_client(cfg.anthropic_api_key)
 
     company_id = _get_or_create_company(company_slug)
 

@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from src.core.config import HAIKU_MODEL
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -162,7 +164,7 @@ def _check_anthropic() -> tuple[str, bool]:
                     "content-type": "application/json",
                 },
                 json={
-                    "model": "claude-haiku-4-5-20251001",
+                    "model": HAIKU_MODEL,
                     "max_tokens": 1,
                     "messages": [{"role": "user", "content": "ping"}],
                 },

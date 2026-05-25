@@ -94,22 +94,14 @@ def with_writer() -> Generator[sqlite3.Connection, None, None]:
 
 
 def init_db() -> None:
-    """Initialise the database: create the directory and run schema migrations.
+    """Initialise the database: create the directory and run schema migrations."""
+    from src.core.migrations import run_migrations  # local import avoids cycle
 
-    The migration runner (``src.core.migrations.run_migrations``) is imported
-    lazily so that this module can be tested before Step 2.2 is implemented.
-    """
     path = _db_path()
     os.makedirs(path.parent, exist_ok=True)
 
     with with_writer() as conn:
-        try:
-            from src.core.migrations import run_migrations  # noqa: PLC0415
-
-            run_migrations(conn)
-        except ImportError:
-            # migrations module not yet available (pre-Step-2.2); skip silently
-            pass
+        run_migrations(conn)
 
 
 __all__ = ["init_db", "get_connection", "WRITE_LOCK", "with_writer"]

@@ -10,12 +10,13 @@ import concurrent.futures
 from typing import Optional
 
 from src.agents.guardrails import check_draft
+from src.core.config import HAIKU_MODEL
 from src.core.db import get_connection, with_writer
 from src.core.schemas import Channel, DraftDispatchRequest, DraftDispatchResponse
 
 __all__ = ["dispatch_revision"]
 
-_MODEL = "claude-haiku-4-5-20251001"
+_MODEL = HAIKU_MODEL
 _TIMEOUT_SECONDS = 90
 
 
@@ -202,15 +203,13 @@ def dispatch_revision(
     """
     if anthropic_client is None:
         try:
-            from anthropic import Anthropic
-            from src.core.config import load_config
-            cfg = load_config()
-            if not cfg.anthropic_api_key:
-                return DraftDispatchResponse(
-                    status="ERROR",
-                    error_message="ANTHROPIC_API_KEY not configured",
-                )
-            anthropic_client = Anthropic(api_key=cfg.anthropic_api_key)
+            from src.core.config import get_anthropic_client
+            anthropic_client = get_anthropic_client()
+        except ValueError as exc:
+            return DraftDispatchResponse(
+                status="ERROR",
+                error_message=str(exc),
+            )
         except Exception as exc:
             return DraftDispatchResponse(
                 status="ERROR",

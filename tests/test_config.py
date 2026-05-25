@@ -144,3 +144,48 @@ def test_write_default_config_creates_with_0o600(tmp_path: Path) -> None:
     assert data["keys"]["anthropic_api_key"] == "REPLACE_ME"
     assert data["keys"]["serper_api_key"] == "REPLACE_ME"
     assert data["keys"]["hunter_api_key"] == "REPLACE_ME"
+
+
+# ---------------------------------------------------------------------------
+# NETWORKING_AGENT_CONFIG env override
+# ---------------------------------------------------------------------------
+
+def test_networking_agent_config_env_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """NETWORKING_AGENT_CONFIG should redirect load_config to a custom path."""
+    custom_path = tmp_path / "custom" / "alt.yaml"
+    _write_yaml(custom_path, {
+        "keys": {
+            "anthropic_api_key": "override-anthro",
+            "serper_api_key": "override-serper",
+            "hunter_api_key": "override-hunter",
+        }
+    })
+
+    # Point the default at a nonexistent file so we can prove the override wins
+    monkeypatch.setattr(config_module, "_config_path", tmp_path / "default.yaml")
+    monkeypatch.setenv("NETWORKING_AGENT_CONFIG", str(custom_path))
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    monkeypatch.delenv("HUNTER_API_KEY", raising=False)
+
+    cfg = load_config()
+    assert cfg.anthropic_api_key == "override-anthro"
+    assert cfg.serper_api_key == "override-serper"
+    assert cfg.hunter_api_key == "override-hunter"
+
+
+def test_get_anthropic_client_raises_without_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """get_anthropic_client should raise ValueError when no key is configured."""
+    from src.core.config import get_anthropic_client
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("NETWORKING_AGENT_CONFIG", raising=False)
+    # Point at a nonexistent default to force a None key
+    monkeypatch.setattr(config_module, "_config_path", Path("/nonexistent/x.yaml"))
+
+    with pytest.raises(ValueError, match="ANTHROPIC_API_KEY not configured"):
+        get_anthropic_client()

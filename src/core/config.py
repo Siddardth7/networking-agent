@@ -3,13 +3,18 @@ src/core/config.py — Secrets-aware configuration loader.
 
 Resolution order for API keys:
   1. Environment variable (ANTHROPIC_API_KEY, SERPER_API_KEY, HUNTER_API_KEY)
-  2. ~/.networking-agent/config.yaml under keys:
+  2. ~/.networking-agent/config.yaml under keys.anthropic_api_key,
+     keys.serper_api_key, keys.hunter_api_key
+
+The config file path itself can be overridden by setting the
+``NETWORKING_AGENT_CONFIG`` environment variable.
 
 Security: config.yaml must have mode 0o600. On first write, chmod is applied
 automatically. On every read, mode is verified and ConfigSecurityError is raised
 if permissions are too open.
 
-Exports: load_config, Config, ConfigSecurityError
+Exports: load_config, Config, ConfigSecurityError, HAIKU_MODEL,
+get_anthropic_client
 """
 
 from __future__ import annotations
@@ -22,10 +27,32 @@ from typing import Optional
 
 import yaml
 
-# Module-level path — tests monkeypatch this to use tmp_path.
+# ---------------------------------------------------------------------------
+# Shared constants
+# ---------------------------------------------------------------------------
+
+# The single Claude model used across Finder, Drafter, dispatch (REVISE), and
+# the network_check live ping. Update here when bumping model versions.
+HAIKU_MODEL = "claude-haiku-4-5-20251001"
+
+# Module-level path — tests monkeypatch this to use tmp_path. At runtime,
+# _resolve_config_path() may override it via NETWORKING_AGENT_CONFIG env var.
 _config_path: Path = Path.home() / ".networking-agent" / "config.yaml"
 
 _SENTINEL = "REPLACE_ME"
+
+
+def _resolve_config_path() -> Path:
+    """Return the effective config path.
+
+    Resolution order:
+      1. NETWORKING_AGENT_CONFIG env var (if set, expand ~ and return)
+      2. Module-level _config_path (monkeypatched by tests, else the default)
+    """
+    override = os.environ.get("NETWORKING_AGENT_CONFIG")
+    if override:
+        return Path(override).expanduser()
+    return _config_path
 
 
 class ConfigSecurityError(Exception):
@@ -108,7 +135,7 @@ def load_config() -> Config:
     Returns a :class:`Config` instance. API key fields may be None if not
     configured — callers that require them must validate themselves.
     """
-    path: Path = _config_path  # reads module-level so tests can monkeypatch
+    path: Path = _resolve_config_path()  # env override → module-level → default
 
     # --- Load YAML if it exists (and verify permissions) ---
     yaml_data: dict = {}
@@ -143,3 +170,22 @@ def load_config() -> Config:
         hunter_monthly_limit=hunter_monthly_limit,
         finder_limit=finder_limit,
     )
+
+
+def get_anthropic_client(api_key: Optional[str] = None):
+    """Return a fresh ``anthropic.Anthropic`` client.
+
+    Centralizes the lazy-import + key-resolution pattern previously duplicated
+    across Finder, Drafter, and dispatch. Pass ``api_key`` to override the
+    configured key (mainly for tests).
+
+    Raises ``ValueError`` if no key is configured and none is provided.
+    """
+    if api_key is None:
+        cfg = load_config()
+        api_key = cfg.anthropic_api_key
+    if not api_key:
+        raise ValueError("ANTHROPIC_API_KEY not configured")
+
+    from anthropic import Anthropic  # local import keeps module import-light
+    return Anthropic(api_key=api_key)

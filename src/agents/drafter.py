@@ -13,6 +13,7 @@ from typing import Optional
 
 from src.agents.achievement_matcher import load_resume_library, match_achievements
 from src.agents.guardrails import check_draft
+from src.core.config import HAIKU_MODEL
 from src.core.db import get_connection, with_writer
 from src.core.schemas import Channel, FocusArea, Persona
 
@@ -21,7 +22,7 @@ __all__ = ["Draft", "draft_for_contacts"]
 # Cap workers to avoid hitting Anthropic Tier 1 rate limits (50 RPM)
 _MAX_WORKERS = 6
 
-_MODEL = "claude-haiku-4-5-20251001"
+_MODEL = HAIKU_MODEL
 
 # Template directory relative to this file: src/agents/ → src/templates/personas/
 _PERSONA_TEMPLATE_DIR = Path(__file__).parent.parent / "templates" / "personas"
@@ -213,6 +214,16 @@ def _draft_all_channels_for_contact(
     if contact is None:
         return []
 
+    # Idempotency: clear any partial v1 drafts from a previously killed run.
+    # The contact is in SELECTED state when we start; v2+ revisions only exist
+    # after the marketer loop, which can't run until DRAFTED. So any v1 rows
+    # here are debris from an interrupted prior attempt.
+    with with_writer() as conn:
+        conn.execute(
+            "DELETE FROM drafts WHERE contact_id = ? AND version = 1",
+            (contact_id,),
+        )
+
     try:
         persona = Persona(contact["persona"])
     except (ValueError, TypeError):
@@ -279,12 +290,8 @@ def draft_for_contacts(
     dict mapping contact_id → list[Draft]
     """
     if anthropic_client is None:
-        from anthropic import Anthropic
-        from src.core.config import load_config
-        cfg = load_config()
-        if not cfg.anthropic_api_key:
-            raise ValueError("ANTHROPIC_API_KEY not configured")
-        anthropic_client = Anthropic(api_key=cfg.anthropic_api_key)
+        from src.core.config import get_anthropic_client
+        anthropic_client = get_anthropic_client()
 
     workers = min(_MAX_WORKERS, max(1, len(contact_ids)))
     results: dict[int, list[Draft]] = {}
