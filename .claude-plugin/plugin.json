@@ -1,0 +1,7 @@
+{
+  "name": "networking-agent",
+  "version": "0.1.0",
+  "description": "Autonomous 3-agent outreach pipeline: Finder discovers contacts, Drafter generates personalized messages, Marketer runs approval loop. Distributable Claude Code plugin for aerospace/space job networking.",
+  "author": {"name": "Siddardth Pathipaka"},
+  "license": "MIT"
+}

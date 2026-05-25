@@ -1,0 +1,67 @@
+# ~/.networking-agent/resume_library.yaml
+# Copy this file to ~/.networking-agent/resume_library.yaml and replace bullets
+# with your own project achievements.
+#
+# focus_areas must be from: COMPOSITE_DESIGN, STRUCTURAL_ANALYSIS, MANUFACTURING,
+#                           MATERIALS, ADDITIVE, PEER, ALUMNI_ACADEMIC
+# keywords are case-insensitive substrings matched against a contact's job title
+# to rank bullets by relevance.
+
+projects:
+  - id: sampe_fuselage
+    title: "SAMPE Composite Fuselage Design"
+    focus_areas: [COMPOSITE_DESIGN, MANUFACTURING, STRUCTURAL_ANALYSIS]
+    bullets:
+      - id: sampe_load
+        text: "Designed CFRP fuselage shell for SAMPE student competition — 40% weight reduction vs aluminum baseline while meeting FAR 23 load factors."
+        keywords: [composite, fuselage, structural, load, cfrp]
+      - id: sampe_layup
+        text: "Defined ply sequence and fiber orientation using CLT analysis; validated via coupon testing (3-point bend, lap shear) — 98% correlation with FEA predictions."
+        keywords: [composite, layup, clt, ply, structural, analysis]
+      - id: sampe_mfg
+        text: "Led vacuum infusion process development for 1.2m fuselage panel — achieved void content <2% confirmed by cross-section micrographs."
+        keywords: [manufacturing, composite, infusion, process, quality]
+
+  - id: stress_analysis_wing
+    title: "Wing Box Stress Analysis"
+    focus_areas: [STRUCTURAL_ANALYSIS, COMPOSITE_DESIGN]
+    bullets:
+      - id: wing_fea
+        text: "Ran NASTRAN static aeroelastic analysis on a composite wing box — identified rib buckling margin at 1.15g limit load and proposed doubler reinforcement."
+        keywords: [structural, stress, fea, nastran, aeroelastic, wing, loads]
+      - id: wing_fatigue
+        text: "Performed fatigue life estimation using S-N curves for 2024-T3 aluminum skin panels — predicted 40,000 flight cycle life with 20% scatter margin."
+        keywords: [structural, fatigue, aluminum, materials, analysis]
+
+  - id: additive_bracket
+    title: "Additive Manufacturing Structural Bracket"
+    focus_areas: [ADDITIVE, MANUFACTURING, MATERIALS]
+    bullets:
+      - id: am_topology
+        text: "Topology-optimized an avionics mounting bracket using nTopology — reduced mass by 55% (450g → 200g) while maintaining 3× safety factor under vibration loads."
+        keywords: [additive, 3d print, manufacturing, topology, structural]
+      - id: am_material
+        text: "Characterized EOS Ti-6Al-4V SLM specimens: tensile, hardness, and microstructure vs ASTM F3001 minimum — demonstrated equivalent static properties."
+        keywords: [additive, materials, titanium, manufacturing, characterization]
+
+  - id: supplier_quality
+    title: "Supplier Quality Engineering Internship"
+    focus_areas: [MANUFACTURING, PEER]
+    bullets:
+      - id: sq_mrb
+        text: "Dispositioned 47 MRB tickets across 3 suppliers in 8 weeks — drafted use-as-is justifications for 38, rework plans for 9; zero production-line escapes."
+        keywords: [quality, mrb, supplier, manufacturing, production]
+      - id: sq_audit
+        text: "Led AS9100D supplier readiness audit at Tier 2 forging vendor — identified 4 major NCs, drove corrective action closure within 30-day window."
+        keywords: [quality, supplier, audit, manufacturing, as9100]
+
+  - id: materials_research
+    title: "High-Temperature Alloy Characterization"
+    focus_areas: [MATERIALS, STRUCTURAL_ANALYSIS]
+    bullets:
+      - id: mat_creep
+        text: "Ran creep rupture tests on IN718 specimens at 650°C — extracted Norton power-law constants; results contributed to validated material card for FEA."
+        keywords: [materials, metallurgy, alloy, creep, structural]
+      - id: mat_coating
+        text: "Evaluated TBC spallation resistance of three APS coating variants via thermal cycling — identified optimal bond coat roughness (Ra 8–10 μm) for 1200h life."
+        keywords: [materials, coating, metallurgy, thermal]

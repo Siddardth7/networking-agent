@@ -1,0 +1,15 @@
+# Networking Agent — Default Configuration
+# Copy to ~/.networking-agent/config.yaml and fill in real values.
+# Run: chmod 600 ~/.networking-agent/config.yaml
+
+keys:
+  anthropic_api_key: "REPLACE_ME"
+  serper_api_key: "REPLACE_ME"
+  hunter_api_key: "REPLACE_ME"
+
+providers:
+  serper_monthly_limit: 100   # free tier
+  hunter_monthly_limit: 25    # free tier
+
+pipeline:
+  finder_limit: 5             # contacts discovered per company
