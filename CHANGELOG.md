@@ -6,6 +6,21 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-05-25
+
+Hotfix release addressing HIGH and MEDIUM findings from the pre-ship audit (STRICT_AUDIT_v0.1.0.md).
+
+### Security
+- **P9** Hunter.io API key no longer leaks into stderr tracebacks; httpx exceptions raised from Hunter calls are now caught and re-raised through a sanitized twin with `api_key=***` and a broken `__cause__` chain via `scrubbed_hunter_call()` (commits `a24b27c`, `72d7ab2`).
+
+### Fixed
+- **P6** Per-contact draft sequence in `src/agents/drafter.py` is now atomic — delete-v1, N channel inserts, and the DRAFTED state transition run inside a single `with_writer()` block, so a mid-sequence crash can no longer leave a contact marked DRAFTED with missing channel rows (commits `85576cd`, `6ae0ec3`).
+- **P7** `draft_for_contacts` now drains all worker futures on failure and raises `DrafterPartialFailure(RuntimeError)` carrying `.partial_results` and `.errors`, so completed contacts are preserved when a peer worker raises (commits `7862442`, `b4843b4`).
+- **P8** `network_purge` no longer follows symlinks when removing `~/.networking-agent/drafts/<slug>/`; the new `_safe_rmtree` helper refuses symlinked paths, emits a stderr warning, and records `fs=symlink-skipped` in both the stdout summary and the audit log (commits `fa209be`, `8255e0e`).
+
+### Tests
+- 240 → 252 passing; coverage 88.06%.
+
 ## [0.1.0] - 2026-05-25
 
 ### Added
