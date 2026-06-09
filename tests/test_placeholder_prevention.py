@@ -170,3 +170,34 @@ class TestHardFailReasonPersisted:
         assert trace["quality_code"] == "HARD_FAIL"
         assert trace["reason"]
         assert "250 chars" in trace["reason"]
+
+
+class TestHeldReasonRendering:
+    """A9 — reviewers see WHY a draft was held, in both renderers."""
+
+    def test_artifact_formatter_renders_held_because(self):
+        from src.agents.artifact_writer import _format_critic_trace
+        from src.agents.critic import hard_fail_trace
+
+        out = _format_critic_trace(
+            hard_fail_trace("LinkedIn note is 250 chars (limit 200)")
+        )
+        assert out is not None
+        assert "Held because:" in out
+        assert "250 chars" in out
+
+    def test_marketer_formatter_renders_held_because(self):
+        from src.agents.critic import CriticResult
+        from src.agents.marketer import _format_critic_for_reviewer
+
+        trace = CriticResult(
+            passed=False,
+            quality_code="CRITIC_HOLD",
+            scores={"specificity": 1},
+            issues=["specificity: generic opener"],
+            reason="critic flagged 1 dimension(s) below 3: specificity",
+        ).to_json()
+        out = _format_critic_for_reviewer(trace)
+        assert out is not None
+        assert "Held because:" in out
+        assert "specificity" in out

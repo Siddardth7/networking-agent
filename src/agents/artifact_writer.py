@@ -35,10 +35,16 @@ def _format_critic_trace(trace_json: Optional[str]) -> Optional[str]:
 
     scores: dict = trace.get("scores") or {}
     issues: list = trace.get("issues") or []
-    if not scores and not issues:
+    reason = trace.get("reason")
+    if not scores and not issues and not reason:
         return None
 
     lines: list[str] = []
+    if reason:
+        # The one-line explanation of WHY the draft was held — present for
+        # every HARD_FAIL (hard_check reason) and CRITIC_HOLD (critic
+        # summary) draft. AUDIT-A9.
+        lines.append(f"**Held because:** {reason}")
     if scores:
         score_str = " ".join(f"{dim}={val}" for dim, val in scores.items())
         lines.append(f"**Critic scores:** {score_str}")

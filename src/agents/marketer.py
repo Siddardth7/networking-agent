@@ -32,9 +32,12 @@ def _format_critic_for_reviewer(trace_json: Optional[str]) -> Optional[str]:
         return None
     scores: dict = trace.get("scores") or {}
     issues: list = trace.get("issues") or []
-    if not scores and not issues:
+    reason = trace.get("reason")
+    if not scores and not issues and not reason:
         return None
     parts: list[str] = []
+    if reason:
+        parts.append(f"  Held because: {reason}")
     if scores:
         parts.append("  Critic scores: " + " ".join(
             f"{dim}={val}" for dim, val in scores.items()
