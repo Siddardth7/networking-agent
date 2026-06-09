@@ -47,12 +47,23 @@ def _classify_contact(
     candidate: ContactCandidate,
     company_slug: str,
     anthropic_client,
-) -> tuple[Persona, FocusArea]:
-    """Combined persona + focus_area classification via single Claude haiku call."""
+) -> tuple[Persona, FocusArea, Optional[str]]:
+    """Persona + focus_area + hook_signal via a single Claude haiku call.
+
+    Returns ``(persona, focus_area, hook_signal)`` where ``hook_signal`` is
+    a short specific phrase (≤ 80 chars) extracted from the LinkedIn snippet
+    — e.g. "led 787 wing-box stress team", "MS at Georgia Tech in composites".
+    ``None`` when no specific signal is extractable. The hook generator
+    promotes a non-None signal to Tier 0 so hooks are real, not categories.
+    """
     tools = [
         {
             "name": "classify_contact",
-            "description": "Classify the contact's persona and technical focus area",
+            "description": (
+                "Classify the contact's persona and technical focus area, "
+                "and extract one specific personalization signal from their "
+                "LinkedIn snippet if present."
+            ),
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -61,8 +72,10 @@ def _classify_contact(
                         "enum": ["RECRUITER", "SENIOR_MANAGER", "PEER_ENGINEER", "ALUMNI"],
                         "description": (
                             "RECRUITER: HR/recruiting. "
-                            "SENIOR_MANAGER: Director/VP/Manager. "
-                            "PEER_ENGINEER: Engineer/Analyst IC. "
+                            "SENIOR_MANAGER: Director/VP/Manager. Senior/Staff/Principal "
+                            "individual contributors ALSO count as SENIOR_MANAGER for "
+                            "outreach purposes (their drafts deserve senior-tone treatment). "
+                            "PEER_ENGINEER: junior/mid-level Engineer/Analyst IC. "
                             "ALUMNI: Student/PhD/Research/University."
                         ),
                     },
@@ -79,7 +92,7 @@ def _classify_contact(
                         ],
                         "description": (
                             "COMPOSITE_DESIGN: composites/carbon fiber. "
-                            "STRUCTURAL_ANALYSIS: stress/loads/FEA. "
+                            "STRUCTURAL_ANALYSIS: stress/loads/FEA/airframe. "
                             "MANUFACTURING: production/quality/MRB/supplier. "
                             "MATERIALS: metallurgy/alloys. "
                             "ADDITIVE: 3D printing. "
@@ -87,15 +100,34 @@ def _classify_contact(
                             "ALUMNI_ACADEMIC: academic/PhD."
                         ),
                     },
+                    "hook_signal": {
+                        "type": "string",
+                        "description": (
+                            "One short, SPECIFIC, verifiable phrase from the "
+                            "snippet that could anchor a personalized outreach "
+                            "opener — e.g. 'led 787 empennage stress team', "
+                            "'MS at Georgia Tech in composites', 'recent paper on "
+                            "bonded composite repair'. Constraints: ≤ 80 characters, "
+                            "no fabrication, must be grounded in the snippet text. "
+                            "Return an EMPTY STRING if the snippet has no specific "
+                            "signal — DO NOT invent one."
+                        ),
+                    },
                 },
-                "required": ["persona", "focus_area"],
+                "required": ["persona", "focus_area", "hook_signal"],
             },
         }
     ]
 
+    snippet_block = (
+        f"LinkedIn snippet:\n\"\"\"{candidate.snippet}\"\"\"\n\n"
+        if candidate.snippet
+        else "LinkedIn snippet: (none available)\n\n"
+    )
+
     response = anthropic_client.messages.create(
         model=HAIKU_MODEL,
-        max_tokens=100,
+        max_tokens=200,
         tools=tools,
         tool_choice={"type": "tool", "name": "classify_contact"},
         messages=[
@@ -104,8 +136,10 @@ def _classify_contact(
                 "content": (
                     f"Contact: {candidate.full_name}\n"
                     f"Title: {candidate.title or 'Unknown'}\n"
-                    f"Company: {company_slug}\n"
-                    "Classify persona and focus area."
+                    f"Company: {company_slug}\n\n"
+                    f"{snippet_block}"
+                    "Classify persona and focus area, then extract one specific "
+                    "hook_signal from the snippet (or empty string if none)."
                 ),
             }
         ],
@@ -113,7 +147,7 @@ def _classify_contact(
 
     tool_block = next((b for b in response.content if b.type == "tool_use"), None)
     if tool_block is None:
-        return Persona.PEER_ENGINEER, FocusArea.PEER
+        return Persona.PEER_ENGINEER, FocusArea.PEER, None
 
     data = tool_block.input
     try:
@@ -125,15 +159,42 @@ def _classify_contact(
     except ValueError:
         focus_area = FocusArea.PEER
 
-    return persona, focus_area
+    raw_signal = (data.get("hook_signal") or "").strip()
+    # Truncate at the 80-char ceiling and drop the empty-signal sentinel.
+    hook_signal = raw_signal[:80] if raw_signal else None
+
+    return persona, focus_area, hook_signal
 
 
-def _generate_hook(candidate: ContactCandidate) -> str:
-    """5-tier deterministic hook per DESIGN §6."""
+def _generate_hook(
+    candidate: ContactCandidate,
+    hook_signal: Optional[str] = None,
+    company_news: Optional[str] = None,
+) -> str:
+    """Deterministic hook per DESIGN §6, augmented with Layer-1 signals.
+
+    Tier ordering (most-specific first):
+
+    Tier 0 — *hook_signal*: a verbatim signal extracted by the classifier
+             from the LinkedIn snippet. This is what makes the opener
+             genuinely personalized — when present we always prefer it.
+    Tier 1 — UIUC alumni signal in title or URL.
+    Tier 2 — shared employer (word-boundary match on title).
+    Tier 3 — title-keyword specialty bucket.
+    Tier 4 — *company_news*: a snippet from the per-run company news
+             search. Shared across all contacts for the company; acts
+             as a low-resolution fallback before GENERIC.
+    Tier 5 — ``GENERIC`` sentinel. The drafter / marketer treat this as
+             a "no real hook" state.
+    """
     import re
 
     title_lower = (candidate.title or "").lower()
     url_lower = (candidate.linkedin_url or "").lower()
+
+    # Tier 0: explicit hook_signal from the classifier (LinkedIn snippet).
+    if hook_signal:
+        return hook_signal
 
     # Tier 1: UIUC alumni signal
     for sig in _UIUC_SIGNALS:
@@ -158,10 +219,40 @@ def _generate_hook(candidate: ContactCandidate) -> str:
     if any(k in title_lower for k in ["additive", "3d print"]):
         return "your additive manufacturing work"
 
-    # Tier 4: company news signals (deferred to v0.2)
+    # Tier 4: company news (Layer 1d — single per-run search).
+    if company_news:
+        return company_news
 
     # Tier 5: generic fallback
     return "GENERIC"
+
+
+def _fetch_company_news_signal(
+    company_slug: str,
+    serper_provider: SerperProvider,
+) -> Optional[str]:
+    """Run one Serper news-flavored search per pipeline run.
+
+    Returns a short snippet of the top organic result, or None on quota
+    exhaustion / no results / any provider error. Errors are deliberately
+    swallowed — Tier 4 (company news) is a *fallback* hook, not a blocking
+    step in the pipeline.
+    """
+    company_name = company_slug.replace("-", " ")
+    try:
+        snippet = serper_provider.search_general(
+            f"{company_name} news 2026"
+        )
+    except Exception:
+        return None
+    # Defensive against mocks / unexpected return types: only proceed for
+    # genuine, non-empty strings. Anything else degrades silently to no hook.
+    if not isinstance(snippet, str) or not snippet.strip():
+        return None
+    snippet = snippet.strip()
+    if len(snippet) > 120:
+        snippet = snippet[:117].rstrip() + "..."
+    return snippet
 
 
 def _get_or_create_company(company_slug: str) -> int:
@@ -241,6 +332,11 @@ def find_contacts(
             )
         return []
 
+    # Phase 1.5: One company-news search per run, shared across all contacts
+    # as a Tier-4 fallback hook. Errors are swallowed inside the helper —
+    # this signal is a nice-to-have, not a blocking step.
+    company_news = _fetch_company_news_signal(company_slug, serper_provider)
+
     # Phase 2: Enrich — on Hunter QuotaExhausted mark remaining contacts HUNTER_EXHAUSTED
     company_domain = f"{company_slug.replace('-', '')}.com"
     hunter_exhausted = False
@@ -267,8 +363,12 @@ def find_contacts(
     results: list[ContactCandidate] = []
 
     for candidate, email_result in enriched:
-        persona, focus_area = _classify_contact(candidate, company_slug, anthropic_client)
-        hook = _generate_hook(candidate)
+        persona, focus_area, hook_signal = _classify_contact(
+            candidate, company_slug, anthropic_client
+        )
+        hook = _generate_hook(
+            candidate, hook_signal=hook_signal, company_news=company_news,
+        )
 
         enriched_candidate = ContactCandidate(
             full_name=candidate.full_name,
@@ -278,16 +378,29 @@ def find_contacts(
             persona=persona,
             focus_area=focus_area,
             email=email_result.email,
+            snippet=candidate.snippet,
         )
         results.append(enriched_candidate)
+
+        # shared_signals records the raw signal sources behind the hook —
+        # the LinkedIn snippet first (per-contact), then the company news
+        # snippet (shared across the batch). The marketer renders this
+        # field in the approval loop so the reviewer can audit the hook.
+        signal_parts: list[str] = []
+        if candidate.snippet:
+            signal_parts.append(f"profile: {candidate.snippet[:140]}")
+        if company_news:
+            signal_parts.append(f"company_news: {company_news[:140]}")
+        shared_signals = " | ".join(signal_parts) or None
 
         with with_writer() as conn:
             conn.execute(
                 """
                 INSERT INTO contacts
                     (company_id, full_name, title, persona, focus_area,
-                     linkedin_url, email, email_verified, source_provider, hook)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     linkedin_url, email, email_verified, source_provider,
+                     hook, shared_signals)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     company_id,
@@ -300,6 +413,7 @@ def find_contacts(
                     int(email_result.verified),
                     email_result.source,
                     hook,
+                    shared_signals,
                 ),
             )
 

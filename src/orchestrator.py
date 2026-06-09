@@ -58,6 +58,56 @@ def _get_selected_contact_ids(company_id: int) -> list[int]:
         conn.close()
 
 
+_BLOCKED_CODES_FOR_REPORT: set[str] = {"HARD_FAIL", "CRITIC_HOLD"}
+
+
+def _batch_quality_report(company_id: int) -> tuple[int, int]:
+    """Return ``(blocked_count, total_draft_count)`` for the company's
+    latest-version drafts. Both ``HARD_FAIL`` and ``CRITIC_HOLD`` count
+    as blocked — the marketer gate refuses both without --force."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT d.quality_code
+            FROM drafts d
+            JOIN contacts c ON c.id = d.contact_id
+            WHERE c.company_id = ? AND d.version = (
+                SELECT MAX(version) FROM drafts d2
+                WHERE d2.contact_id = d.contact_id AND d2.channel = d.channel
+            )
+            """,
+            (company_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    total = len(rows)
+    hard = sum(1 for r in rows if (r[0] or "OK") in _BLOCKED_CODES_FOR_REPORT)
+    return hard, total
+
+
+def _batch_quality_checkpoint(company_id: int) -> None:
+    """Warn (but never abort) when HARD_FAIL fraction exceeds the configured
+    threshold. The marketer gate is the real stop; this is just a heads-up
+    so the user knows the batch is bad before they enter the approval loop.
+    """
+    from src.core.config import load_config  # noqa: PLC0415
+
+    cfg = load_config()
+    hard, total = _batch_quality_report(company_id)
+    if total == 0:
+        return
+    fraction = hard / total
+    if fraction > cfg.batch_hard_fail_threshold:
+        print(
+            f"\n⚠️  Batch quality warning: {hard}/{total} drafts "
+            f"({fraction:.0%}) are blocked (HARD_FAIL or CRITIC_HOLD) "
+            f"(threshold {cfg.batch_hard_fail_threshold:.0%}).\n"
+            f"   The marketer gate will block approval of these drafts. "
+            f"Review carefully before using --force.\n"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
@@ -141,6 +191,7 @@ def run_pipeline(
         contact_ids = _get_selected_contact_ids(company_id)
         if contact_ids:
             _draft_for_contacts(contact_ids, anthropic_client)
+        _batch_quality_checkpoint(company_id)
         _run_approval_loop(company_id)
         _write_artifact(company_id)
         return
@@ -150,6 +201,7 @@ def run_pipeline(
         selected_ids = _run_selection_gate(company_id)
         if selected_ids:
             _draft_for_contacts(selected_ids, anthropic_client)
+        _batch_quality_checkpoint(company_id)
         _run_approval_loop(company_id)
         _write_artifact(company_id)
         return
@@ -163,7 +215,9 @@ def run_pipeline(
         )
         return
 
-    _find_contacts(company_slug, anthropic_client=anthropic_client)
+    from src.core.config import load_config  # noqa: PLC0415
+    _cfg = load_config()
+    _find_contacts(company_slug, limit=_cfg.finder_limit, anthropic_client=anthropic_client)
 
     # Re-fetch company_id after Finder (Finder may have created the row if slug
     # didn't exist yet; slug is UNIQUE so the same row is returned)
@@ -173,5 +227,6 @@ def run_pipeline(
     selected_ids = _run_selection_gate(company_id)
     if selected_ids:
         _draft_for_contacts(selected_ids, anthropic_client)
+    _batch_quality_checkpoint(company_id)
     _run_approval_loop(company_id)
     _write_artifact(company_id)

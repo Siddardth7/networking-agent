@@ -4,12 +4,17 @@
 #
 # focus_areas must be from: COMPOSITE_DESIGN, STRUCTURAL_ANALYSIS, MANUFACTURING,
 #                           MATERIALS, ADDITIVE, PEER, ALUMNI_ACADEMIC
+# type must be from: COMPETITION, COURSEWORK, RESEARCH, INTERNSHIP, INDUSTRY
+#   The drafter uses `type` to forbid re-attribution: a COMPETITION project
+#   must NEVER be described as work for the contact's company. INTERNSHIP and
+#   INDUSTRY items may be referenced as professional experience.
 # keywords are case-insensitive substrings matched against a contact's job title
 # to rank bullets by relevance.
 
 projects:
   - id: sampe_fuselage
     title: "SAMPE Composite Fuselage Design"
+    type: COMPETITION
     focus_areas: [COMPOSITE_DESIGN, MANUFACTURING, STRUCTURAL_ANALYSIS]
     bullets:
       - id: sampe_load
@@ -24,6 +29,7 @@ projects:
 
   - id: stress_analysis_wing
     title: "Wing Box Stress Analysis"
+    type: COURSEWORK
     focus_areas: [STRUCTURAL_ANALYSIS, COMPOSITE_DESIGN]
     bullets:
       - id: wing_fea
@@ -35,6 +41,7 @@ projects:
 
   - id: additive_bracket
     title: "Additive Manufacturing Structural Bracket"
+    type: COURSEWORK
     focus_areas: [ADDITIVE, MANUFACTURING, MATERIALS]
     bullets:
       - id: am_topology
@@ -46,6 +53,7 @@ projects:
 
   - id: supplier_quality
     title: "Supplier Quality Engineering Internship"
+    type: INTERNSHIP
     focus_areas: [MANUFACTURING, PEER]
     bullets:
       - id: sq_mrb
@@ -57,6 +65,7 @@ projects:
 
   - id: materials_research
     title: "High-Temperature Alloy Characterization"
+    type: RESEARCH
     focus_areas: [MATERIALS, STRUCTURAL_ANALYSIS]
     bullets:
       - id: mat_creep

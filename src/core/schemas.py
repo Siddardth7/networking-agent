@@ -18,6 +18,7 @@ __all__ = [
     "Channel",
     "PipelineState",
     "ContactState",
+    "ProjectType",
     # Models
     "ContactCandidate",
     "EmailResult",
@@ -73,6 +74,22 @@ class ContactState(str, Enum):
     SENT = "SENT"
 
 
+class ProjectType(str, Enum):
+    """Origin of a resume project. Provenance for fact-attribution rules.
+
+    The drafter must NEVER re-attribute work from a COMPETITION or COURSEWORK
+    project to a contact's employer (root-cause audit §2.2 — coursework being
+    rewritten as "work at Tata Advanced Systems"). INTERNSHIP and INDUSTRY
+    items may be referenced as professional experience.
+    """
+
+    COMPETITION = "COMPETITION"   # student design competition (SAMPE, etc.)
+    COURSEWORK = "COURSEWORK"     # class projects, MS coursework
+    RESEARCH = "RESEARCH"         # academic research, thesis work
+    INTERNSHIP = "INTERNSHIP"     # paid/unpaid internship at a company
+    INDUSTRY = "INDUSTRY"         # full-time professional work
+
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -88,6 +105,10 @@ class ContactCandidate(BaseModel):
     persona: Optional[Persona] = None
     focus_area: Optional[FocusArea] = None
     email: Optional[str] = None
+    # Raw Serper search snippet (LinkedIn About / recent activity excerpt).
+    # Used by the finder classifier to ground persona + extract a specific
+    # hook_signal. May be None when not provided by the search API.
+    snippet: Optional[str] = None
 
 
 class EmailResult(BaseModel):

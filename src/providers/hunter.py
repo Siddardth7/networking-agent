@@ -250,7 +250,7 @@ class HunterProvider(EmailProvider):
         email: Optional[str] = data.get("email")
         verification_status: str = data.get("verification", {}).get("status", "")
         verified: bool = verification_status in ("valid", "accept_all")
-        confidence: int = int(data.get("score", 0))
+        confidence: int = int(data.get("score") or 0)
 
         return EmailResult(
             email=email,

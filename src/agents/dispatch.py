@@ -1,23 +1,51 @@
 """
 src/agents/dispatch.py
 REVISE dispatch protocol: regenerate a single draft with user feedback.
-Traceability: DESIGN.md §8.3 · VALIDATION Skeptic #2, User Advocate U5 (BLOCKING)
+
+Layer 6: revisions now use the **same** grounding contract as the first
+draft — persona template, APPROVED FACTS with provenance, FACT DISCIPLINE
+block, hard_check, optional critic. Pre-Layer-6 the revision prompt
+dropped the persona template, dropped the achievement bullets, and
+dropped the fact-discipline rules, so REVISE made bad drafts worse.
+That regression is gone.
+
+Traceability: DESIGN.md §8.3 · DRAFTER_ROOT_CAUSE_AUDIT.md §2.6, Layer 6
 """
 
 from __future__ import annotations
 
-import concurrent.futures
+from pathlib import Path
 from typing import Optional
 
-from src.agents.guardrails import check_draft
-from src.core.config import HAIKU_MODEL
+from src.agents.achievement_matcher import load_resume_library, match_achievements
+from src.agents.critic import critique_draft
+from src.agents.drafter import _build_prompt, _load_persona_template
+from src.agents.guardrails import check_draft, hard_check
+from src.agents.shared import (
+    CHANNEL_CONSTRAINTS,
+    DEFAULT_TIMEOUT_SECONDS,
+    call_claude_with_timeout,
+    parse_email_body_subject,
+)
+from src.core.config import HAIKU_MODEL, load_config
 from src.core.db import get_connection, with_writer
-from src.core.schemas import Channel, DraftDispatchRequest, DraftDispatchResponse
+from src.core.schemas import (
+    Channel,
+    DraftDispatchRequest,
+    DraftDispatchResponse,
+    FocusArea,
+    Persona,
+)
 
 __all__ = ["dispatch_revision"]
 
 _MODEL = HAIKU_MODEL
-_TIMEOUT_SECONDS = 90
+_TIMEOUT_SECONDS = DEFAULT_TIMEOUT_SECONDS
+
+# Module-level aliases — preserved for back-compat with anything that
+# referenced the private names from outside.
+_CHANNEL_CONSTRAINTS = CHANNEL_CONSTRAINTS
+_parse_email_body_subject = parse_email_body_subject
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +56,8 @@ def _load_contact(contact_id: int) -> Optional[dict]:
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT id, full_name, title, persona, focus_area, linkedin_url, email, hook "
+            "SELECT id, full_name, title, persona, focus_area, linkedin_url, "
+            "email, hook, shared_signals "
             "FROM contacts WHERE id = ?",
             (contact_id,),
         ).fetchone()
@@ -69,112 +98,74 @@ def _insert_revised_draft(
     subject: Optional[str],
     version: int,
     quality_flag: bool,
+    quality_code: str = "OK",
+    critic_trace: Optional[str] = None,
 ) -> int:
-    """Insert a new draft row and return its id."""
+    """Insert a new draft row and return its id.
+
+    Persists quality_code so the marketer gate (Layer 5) blocks HARD_FAIL
+    and CRITIC_HOLD revisions the same way it blocks first-pass drafts,
+    and critic_trace so the reviewer can see WHY a revision was held.
+    """
     with with_writer() as conn:
         cursor = conn.execute(
-            "INSERT INTO drafts (contact_id, channel, body, subject, version, quality_flag) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (contact_id, channel.value, body, subject, version, int(quality_flag)),
+            "INSERT INTO drafts (contact_id, channel, body, subject, version, "
+            "quality_flag, quality_code, critic_trace) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (contact_id, channel.value, body, subject, version,
+             int(quality_flag), quality_code, critic_trace),
         )
         return cursor.lastrowid
 
 
 # ---------------------------------------------------------------------------
-# Prompt construction
+# Prompt construction — fully-grounded, mirrors the first-draft contract
 # ---------------------------------------------------------------------------
-
-_CHANNEL_CONSTRAINTS = {
-    Channel.LINKEDIN_CONNECTION: (
-        "Write ONLY the LinkedIn connection request note. "
-        "Hard limit: 300 characters total (including spaces). "
-        "Do NOT include a subject line."
-    ),
-    Channel.LINKEDIN_POST_CONNECTION: (
-        "Write the follow-up message sent AFTER the connection is accepted. "
-        "Conversational tone; start the relationship, don't pitch directly. "
-        "Do NOT include a subject line."
-    ),
-    Channel.COLD_EMAIL: (
-        "Write a cold email. "
-        "Hard limit: 150 words for the body (not counting subject line). "
-        "Output format — first line: 'Subject: <subject text>', then a blank line, then the email body."
-    ),
-}
-
 
 def _build_revision_prompt(
     contact: dict,
     channel: Channel,
+    bullets: list,
+    persona_template: str,
+    voice_doc: str,
     prior_body: str,
     feedback: str,
-    voice_doc: str = "",
-    anti_phrase: Optional[str] = None,
+    anti_phrases: Optional[list[str]] = None,
 ) -> str:
-    voice_section = f"\n\n## Voice & Style Rules\n{voice_doc}" if voice_doc else ""
-    anti_phrase_section = (
-        f"\n\n## CRITICAL: DO NOT USE THIS PHRASE OR ANYTHING SIMILAR\n"
-        f'Avoid: "{anti_phrase}"\n'
-        f"If you were going to write something like that, rephrase it entirely."
-    ) if anti_phrase else ""
+    """Build the REVISE prompt using the *same* grounding as the first draft.
 
-    return f"""You are revising an outreach draft for Siddardth Pathipaka, MS Aerospace UIUC (Dec 2025).{voice_section}
+    Composition strategy: call ``drafter._build_prompt`` to get the
+    persona + APPROVED FACTS + FACT DISCIPLINE block, then append the
+    REVISION CONTEXT (prior draft + feedback). The model sees one
+    coherent document and cannot quietly drop grounding under feedback
+    pressure.
+    """
+    try:
+        persona = Persona(contact["persona"])
+    except (KeyError, ValueError, TypeError):
+        persona = Persona.PEER_ENGINEER
 
-## Contact
-- Name: {contact['full_name']}
-- Title: {contact.get('title') or 'Unknown'}
-- LinkedIn: {contact.get('linkedin_url') or 'N/A'}
-- Hook: {contact.get('hook') or 'GENERIC'}
-
-## Previous Draft
-{prior_body}
-
-## User Feedback
-{feedback}
-
-## Channel Constraints
-{_CHANNEL_CONSTRAINTS[channel]}
-{anti_phrase_section}
-
-Revise the draft incorporating the feedback. Output ONLY the message text (and subject line if applicable) — no preamble, no explanation."""
-
-
-def _parse_email_body_subject(text: str) -> tuple[str, Optional[str]]:
-    lines = text.strip().split("\n")
-    if lines and lines[0].lower().startswith("subject:"):
-        subject = lines[0][len("subject:"):].strip()
-        body = "\n".join(lines[1:]).lstrip("\n").strip()
-        return body, subject
-    return text.strip(), None
-
-
-# ---------------------------------------------------------------------------
-# LLM call (wrapped for timeout)
-# ---------------------------------------------------------------------------
-
-def _call_claude_with_timeout(
-    prompt: str,
-    anthropic_client,
-    timeout: float = _TIMEOUT_SECONDS,
-) -> str:
-    """Call the LLM in a thread and raise TimeoutError if it exceeds *timeout* seconds."""
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(
-            _call_claude_raw, prompt, anthropic_client
-        )
-        try:
-            return future.result(timeout=timeout)
-        except concurrent.futures.TimeoutError:
-            raise TimeoutError(f"LLM call exceeded {timeout}s timeout")
-
-
-def _call_claude_raw(prompt: str, anthropic_client) -> str:
-    response = anthropic_client.messages.create(
-        model=_MODEL,
-        max_tokens=600,
-        messages=[{"role": "user", "content": prompt}],
+    base_prompt = _build_prompt(
+        contact, channel, persona, bullets, persona_template, voice_doc,
+        anti_phrases=anti_phrases,
     )
-    return response.content[0].text.strip()
+
+    # Replace the trailing "Now write the message." instruction with the
+    # revision-specific tail so we keep all grounding but redirect the
+    # task.
+    base_no_tail = base_prompt.rsplit(
+        "Now write the message.", 1,
+    )[0].rstrip()
+
+    return (
+        f"{base_no_tail}\n\n"
+        f"## REVISION CONTEXT — previous draft\n{prior_body}\n\n"
+        f"## REVISION CONTEXT — feedback to address\n{feedback}\n\n"
+        "Revise the draft to address the feedback while obeying every "
+        "rule above (FACT DISCIPLINE, channel constraints, voice). "
+        "Output ONLY the revised message text (and subject line if "
+        "applicable) — no preamble, no explanation."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -185,38 +176,28 @@ def dispatch_revision(
     req: DraftDispatchRequest,
     anthropic_client=None,
     _timeout: float = _TIMEOUT_SECONDS,
+    _library_path: Optional[str] = None,
 ) -> DraftDispatchResponse:
-    """Regenerate a single draft with user feedback.
-
-    Parameters
-    ----------
-    req:
-        DraftDispatchRequest with contact_id, channel, prior_draft_id, feedback.
-    anthropic_client:
-        Optional Anthropic client for DI in tests.
-    _timeout:
-        LLM call timeout in seconds (injected in tests to trigger fast failure).
+    """Regenerate a single draft with user feedback, fully-grounded.
 
     Returns
     -------
-    DraftDispatchResponse with status=OK|GUARDRAIL_FLAGGED|ERROR.
+    DraftDispatchResponse
+        ``status`` is ``OK`` (clean + critic passes), ``GUARDRAIL_FLAGGED``
+        (soft blocklist regen flagged), or ``ERROR``.
     """
     if anthropic_client is None:
         try:
             from src.core.config import get_anthropic_client
             anthropic_client = get_anthropic_client()
         except ValueError as exc:
-            return DraftDispatchResponse(
-                status="ERROR",
-                error_message=str(exc),
-            )
+            return DraftDispatchResponse(status="ERROR", error_message=str(exc))
         except Exception as exc:
             return DraftDispatchResponse(
                 status="ERROR",
                 error_message=f"Client init failed: {exc}",
             )
 
-    # Load contact and prior draft
     contact = _load_contact(req.contact_id)
     if contact is None:
         return DraftDispatchResponse(
@@ -230,102 +211,131 @@ def dispatch_revision(
         if prior:
             prior_body = prior.get("body") or ""
 
-    # Determine next version (idempotency: always max+1)
     current_max = _latest_version_for_channel(req.contact_id, req.channel)
     next_version = current_max + 1
 
-    # Voice doc (optional)
-    from pathlib import Path
+    # Load the same grounding the first-draft pipeline used.
+    try:
+        persona = Persona(contact["persona"])
+    except (ValueError, TypeError):
+        persona = Persona.PEER_ENGINEER
+    try:
+        focus_area = FocusArea(contact["focus_area"])
+    except (ValueError, TypeError):
+        focus_area = FocusArea.PEER
+
+    library = load_resume_library(_library_path)
+    bullets = match_achievements(
+        focus_area, contact.get("title") or "", library, top_n=3,
+    )
+    persona_template = _load_persona_template(persona)
+
     voice_path = Path.home() / ".networking-agent" / "voice.md"
     voice_doc = voice_path.read_text() if voice_path.exists() else ""
 
     feedback = req.feedback or ""
 
+    cfg = load_config()
+
     # --- Attempt 1 ---
     try:
         prompt1 = _build_revision_prompt(
-            contact, req.channel, prior_body, feedback, voice_doc
+            contact, req.channel, bullets, persona_template, voice_doc,
+            prior_body, feedback,
         )
-        text1 = _call_claude_with_timeout(prompt1, anthropic_client, _timeout)
+        text1 = call_claude_with_timeout(
+            prompt1, anthropic_client, _timeout, model=_MODEL, max_tokens=600,
+        )
     except TimeoutError as exc:
-        return DraftDispatchResponse(
-            status="ERROR",
-            error_message=str(exc),
-        )
+        return DraftDispatchResponse(status="ERROR", error_message=str(exc))
     except Exception as exc:
         return DraftDispatchResponse(
-            status="ERROR",
-            error_message=f"LLM call failed: {exc}",
+            status="ERROR", error_message=f"LLM call failed: {exc}",
         )
 
     bad_phrase = check_draft(text1)
-    if bad_phrase is None:
-        # Clean draft — parse and insert
-        if req.channel == Channel.COLD_EMAIL:
-            body, subject = _parse_email_body_subject(text1)
-        else:
-            body, subject = text1, None
-
+    soft_failed = False
+    final_text = text1
+    if bad_phrase is not None:
+        # Regen once with anti-phrase nudge.
         try:
-            new_id = _insert_revised_draft(
-                req.contact_id, req.channel, body, subject, next_version, False
+            prompt2 = _build_revision_prompt(
+                contact, req.channel, bullets, persona_template, voice_doc,
+                prior_body, feedback, anti_phrases=[bad_phrase],
             )
+            final_text = call_claude_with_timeout(
+                prompt2, anthropic_client, _timeout, model=_MODEL, max_tokens=600,
+            )
+        except TimeoutError as exc:
+            return DraftDispatchResponse(status="ERROR", error_message=str(exc))
         except Exception as exc:
             return DraftDispatchResponse(
-                status="ERROR",
-                error_message=f"DB write failed: {exc}",
+                status="ERROR", error_message=f"LLM regen failed: {exc}",
             )
+        soft_failed = check_draft(final_text) is not None
 
-        return DraftDispatchResponse(
-            status="OK",
-            new_draft_id=new_id,
-            new_version=next_version,
-            body=body,
-            subject=subject,
-            quality_flag=False,
-        )
-
-    # --- Attempt 2 (guardrail regen) ---
-    try:
-        prompt2 = _build_revision_prompt(
-            contact, req.channel, prior_body, feedback, voice_doc,
-            anti_phrase=bad_phrase,
-        )
-        text2 = _call_claude_with_timeout(prompt2, anthropic_client, _timeout)
-    except TimeoutError as exc:
-        return DraftDispatchResponse(
-            status="ERROR",
-            error_message=str(exc),
-        )
-    except Exception as exc:
-        return DraftDispatchResponse(
-            status="ERROR",
-            error_message=f"LLM regen failed: {exc}",
-        )
-
-    quality_flag = check_draft(text2) is not None
-
+    # Parse body/subject for COLD_EMAIL.
     if req.channel == Channel.COLD_EMAIL:
-        body2, subject2 = _parse_email_body_subject(text2)
+        body, subject = parse_email_body_subject(final_text)
     else:
-        body2, subject2 = text2, None
+        body, subject = final_text, None
+
+    # Hard gate.
+    source_facts = "\n".join(b.text for b in bullets) if bullets else None
+    hc = hard_check(
+        body, source_facts=source_facts, channel=req.channel.value,
+        linkedin_char_limit=cfg.linkedin_char_limit,
+        email_word_limit=cfg.email_word_limit,
+    )
+
+    critic_trace: Optional[str] = None
+    if not hc.passed:
+        quality_code = hc.quality_code  # HARD_FAIL
+    else:
+        critic_code: Optional[str] = None
+        if cfg.enable_critic:
+            try:
+                cr = critique_draft(
+                    body=body, contact=contact, channel=req.channel.value,
+                    source_facts=source_facts, anthropic_client=anthropic_client,
+                    subject=subject,
+                )
+            except Exception:
+                cr = None
+            if cr is not None:
+                # Persist whether held or passed — calibration data.
+                critic_trace = cr.to_json()
+                if not cr.passed:
+                    critic_code = cr.quality_code  # CRITIC_HOLD
+        if critic_code is not None:
+            quality_code = critic_code
+        elif soft_failed:
+            quality_code = "SOFT_FLAG"
+        else:
+            quality_code = "OK"
+
+    quality_flag = quality_code != "OK"
 
     try:
-        new_id2 = _insert_revised_draft(
-            req.contact_id, req.channel, body2, subject2, next_version, quality_flag
+        new_id = _insert_revised_draft(
+            req.contact_id, req.channel, body, subject, next_version,
+            quality_flag, quality_code, critic_trace=critic_trace,
         )
     except Exception as exc:
         return DraftDispatchResponse(
-            status="ERROR",
-            error_message=f"DB write failed: {exc}",
+            status="ERROR", error_message=f"DB write failed: {exc}",
         )
 
-    status = "GUARDRAIL_FLAGGED" if quality_flag else "OK"
+    # Status mapping:
+    #   HARD_FAIL / CRITIC_HOLD → GUARDRAIL_FLAGGED (caller sees flag, marketer blocks)
+    #   SOFT_FLAG               → GUARDRAIL_FLAGGED (caller sees flag, marketer allows)
+    #   OK                      → OK
+    status = "OK" if quality_code == "OK" else "GUARDRAIL_FLAGGED"
     return DraftDispatchResponse(
         status=status,
-        new_draft_id=new_id2,
+        new_draft_id=new_id,
         new_version=next_version,
-        body=body2,
-        subject=subject2,
+        body=body,
+        subject=subject,
         quality_flag=quality_flag,
     )

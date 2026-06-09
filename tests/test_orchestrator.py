@@ -84,7 +84,7 @@ def test_new_state_full_pipeline_called_in_order(capsys):
         call_order.append("checks")
         return 0
 
-    def mock_find(company_slug, anthropic_client=None):
+    def mock_find(company_slug, limit=None, anthropic_client=None):
         call_order.append("find")
         return []
 

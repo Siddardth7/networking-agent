@@ -100,46 +100,112 @@ class SerperProvider(SearchProvider):
         httpx.HTTPStatusError
             After retry exhaustion for 429 or 5xx responses.
         """
-        # Build the query string
-        keywords_str = " OR ".join(role_keywords)
-        query = f'site:linkedin.com/in "{company}" ({keywords_str})'
+        # Serper free tier caps num at 10. For larger limits, batch into
+        # multiple queries with page offsets and deduplicate by LinkedIn URL.
+        _SERPER_MAX_NUM = 10
 
         # Compute the company slug once (used for all ContactCandidate objects)
         company_slug = company.lower().replace(" ", "-")
 
-        # Increment quota BEFORE the network call (fail fast if already exhausted)
-        if self._quota_manager is not None:
-            self._quota_manager.increment("serper", 1)
+        keywords_str = " OR ".join(role_keywords)
+        query = f'site:linkedin.com/in "{company}" ({keywords_str})'
 
-        # Perform the HTTP request with retry/backoff
         headers = {
             "X-API-KEY": self._api_key,
             "Content-Type": "application/json",
         }
-        body = {"q": query, "num": limit}
+
+        candidates: list[ContactCandidate] = []
+        seen_urls: set[str] = set()
+        page = 1
+
+        while len(candidates) < limit:
+            batch_size = min(_SERPER_MAX_NUM, limit - len(candidates))
+
+            # Increment quota BEFORE each network call
+            if self._quota_manager is not None:
+                self._quota_manager.increment("serper", 1)
+
+            body: dict = {"q": query, "num": batch_size}
+            if page > 1:
+                body["page"] = page
+
+            def _do_request(b=body) -> httpx.Response:
+                return self._http_client.post(
+                    _SERPER_ENDPOINT,
+                    headers=headers,
+                    json=b,
+                )
+
+            response = with_retry(_do_request)
+            data = response.json()
+            organic = data.get("organic", [])
+
+            if not organic:
+                break  # no more results
+
+            added_this_page = 0
+            for item in organic:
+                if len(candidates) >= limit:
+                    break
+                candidate = self._parse_organic_result(item, company_slug)
+                if candidate is not None:
+                    url_key = (candidate.linkedin_url or "").rstrip("/").lower()
+                    if url_key and url_key not in seen_urls:
+                        seen_urls.add(url_key)
+                        candidates.append(candidate)
+                        added_this_page += 1
+
+            if added_this_page == 0:
+                break  # no new unique results; stop paging
+
+            page += 1
+
+        return candidates
+
+    def search_general(self, query: str) -> Optional[str]:
+        """Run a single, general-purpose Serper query and return the top
+        snippet — or ``None`` on quota exhaustion, no results, or error.
+
+        Used for Tier 4 company-news hooks (DESIGN §6); the finder calls
+        this once per pipeline run and shares the result across all
+        contacts. Errors are caller-swallowed; this method itself raises
+        only QuotaExhausted (which the caller may also swallow).
+
+        Parameters
+        ----------
+        query:
+            Free-form search string (e.g. ``"Joby Aviation news 2026"``).
+
+        Returns
+        -------
+        Optional[str]
+            The ``snippet`` field of the first organic result, or ``None``.
+        """
+        if self._quota_manager is not None:
+            self._quota_manager.increment("serper", 1)
+
+        headers = {
+            "X-API-KEY": self._api_key,
+            "Content-Type": "application/json",
+        }
+        body = {"q": query, "num": 3}
 
         def _do_request() -> httpx.Response:
             return self._http_client.post(
-                _SERPER_ENDPOINT,
-                headers=headers,
-                json=body,
+                _SERPER_ENDPOINT, headers=headers, json=body,
             )
 
-        response = with_retry(_do_request)
-
-        # Parse organic results
+        try:
+            response = with_retry(_do_request)
+        except Exception:
+            return None
         data = response.json()
-        organic = data.get("organic", [])
-
-        candidates: list[ContactCandidate] = []
-        for item in organic:
-            if len(candidates) >= limit:
-                break
-            candidate = self._parse_organic_result(item, company_slug)
-            if candidate is not None:
-                candidates.append(candidate)
-
-        return candidates
+        for item in data.get("organic", []):
+            snippet = (item.get("snippet") or "").strip()
+            if snippet:
+                return snippet
+        return None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -167,6 +233,7 @@ class SerperProvider(SearchProvider):
         """
         raw_title: Optional[str] = item.get("title")
         link: Optional[str] = item.get("link")
+        snippet: Optional[str] = item.get("snippet")
 
         if not raw_title or not link:
             return None
@@ -195,9 +262,13 @@ class SerperProvider(SearchProvider):
 
             job_title = raw_job[:cut].strip() or None
 
+        # Snippet may be falsy / whitespace-only; normalize to None.
+        snippet_clean = (snippet or "").strip() or None
+
         return ContactCandidate(
             full_name=full_name,
             title=job_title,
             linkedin_url=link,
             company_slug=company_slug,
+            snippet=snippet_clean,
         )

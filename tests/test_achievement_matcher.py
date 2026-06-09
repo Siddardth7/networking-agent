@@ -57,9 +57,12 @@ class TestMatchAchievements:
             FocusArea.COMPOSITE_DESIGN, "Composites Manager", lib, top_n=3
         )
         assert len(results) == 3
-        # All returned bullets should be from projects with COMPOSITE_DESIGN
+        # All returned bullets should come from the composites project.
+        # ProvenancedBullet exposes project_title and project_type so
+        # the drafter can forbid re-attribution.
         for b in results:
-            assert b.id in {"b1", "b2", "b3", "b4"}
+            assert b.project_title == "CFRP Fuselage Design"
+            assert "composite" in b.text.lower() or "cfrp" in b.text.lower() or "coupon" in b.text.lower()
 
     def test_keyword_overlap_ranks_bullet_higher(self):
         lib = _make_library()
@@ -82,7 +85,8 @@ class TestMatchAchievements:
         )
         assert len(results) == 2
         # b1 has "composite" + "structural" = score 2 → should be first
-        assert results[0].id == "b1"
+        assert "fuselage" in results[0].text.lower()
+        assert results[0].project_title == "CFRP Fuselage Design"
 
     def test_manufacturing_focus_gets_manufacturing_bullets(self):
         lib = _make_library()
@@ -91,9 +95,10 @@ class TestMatchAchievements:
         )
         # Both composites_project and mfg_project have MANUFACTURING
         assert len(results) == 3
-        bullet_ids = {b.id for b in results}
-        # m1 has "quality" keyword matching "Quality Engineer"
-        assert "m1" in bullet_ids
+        # m1 ("Dispositioned 47 MRB tickets") is the only bullet whose
+        # "quality" keyword overlaps "Quality Engineer" — must rank in.
+        texts = [b.text for b in results]
+        assert any("MRB" in t for t in texts)
 
     def test_unmatched_focus_area_returns_empty(self):
         lib = _make_library()

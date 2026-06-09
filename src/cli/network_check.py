@@ -23,7 +23,7 @@ from src.providers.hunter import scrubbed_hunter_call
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-LATEST_MIGRATION = 1
+LATEST_MIGRATION = 3
 
 # ---------------------------------------------------------------------------
 # Test injection hook — set before calling run_checks()
@@ -244,10 +244,13 @@ def _check_hunter() -> tuple[list[str], bool]:
 
         client, should_close = _get_http_client()
         try:
-            with scrubbed_hunter_call(key):
-                resp = client.get(
-                    f"https://api.hunter.io/v2/account?api_key={key}",
-                )
+            for attempt in range(2):
+                with scrubbed_hunter_call(key):
+                    resp = client.get(
+                        f"https://api.hunter.io/v2/account?api_key={key}",
+                    )
+                if resp.status_code != 502 or attempt == 1:
+                    break
         finally:
             if should_close:
                 client.close()

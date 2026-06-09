@@ -9,6 +9,7 @@ Traceability: PLAN.md Step 7.3
 from __future__ import annotations
 
 import datetime
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -16,6 +17,36 @@ from src.core.db import get_connection, with_writer
 from src.core.schemas import Channel
 
 __all__ = ["write_artifact"]
+
+
+def _format_critic_trace(trace_json: Optional[str]) -> Optional[str]:
+    """Render a critic_trace JSON blob as a compact markdown summary.
+
+    Returns None when there's nothing useful to show (no trace, parse
+    error, or the verdict was OK with no scores).  The output is two
+    lines: per-dimension scores and a bullet list of issues.
+    """
+    if not trace_json:
+        return None
+    try:
+        trace = json.loads(trace_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    scores: dict = trace.get("scores") or {}
+    issues: list = trace.get("issues") or []
+    if not scores and not issues:
+        return None
+
+    lines: list[str] = []
+    if scores:
+        score_str = " ".join(f"{dim}={val}" for dim, val in scores.items())
+        lines.append(f"**Critic scores:** {score_str}")
+    if issues:
+        lines.append("**Critic issues:**")
+        for issue in issues:
+            lines.append(f"  - {issue}")
+    return "\n".join(lines)
 
 # Default output directory (overridable via _output_dir for tests)
 _DEFAULT_OUTPUT_DIR: Path = Path.home() / ".networking-agent" / "drafts"
@@ -51,7 +82,8 @@ def _load_approved_contacts(company_id: int) -> list[dict]:
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT id, full_name, title, linkedin_url, email, hook "
+            "SELECT id, full_name, title, persona, focus_area, "
+            "linkedin_url, email, hook, shared_signals "
             "FROM contacts "
             "WHERE company_id = ? AND state IN ('DRAFTED', 'APPROVED', 'SELECTED') "
             "ORDER BY id",
@@ -66,13 +98,15 @@ def _load_latest_drafts_for_contact(contact_id: int) -> dict[str, dict]:
     """Return the latest (highest version) draft per channel for *contact_id*.
 
     Returns a dict keyed by channel value, e.g.:
-        {'LINKEDIN_CONNECTION': {id, channel, body, subject, version}, ...}
+        {'LINKEDIN_CONNECTION': {id, channel, body, subject, version,
+                                  quality_flag, quality_code}, ...}
     """
     conn = get_connection()
     try:
         rows = conn.execute(
             """
-            SELECT id, channel, body, subject, version
+            SELECT id, channel, body, subject, version, quality_flag,
+                   quality_code, critic_trace
             FROM drafts
             WHERE contact_id = ?
             ORDER BY channel, version DESC
@@ -115,14 +149,23 @@ def _render_artifact(
     for contact in contacts:
         cid = contact["id"]
         lines.append(f"## {contact['full_name']}")
+        # Persona + focus_area surface the classifier verdict so the
+        # reviewer can diagnose misclassification at a glance
+        # (root-cause audit §2.8 — artifact was QA-blind without this).
         if contact.get("title"):
             lines.append(f"**Title:** {contact['title']}  ")
+        if contact.get("persona"):
+            lines.append(f"**Persona:** {contact['persona']}  ")
+        if contact.get("focus_area"):
+            lines.append(f"**Focus area:** {contact['focus_area']}  ")
         if contact.get("linkedin_url"):
             lines.append(f"**LinkedIn:** {contact['linkedin_url']}  ")
         if contact.get("email"):
             lines.append(f"**Email:** {contact['email']}  ")
         if contact.get("hook"):
             lines.append(f"**Hook:** {contact['hook']}  ")
+        if contact.get("shared_signals"):
+            lines.append(f"**Shared signals:** {contact['shared_signals']}  ")
         lines.append("")
 
         contact_drafts = drafts_by_contact.get(cid, {})
@@ -139,8 +182,25 @@ def _render_artifact(
                 lines.append("")
                 continue
 
-            lines.append(f"_Version {draft['version']}_")
+            quality_code = draft.get("quality_code") or "OK"
+            # Quality code badge — OK is silent, anything else is loud
+            # so the reviewer cannot miss a blocked or flagged draft.
+            badge = {
+                "OK": "",
+                "SOFT_FLAG": " ⚠️ SOFT_FLAG",
+                "HARD_FAIL": " ⛔ HARD_FAIL",
+                "CRITIC_HOLD": " ⛔ CRITIC_HOLD",
+            }.get(quality_code, f" ⚠️ {quality_code}")
+            lines.append(f"_Version {draft['version']}_{badge}")
             lines.append("")
+
+            # Surface critic reasons — addresses the §7 verification gap
+            # "drafts.quality_code = CRITIC_HOLD is opaque."
+            critic_block = _format_critic_trace(draft.get("critic_trace"))
+            if critic_block:
+                for line in critic_block.splitlines():
+                    lines.append(line)
+                lines.append("")
 
             if channel_enum == Channel.COLD_EMAIL and draft.get("subject"):
                 lines.append(f"**Subject:** {draft['subject']}")

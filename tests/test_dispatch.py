@@ -27,6 +27,28 @@ def tmp_db(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     monkeypatch.setattr("src.core.db._DB_PATH", Path(db_path))
     init_db()
+    # Layer 4 critic is OFF for these tests — they cover dispatch flow,
+    # status mapping, and DB persistence. Critic-on dispatch coverage
+    # lives in tests/test_dispatch_grounding.py.
+    from src.core.config import Config, load_config
+    real = load_config
+
+    def _no_critic_cfg():
+        cfg = real()
+        return Config(
+            anthropic_api_key=cfg.anthropic_api_key,
+            serper_api_key=cfg.serper_api_key,
+            hunter_api_key=cfg.hunter_api_key,
+            serper_monthly_limit=cfg.serper_monthly_limit,
+            hunter_monthly_limit=cfg.hunter_monthly_limit,
+            finder_limit=cfg.finder_limit,
+            linkedin_char_limit=cfg.linkedin_char_limit,
+            email_word_limit=cfg.email_word_limit,
+            batch_hard_fail_threshold=cfg.batch_hard_fail_threshold,
+            enable_critic=False,
+        )
+
+    monkeypatch.setattr("src.agents.dispatch.load_config", _no_critic_cfg)
     yield db_path
 
 

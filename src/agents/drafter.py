@@ -13,10 +13,16 @@ from pathlib import Path
 from typing import Optional
 
 from src.agents.achievement_matcher import load_resume_library, match_achievements
-from src.agents.guardrails import check_draft
-from src.core.config import HAIKU_MODEL
+from src.agents.critic import critique_draft
+from src.agents.guardrails import check_draft, hard_check
+from src.agents.shared import (
+    CHANNEL_CONSTRAINTS,
+    call_claude,
+    parse_email_body_subject,
+)
+from src.core.config import HAIKU_MODEL, load_config
 from src.core.db import get_connection, with_writer
-from src.core.schemas import Channel, FocusArea, Persona
+from src.core.schemas import Channel, FocusArea, Persona, ProjectType
 
 __all__ = ["Draft", "DrafterPartialFailure", "draft_for_contacts"]
 
@@ -31,23 +37,10 @@ _PERSONA_TEMPLATE_DIR = Path(__file__).parent.parent / "templates" / "personas"
 _VOICE_DOC_PATH = Path.home() / ".networking-agent" / "voice.md"
 _LIBRARY_PATH = Path.home() / ".networking-agent" / "resume_library.yaml"
 
-_CHANNEL_CONSTRAINTS = {
-    Channel.LINKEDIN_CONNECTION: (
-        "Write ONLY the LinkedIn connection request note. "
-        "Hard limit: 300 characters total (including spaces). "
-        "Do NOT include a subject line."
-    ),
-    Channel.LINKEDIN_POST_CONNECTION: (
-        "Write the follow-up message sent AFTER the connection is accepted. "
-        "Conversational tone; start the relationship, don't pitch directly. "
-        "Do NOT include a subject line."
-    ),
-    Channel.COLD_EMAIL: (
-        "Write a cold email. "
-        "Hard limit: 150 words for the body (not counting subject line). "
-        "Output format — first line: 'Subject: <subject text>', then a blank line, then the email body."
-    ),
-}
+# CHANNEL_CONSTRAINTS now lives in src/agents/shared.py — imported above.
+# Kept as a module-level alias so anything still referencing the private
+# name keeps working; the source of truth is shared.CHANNEL_CONSTRAINTS.
+_CHANNEL_CONSTRAINTS = CHANNEL_CONSTRAINTS
 
 
 class DrafterPartialFailure(RuntimeError):
@@ -92,6 +85,16 @@ class Draft:
     subject: Optional[str]
     version: int
     quality_flag: bool
+    # Canonical quality status. Bool quality_flag is retained for back-compat
+    # with the marketer's "⚠" rendering; quality_code is what the gate reads.
+    # Values: "OK" | "SOFT_FLAG" | "HARD_FAIL" | "CRITIC_HOLD".
+    quality_code: str = "OK"
+    # Serialized CriticResult JSON; None when the critic was not run
+    # (HARD_FAIL short-circuit, enable_critic=False, pre-migration row).
+    # Surfaced in the marketer + artifact so reviewers can see WHY a
+    # CRITIC_HOLD verdict was issued — the calibration knob depends on
+    # this being durable, not just present in the model response.
+    critic_trace: Optional[str] = None
 
 
 def _load_persona_template(persona: Persona) -> str:
@@ -127,6 +130,55 @@ def _load_contact(contact_id: int) -> Optional[dict]:
         conn.close()
 
 
+_FACT_DISCIPLINE = """## FACT DISCIPLINE — non-negotiable
+
+You may only state facts that appear verbatim (or in trivially-paraphrased
+form) in the APPROVED FACTS list below, the Voice & Style identity block,
+or the Contact Information section. In particular:
+
+1. **No invented numbers.** If a metric (percentage, count, dollar amount,
+   timeline) does not appear in APPROVED FACTS, do NOT introduce one.
+   "Significantly reduced weight" is acceptable; "12% weight reduction"
+   is NOT unless that exact metric is in APPROVED FACTS.
+
+2. **No re-attribution across project types.** Each bullet is tagged
+   with its origin (COMPETITION / COURSEWORK / RESEARCH / INTERNSHIP /
+   INDUSTRY). A COMPETITION or COURSEWORK bullet is academic work —
+   you may NEVER describe it as work performed at the contact's employer
+   or any other company. INTERNSHIP / INDUSTRY bullets may be referenced
+   as professional experience. When in doubt, name the project explicitly
+   (e.g., "in a SAMPE competition project") rather than implying employer.
+
+3. **No placeholders, ever.** Do NOT emit tokens like `[RESEARCH_NEEDED]`,
+   `[COMPANY]`, `[TEAM]`, or any other bracketed all-caps token. If you
+   lack a specific fact, omit the sentence — do not flag for follow-up.
+
+4. **Specificity floor.** If the only specific thing you can say is
+   generic to the company (e.g., "your eVTOL work"), prefer a shorter
+   message that omits the generic line entirely."""
+
+
+def _render_approved_facts(bullets: list) -> str:
+    """Render achievement bullets with provenance for the prompt.
+
+    Each line is: ``- [<TYPE>: <Project Title>] <bullet text>``. The type
+    tag is what the FACT DISCIPLINE block uses to forbid re-attribution.
+    """
+    if not bullets:
+        return "(no achievements matched — keep the message brief and grounded in the identity block only; do NOT invent specifics)"
+    lines: list[str] = []
+    for b in bullets:
+        # Tolerate both ProvenancedBullet and legacy Bullet for now.
+        project_title = getattr(b, "project_title", None)
+        project_type = getattr(b, "project_type", None)
+        if project_title and project_type:
+            type_str = project_type.value if hasattr(project_type, "value") else str(project_type)
+            lines.append(f"- [{type_str}: {project_title}] {b.text}")
+        else:
+            lines.append(f"- {b.text}")
+    return "\n".join(lines)
+
+
 def _build_prompt(
     contact: dict,
     channel: Channel,
@@ -134,18 +186,21 @@ def _build_prompt(
     bullets: list,
     persona_template: str,
     voice_doc: str,
-    anti_phrase: Optional[str] = None,
+    anti_phrases: Optional[list[str]] = None,
 ) -> str:
     hook = contact.get("hook") or "GENERIC"
-    achievement_text = "\n".join(f"- {b.text}" for b in bullets) if bullets else "(no achievements matched)"
+    approved_facts = _render_approved_facts(bullets)
 
     voice_section = f"\n\n## Voice & Style Rules\n{voice_doc}" if voice_doc else ""
 
-    anti_phrase_section = (
-        f"\n\n## CRITICAL: DO NOT USE THIS PHRASE OR ANYTHING SIMILAR\n"
-        f'Avoid: "{anti_phrase}"\n'
-        f"If you were going to write something like that, rephrase it entirely."
-    ) if anti_phrase else ""
+    anti_phrase_section = ""
+    if anti_phrases:
+        joined = "\n".join(f'  - "{p}"' for p in anti_phrases)
+        anti_phrase_section = (
+            f"\n\n## CRITICAL: DO NOT USE THESE PHRASES OR ANYTHING SIMILAR\n"
+            f"{joined}\n"
+            f"If you were going to write something like that, rephrase it entirely."
+        )
 
     return f"""{persona_template}{voice_section}
 
@@ -156,8 +211,10 @@ def _build_prompt(
 - Email: {contact.get('email') or 'N/A'}
 - Hook (why you're reaching out): {hook}
 
-## Relevant Achievements to Reference
-{achievement_text}
+## APPROVED FACTS — the only achievements you may state
+{approved_facts}
+
+{_FACT_DISCIPLINE}
 
 ## Channel Constraints
 {_CHANNEL_CONSTRAINTS[channel]}
@@ -166,27 +223,13 @@ def _build_prompt(
 Now write the message. Output ONLY the message text (and subject line if applicable) — no preamble, no explanation."""
 
 
-def _parse_email_body_subject(text: str) -> tuple[str, Optional[str]]:
-    """Extract subject and body from a COLD_EMAIL response.
-
-    Expected format: 'Subject: <text>\\n\\n<body>'
-    Falls back to None subject if format not found.
-    """
-    lines = text.strip().split("\n")
-    if lines and lines[0].lower().startswith("subject:"):
-        subject = lines[0][len("subject:"):].strip()
-        body = "\n".join(lines[1:]).lstrip("\n").strip()
-        return body, subject
-    return text.strip(), None
+# _parse_email_body_subject and _call_claude moved to src/agents/shared.py.
+# Aliases preserved so tests / external callers keep working.
+_parse_email_body_subject = parse_email_body_subject
 
 
 def _call_claude(prompt: str, anthropic_client) -> str:
-    response = anthropic_client.messages.create(
-        model=_MODEL,
-        max_tokens=600,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.content[0].text.strip()
+    return call_claude(prompt, anthropic_client, model=_MODEL, max_tokens=600)
 
 
 def _draft_one_channel(
@@ -196,28 +239,93 @@ def _draft_one_channel(
     persona_template: str,
     voice_doc: str,
     bullets: list,
-) -> tuple[str, Optional[str], bool]:
-    """Generate one draft for (contact, channel). Returns (body, subject, quality_flag)."""
+    linkedin_char_limit: int = 200,
+    email_word_limit: int = 150,
+    enable_critic: bool = True,
+) -> tuple[str, Optional[str], bool, str, Optional[str]]:
+    """Generate one draft for (contact, channel).
+
+    Returns ``(body, subject, quality_flag, quality_code, critic_trace)``.
+    ``quality_code`` is the canonical status; ``quality_flag`` is its
+    backward-compatible boolean projection (True iff not ``"OK"``).
+    ``critic_trace`` is the serialized CriticResult JSON, or None when
+    the critic was not run (HARD_FAIL short-circuit / enable_critic=False).
+    """
     prompt = _build_prompt(contact, channel, Persona(contact["persona"]), bullets, persona_template, voice_doc)
     text = _call_claude(prompt, anthropic_client)
 
-    # Guardrails pass 1
+    # Soft guardrail pass 1
     bad_phrase = check_draft(text)
-    if bad_phrase is None:
-        body, subject = _parse_email_body_subject(text) if channel == Channel.COLD_EMAIL else (text, None)
-        return body, subject, False
+    if bad_phrase is not None:
+        # Regen once with anti-phrase nudge (list form so future iterations
+        # can carry forward multiple phrases without prompt changes).
+        prompt2 = _build_prompt(
+            contact, channel, Persona(contact["persona"]), bullets,
+            persona_template, voice_doc, anti_phrases=[bad_phrase],
+        )
+        text = _call_claude(prompt2, anthropic_client)
+        soft_failed = check_draft(text) is not None
+    else:
+        soft_failed = False
 
-    # Regen once with anti-phrase nudge
-    prompt2 = _build_prompt(
-        contact, channel, Persona(contact["persona"]), bullets,
-        persona_template, voice_doc, anti_phrase=bad_phrase
+    # Parse body/subject before length-checking so we measure what's sent.
+    body, subject = (
+        _parse_email_body_subject(text)
+        if channel == Channel.COLD_EMAIL
+        else (text, None)
     )
-    text2 = _call_claude(prompt2, anthropic_client)
 
-    # Guardrails pass 2
-    quality_flag = check_draft(text2) is not None
-    body, subject = _parse_email_body_subject(text2) if channel == Channel.COLD_EMAIL else (text2, None)
-    return body, subject, quality_flag
+    # Hard-fail gate: brackets, fabricated metrics, length. Operates on the
+    # body (subject excluded from word/char counts intentionally).
+    source_facts = "\n".join(b.text for b in bullets) if bullets else None
+    hc = hard_check(
+        body,
+        source_facts=source_facts,
+        channel=channel.value,
+        linkedin_char_limit=linkedin_char_limit,
+        email_word_limit=email_word_limit,
+    )
+
+    if not hc.passed:
+        # Hard fail short-circuits — no critic, no soft considerations.
+        return body, subject, True, hc.quality_code, None
+
+    # Layer 4: automated critic (Sonnet). Runs only when hard checks pass
+    # and the user hasn't disabled it via config. Critic verdict can
+    # downgrade OK → CRITIC_HOLD, but never overrides a SOFT_FLAG into OK
+    # (soft signals are kept visible for the reviewer).
+    critic_code: Optional[str] = None
+    critic_trace: Optional[str] = None
+    if enable_critic:
+        try:
+            critic_result = critique_draft(
+                body=body,
+                contact=contact,
+                channel=channel.value,
+                source_facts=source_facts,
+                anthropic_client=anthropic_client,
+                subject=subject,
+            )
+        except Exception:
+            # Critic is fail-OPEN by design: a Sonnet outage or transport
+            # blip must not silently downgrade every draft. Hard_check is
+            # the real safety net; CRITIC_HOLD is an additional gate.
+            critic_result = None
+        if critic_result is not None:
+            # Persist the trace regardless of pass/fail — passing
+            # rationales are useful calibration data too.
+            critic_trace = critic_result.to_json()
+            if not critic_result.passed:
+                critic_code = critic_result.quality_code  # "CRITIC_HOLD"
+
+    if critic_code is not None:
+        quality_code = critic_code
+    elif soft_failed:
+        quality_code = "SOFT_FLAG"
+    else:
+        quality_code = "OK"
+
+    return body, subject, quality_code != "OK", quality_code, critic_trace
 
 
 def _insert_draft(
@@ -227,6 +335,8 @@ def _insert_draft(
     subject: Optional[str],
     quality_flag: bool,
     conn: sqlite3.Connection,
+    quality_code: str = "OK",
+    critic_trace: Optional[str] = None,
 ) -> int:
     """Insert a draft row and return its id.
 
@@ -236,9 +346,11 @@ def _insert_draft(
     see the atomicity note in ``_draft_all_channels_for_contact``.
     """
     cursor = conn.execute(
-        "INSERT INTO drafts (contact_id, channel, body, subject, version, quality_flag) "
-        "VALUES (?, ?, ?, ?, 1, ?)",
-        (contact_id, channel.value, body, subject, int(quality_flag)),
+        "INSERT INTO drafts (contact_id, channel, body, subject, version, "
+        "quality_flag, quality_code, critic_trace) "
+        "VALUES (?, ?, ?, ?, 1, ?, ?, ?)",
+        (contact_id, channel.value, body, subject, int(quality_flag),
+         quality_code, critic_trace),
     )
     return cursor.lastrowid
 
@@ -287,15 +399,25 @@ def _draft_all_channels_for_contact(
     persona_template = _load_persona_template(persona)
     voice_doc = _load_voice_doc()
 
+    cfg = load_config()
+
     # Generate all drafts via the LLM BEFORE acquiring the writer lock.
     # Anthropic calls are slow (network) and would needlessly serialize
     # parallel workers if held inside with_writer().
-    generated: list[tuple[Channel, str, Optional[str], bool]] = []
+    generated: list[tuple[Channel, str, Optional[str], bool, str, Optional[str]]] = []
+    has_email = bool(contact.get("email"))
     for channel in Channel:
-        body, subject, quality_flag = _draft_one_channel(
-            contact, channel, anthropic_client, persona_template, voice_doc, bullets
+        # Don't burn tokens drafting a cold email when we have no address to
+        # send it to. (Root-cause audit §2.4: email drafted without address.)
+        if channel == Channel.COLD_EMAIL and not has_email:
+            continue
+        body, subject, quality_flag, quality_code, critic_trace = _draft_one_channel(
+            contact, channel, anthropic_client, persona_template, voice_doc, bullets,
+            linkedin_char_limit=cfg.linkedin_char_limit,
+            email_word_limit=cfg.email_word_limit,
+            enable_critic=cfg.enable_critic,
         )
-        generated.append((channel, body, subject, quality_flag))
+        generated.append((channel, body, subject, quality_flag, quality_code, critic_trace))
 
     # Atomic per-contact write: delete prior v1 drafts (idempotency from P2),
     # insert all channel drafts, and transition the contact to DRAFTED in one
@@ -317,9 +439,10 @@ def _draft_all_channels_for_contact(
             (contact_id,),
         )
 
-        for channel, body, subject, quality_flag in generated:
+        for channel, body, subject, quality_flag, quality_code, critic_trace in generated:
             draft_id = _insert_draft(
-                contact_id, channel, body, subject, quality_flag, conn=conn
+                contact_id, channel, body, subject, quality_flag,
+                conn=conn, quality_code=quality_code, critic_trace=critic_trace,
             )
             drafts.append(Draft(
                 draft_id=draft_id,
@@ -329,6 +452,8 @@ def _draft_all_channels_for_contact(
                 subject=subject,
                 version=1,
                 quality_flag=quality_flag,
+                quality_code=quality_code,
+                critic_trace=critic_trace,
             ))
 
         _mark_contact_drafted(contact_id, conn=conn)

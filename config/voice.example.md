@@ -42,8 +42,9 @@ at US aerospace and defense companies; I have OPT work authorization.
 - "I am a quick learner"
 
 ## LinkedIn Connection Note Rules
-# Connection notes are capped at 300 characters (hard LinkedIn limit).
-# The Drafter must produce a note that fits — no truncation allowed.
+# Connection notes are capped at 200 characters (free-account hard limit
+# enforced by the guardrails hard_check). The Drafter must produce a note
+# that fits — over-length drafts are HARD_FAIL and cannot be approved.
 - Open with a specific hook: shared school, shared project domain, their recent
   post, or their exact team/program (e.g. "saw your work on 787 empennage
   structures")
@@ -51,15 +52,16 @@ at US aerospace and defense companies; I have OPT work authorization.
 - End with a low-friction CTA: "Would value connecting" or "Happy to connect"
   — never ask for a call in the connection note
 - No hashtags, no emojis, no exclamation marks
-- Target 200-270 characters; leave buffer for the 300-char limit
+- Target 150-190 characters; leave buffer for the 200-char limit
 
 ## LinkedIn Post-Connection Rules
 # Sent after the connection is accepted, typically within 24-48 hours.
 - One short paragraph, 3-5 sentences max
 - Remind them briefly who you are (one sentence)
 - Mention one specific thing about their work or company that is genuinely
-  relevant to your background — do not fake it; leave a [RESEARCH_NEEDED]
-  placeholder if the agent lacks that information
+  relevant to your background — do not fake it. If you don't have a real,
+  specific signal, OMIT the sentence entirely; never emit a placeholder like
+  [RESEARCH_NEEDED] (the guardrail blocks it and the marketer cannot approve it).
 - State what you are looking for clearly and without apology
 - CTA should be conversational: offer a 15-minute call or ask if they know
   the right person to talk to — not both

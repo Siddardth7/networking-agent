@@ -24,11 +24,38 @@ def db_path(tmp_path, monkeypatch):
     path = tmp_path / "state.db"
     monkeypatch.setattr("src.core.db._DB_PATH", path)
     monkeypatch.setattr("src.providers.quota_manager._DB_PATH", path)
+    # Disable the Layer 4 critic for these tests — they cover hard_check,
+    # persistence, and atomicity. Critic-specific behavior lives in
+    # tests/test_critic.py and tests/test_drafter_critic.py.
+    from src.core.config import Config, load_config  # local import keeps top tidy
+    real = load_config
+
+    def _no_critic_cfg():
+        cfg = real()
+        return Config(
+            anthropic_api_key=cfg.anthropic_api_key,
+            serper_api_key=cfg.serper_api_key,
+            hunter_api_key=cfg.hunter_api_key,
+            serper_monthly_limit=cfg.serper_monthly_limit,
+            hunter_monthly_limit=cfg.hunter_monthly_limit,
+            finder_limit=cfg.finder_limit,
+            linkedin_char_limit=cfg.linkedin_char_limit,
+            email_word_limit=cfg.email_word_limit,
+            batch_hard_fail_threshold=cfg.batch_hard_fail_threshold,
+            enable_critic=False,
+        )
+
+    monkeypatch.setattr("src.agents.drafter.load_config", _no_critic_cfg)
     return path
 
 
-def _seed_contacts(n: int = 2) -> tuple[int, list[int]]:
-    """Insert a company + n SELECTED contacts. Returns (company_id, contact_ids)."""
+def _seed_contacts(n: int = 2, with_email: bool = True) -> tuple[int, list[int]]:
+    """Insert a company + n SELECTED contacts. Returns (company_id, contact_ids).
+
+    Contacts include an email by default so the drafter generates all three
+    channels (LinkedIn × 2 + cold email). Pass ``with_email=False`` to
+    exercise the "skip COLD_EMAIL when no address" branch.
+    """
     init_db()
     with with_writer() as conn:
         cursor = conn.execute(
@@ -39,8 +66,9 @@ def _seed_contacts(n: int = 2) -> tuple[int, list[int]]:
         for i in range(n):
             cursor = conn.execute(
                 """INSERT INTO contacts
-                   (company_id, full_name, title, persona, focus_area, linkedin_url, hook, state)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'SELECTED')""",
+                   (company_id, full_name, title, persona, focus_area, linkedin_url,
+                    email, hook, state)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SELECTED')""",
                 (
                     company_id,
                     f"Contact {i + 1}",
@@ -48,6 +76,7 @@ def _seed_contacts(n: int = 2) -> tuple[int, list[int]]:
                     "PEER_ENGINEER",
                     "COMPOSITE_DESIGN",
                     f"https://linkedin.com/in/contact{i + 1}",
+                    f"contact{i + 1}@acme.com" if with_email else None,
                     "your composites work",
                 ),
             )

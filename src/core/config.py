@@ -31,9 +31,14 @@ import yaml
 # Shared constants
 # ---------------------------------------------------------------------------
 
-# The single Claude model used across Finder, Drafter, dispatch (REVISE), and
-# the network_check live ping. Update here when bumping model versions.
+# The cheap, fast Claude model used for high-volume generation paths
+# (Finder classification, Drafter first-pass writing, dispatch REVISE,
+# network_check live ping). Update here when bumping model versions.
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
+
+# Stronger model reserved for the critic pass (Layer 4). Worth the extra
+# tokens because it is the final automated gate before send.
+SONNET_MODEL = "claude-sonnet-4-6"
 
 # Module-level path — tests monkeypatch this to use tmp_path. At runtime,
 # _resolve_config_path() may override it via NETWORKING_AGENT_CONFIG env var.
@@ -74,6 +79,21 @@ class Config:
 
     # Pipeline settings
     finder_limit: int = 5
+
+    # Quality / channel constraints (Layer 3+5). These are the hard limits
+    # enforced in code by `guardrails.hard_check` — keep in sync with the
+    # prompt text in `drafter._CHANNEL_CONSTRAINTS`.
+    linkedin_char_limit: int = 200      # free LinkedIn account cap
+    email_word_limit: int = 150         # cold-email body word cap
+
+    # Batch-quality checkpoint between Drafter and Marketer.
+    # batch_hard_fail_threshold = max fraction of HARD_FAIL drafts tolerated
+    # before the orchestrator warns the user (warn-and-continue; never aborts).
+    batch_hard_fail_threshold: float = 0.0
+
+    # Layer 4: enable the automated critic pass. When False, drafts skip
+    # critic review and only pass through guardrails.
+    enable_critic: bool = True
 
 
 def _check_permissions(path: Path) -> None:
@@ -145,6 +165,7 @@ def load_config() -> Config:
     yaml_keys: dict = yaml_data.get("keys", {})
     yaml_providers: dict = yaml_data.get("providers", {})
     yaml_pipeline: dict = yaml_data.get("pipeline", {})
+    yaml_quality: dict = yaml_data.get("quality", {})
 
     # --- Resolve API keys: env wins, then YAML ---
     anthropic_api_key = _key_or_none(
@@ -162,6 +183,11 @@ def load_config() -> Config:
     hunter_monthly_limit = int(yaml_providers.get("hunter_monthly_limit", 25))
     finder_limit = int(yaml_pipeline.get("finder_limit", 5))
 
+    linkedin_char_limit = int(yaml_quality.get("linkedin_char_limit", 200))
+    email_word_limit = int(yaml_quality.get("email_word_limit", 150))
+    batch_hard_fail_threshold = float(yaml_quality.get("batch_hard_fail_threshold", 0.0))
+    enable_critic = bool(yaml_quality.get("enable_critic", True))
+
     return Config(
         anthropic_api_key=anthropic_api_key,
         serper_api_key=serper_api_key,
@@ -169,6 +195,10 @@ def load_config() -> Config:
         serper_monthly_limit=serper_monthly_limit,
         hunter_monthly_limit=hunter_monthly_limit,
         finder_limit=finder_limit,
+        linkedin_char_limit=linkedin_char_limit,
+        email_word_limit=email_word_limit,
+        batch_hard_fail_threshold=batch_hard_fail_threshold,
+        enable_critic=enable_critic,
     )
 
 

@@ -6,6 +6,7 @@ Traceability: DESIGN.md §7, §8.13
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from dataclasses import dataclass, field
@@ -14,6 +15,35 @@ from typing import Optional
 from src.core.db import get_connection, with_writer
 
 __all__ = ["ApprovalResult", "run_approval_loop"]
+
+
+def _format_critic_for_reviewer(trace_json: Optional[str]) -> Optional[str]:
+    """Render a critic_trace JSON as one or two compact lines for the marketer
+    approval loop. Returns None when the trace is missing / unparseable / empty.
+
+    The reviewer's decision on REVISE vs APPROVE vs SKIP depends on knowing
+    *why* a draft was held, not just *that* it was held.
+    """
+    if not trace_json:
+        return None
+    try:
+        trace = json.loads(trace_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    scores: dict = trace.get("scores") or {}
+    issues: list = trace.get("issues") or []
+    if not scores and not issues:
+        return None
+    parts: list[str] = []
+    if scores:
+        parts.append("  Critic scores: " + " ".join(
+            f"{dim}={val}" for dim, val in scores.items()
+        ))
+    if issues:
+        parts.append("  Critic issues:")
+        for issue in issues:
+            parts.append(f"    - {issue}")
+    return "\n".join(parts)
 
 
 @dataclass
@@ -56,7 +86,8 @@ def _load_contacts_with_drafts(company_id: int) -> list[dict]:
             # Latest draft per channel (highest version)
             drafts = conn.execute(
                 """
-                SELECT id, channel, body, subject, version, quality_flag, approved
+                SELECT id, channel, body, subject, version, quality_flag,
+                       quality_code, critic_trace, approved
                 FROM drafts
                 WHERE contact_id = ?
                 ORDER BY channel, version DESC
@@ -106,6 +137,26 @@ def _approve_drafts(contact_id: int, draft_ids: list[int]) -> list[int]:
     return log_ids
 
 
+# Quality codes that block approval without --force override. HARD_FAIL
+# means the deterministic guardrails refused; CRITIC_HOLD means the Sonnet
+# critic refused. Both must clear before unattended send.
+_BLOCKING_QUALITY_CODES: set[str] = {"HARD_FAIL", "CRITIC_HOLD"}
+
+
+def _contact_has_hard_fail(contact: dict) -> bool:
+    """True if any of *contact*'s latest drafts is in a BLOCKING quality state.
+
+    Despite the legacy name, this now also catches CRITIC_HOLD — both
+    states require --force to approve. Drafts predating migration 002
+    have NULL quality_code which sqlite surfaces here as the column
+    default ('OK'); they are treated as OK.
+    """
+    for d in contact.get("drafts", []):
+        if (d.get("quality_code") or "OK") in _BLOCKING_QUALITY_CODES:
+            return True
+    return False
+
+
 def _mark_company_approved(company_id: int) -> None:
     with with_writer() as conn:
         conn.execute(
@@ -126,14 +177,24 @@ def _char_word_count(text: str) -> str:
 
 def _render_contact_block(contact: dict, index: int) -> str:
     lines = []
-    flagged_drafts = [d for d in contact["drafts"] if d["quality_flag"]]
+    flagged_drafts = [d for d in contact["drafts"] if d.get("quality_flag")]
+    hard_fails = [
+        d for d in contact["drafts"]
+        if (d.get("quality_code") or "OK") in _BLOCKING_QUALITY_CODES
+    ]
     n_flagged = len(flagged_drafts)
+    n_hard = len(hard_fails)
 
     lines.append(f"\n{'=' * 60}")
     lines.append(f"Contact [{index}] — {contact['full_name']}")
     lines.append(f"{'=' * 60}")
 
-    if n_flagged > 0:
+    if n_hard > 0:
+        lines.append(
+            f"  ⛔ {n_hard} draft{'s' if n_hard > 1 else ''} HARD_FAIL "
+            f"— approval blocked (use --force to override)."
+        )
+    elif n_flagged > 0:
         lines.append(
             f"  ⚠️  {n_flagged} draft{'s' if n_flagged > 1 else ''} flagged for quality "
             f"— review highlighted blocks carefully."
@@ -155,13 +216,25 @@ def _render_contact_block(contact: dict, index: int) -> str:
         body = draft["body"] or ""
         subject = draft.get("subject") or ""
         version = draft.get("version", 1)
+        qcode = draft.get("quality_code") or "OK"
         qflag = draft.get("quality_flag", False)
-        flag_str = "  ⚠️  QUALITY FLAG" if qflag else ""
+        if qcode == "HARD_FAIL":
+            flag_str = "  ⛔ HARD_FAIL"
+        elif qcode == "CRITIC_HOLD":
+            flag_str = "  ⛔ CRITIC_HOLD"
+        elif qcode == "SOFT_FLAG" or qflag:
+            flag_str = "  ⚠️  QUALITY FLAG"
+        else:
+            flag_str = ""
 
         lines.append(f"  ── {channel} (v{version}){flag_str} ──")
         if subject:
             lines.append(f"  Subject: {subject}")
         lines.append(f"  {_char_word_count(body)}")
+        critic_block = _format_critic_for_reviewer(draft.get("critic_trace"))
+        if critic_block:
+            for cb_line in critic_block.splitlines():
+                lines.append(cb_line)
         lines.append("  " + "-" * 40)
         for line in body.splitlines():
             lines.append(f"    {line}")
@@ -178,7 +251,9 @@ def _render_all_contacts(contacts: list[dict]) -> None:
 def _print_help() -> None:
     print("\nCommands:")
     print("  APPROVE <id>          — approve a specific contact (uses all channel drafts)")
-    print("  APPROVE all           — approve all remaining contacts")
+    print("  APPROVE <id> --force  — approve even if drafts are HARD_FAIL (manual override)")
+    print("  APPROVE all           — approve all remaining contacts (HARD_FAIL blocked)")
+    print("  APPROVE all --force   — approve all incl. HARD_FAIL drafts (use with care)")
     print("  REVISE <id> <channel> \"<feedback>\" — request a revision")
     print("  SKIP <id>             — skip this contact")
     print("  SHOW <id> raw         — show raw draft text for a contact")
@@ -189,8 +264,8 @@ def _print_help() -> None:
 # Verb parsing
 # ---------------------------------------------------------------------------
 
-_APPROVE_ALL_RE = re.compile(r"^approve\s+all\s*$", re.IGNORECASE)
-_APPROVE_ID_RE = re.compile(r"^approve\s+(\d+)\s*$", re.IGNORECASE)
+_APPROVE_ALL_RE = re.compile(r"^approve\s+all(\s+--force)?\s*$", re.IGNORECASE)
+_APPROVE_ID_RE = re.compile(r"^approve\s+(\d+)(\s+--force)?\s*$", re.IGNORECASE)
 _REVISE_RE = re.compile(
     r'^revise\s+(\d+)\s+(\S+)\s+"([^"]*)"',
     re.IGNORECASE,
@@ -203,24 +278,28 @@ def parse_verb(line: str) -> Optional[tuple]:
     """Parse a user command line into a (verb, ...) tuple.
 
     Returns one of:
-      ("APPROVE_ALL",)
-      ("APPROVE", contact_index: int)
+      ("APPROVE_ALL", force: bool)
+      ("APPROVE", contact_index: int, force: bool)
       ("REVISE", contact_index: int, channel: str, feedback: str)
       ("SKIP", contact_index: int)
       ("SHOW", contact_index: int)
       ("QUIT",)
       None  — unrecognized input
+
+    --force suffix on APPROVE / APPROVE all overrides the HARD_FAIL gate
+    (used after explicit human review of a flagged draft).
     """
     stripped = line.strip()
     if not stripped:
         return None
     if stripped.lower() in ("quit", "q", "exit"):
         return ("QUIT",)
-    if _APPROVE_ALL_RE.match(stripped):
-        return ("APPROVE_ALL",)
+    m = _APPROVE_ALL_RE.match(stripped)
+    if m:
+        return ("APPROVE_ALL", bool(m.group(1)))
     m = _APPROVE_ID_RE.match(stripped)
     if m:
-        return ("APPROVE", int(m.group(1)))
+        return ("APPROVE", int(m.group(1)), bool(m.group(2)))
     m = _REVISE_RE.match(stripped)
     if m:
         return ("REVISE", int(m.group(1)), m.group(2).upper(), m.group(3))
@@ -311,22 +390,56 @@ def run_approval_loop(
             break
 
         if verb[0] == "APPROVE_ALL":
+            force = verb[1] if len(verb) > 1 else False
+            blocked_any = False
             for idx, contact in pending:
+                hard = _contact_has_hard_fail(contact)
+                if hard and not force:
+                    print(
+                        f"  ⛔ Contact [{idx}] {contact['full_name']} has HARD_FAIL "
+                        f"draft(s) — refusing to approve. Use 'APPROVE {idx} --force' "
+                        f"to override after manual review."
+                    )
+                    blocked_any = True
+                    continue
+                if hard and force:
+                    print(
+                        f"  ⚠️  --force override: approving HARD_FAIL draft(s) for "
+                        f"contact [{idx}] {contact['full_name']}. "
+                        f"You have manually accepted responsibility for this content."
+                    )
                 draft_ids = [d["id"] for d in contact["drafts"]]
                 log_ids = _approve_drafts(contact["id"], draft_ids)
                 result.approved_contact_ids.append(contact["id"])
                 result.outreach_log_ids.extend(log_ids)
                 approved_indices.add(idx)
                 print(f"  ✓ Contact [{idx}] {contact['full_name']} approved.")
+            if blocked_any:
+                # Keep the loop alive so the user can act on blocked items
+                # (REVISE / SKIP / APPROVE <id> --force).
+                continue
             break
 
         if verb[0] == "APPROVE":
             target_idx = verb[1]
+            force = verb[2] if len(verb) > 2 else False
             match = next(((idx, c) for idx, c in pending if idx == target_idx), None)
             if match is None:
                 print(f"  Contact [{target_idx}] not found in pending list.")
                 continue
             idx, contact = match
+            hard = _contact_has_hard_fail(contact)
+            if hard and not force:
+                print(
+                    f"  ⛔ Contact [{idx}] has HARD_FAIL draft(s) — refusing to "
+                    f"approve. Re-run as 'APPROVE {idx} --force' after manual review."
+                )
+                continue
+            if hard and force:
+                print(
+                    f"  ⚠️  --force override: approving HARD_FAIL draft(s). "
+                    f"You have manually accepted responsibility for this content."
+                )
             draft_ids = [d["id"] for d in contact["drafts"]]
             log_ids = _approve_drafts(contact["id"], draft_ids)
             result.approved_contact_ids.append(contact["id"])

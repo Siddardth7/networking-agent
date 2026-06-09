@@ -1,0 +1,11 @@
+-- Layer 4 visibility: persist the critic's per-dimension scores + issues.
+-- Without this column, drafts.quality_code = 'CRITIC_HOLD' is opaque — you can
+-- see the verdict but not why. Calibration and false-positive audits both
+-- depend on the reasons being durable, not living only in the model response.
+--
+-- critic_trace is a JSON blob (stored as TEXT) with shape:
+--   {"passed": bool, "quality_code": str, "scores": {<dim>: int, ...},
+--    "issues": [str, ...], "reason": str|null}
+-- NULL means the critic was not run for this draft (enable_critic=False, or
+-- HARD_FAIL short-circuit, or pre-migration row).
+ALTER TABLE drafts ADD COLUMN critic_trace TEXT;

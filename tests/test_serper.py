@@ -144,8 +144,12 @@ def test_successful_parse(qm: QuotaManager) -> None:
 
 
 def test_quota_increment(qm: QuotaManager) -> None:
-    """A successful call decrements remaining quota by exactly 1."""
-    # Ensure the row is seeded so we can read an initial value
+    """Each Serper network call decrements remaining quota by 1.
+
+    Serper free-tier caps ``num`` at 10, so the provider pages internally
+    until it accumulates *limit* candidates OR a page returns no new URLs.
+    A 2-result mock with limit=2 fits in one page → exactly one call.
+    """
     qm.can_query("serper")
     before = qm.remaining("serper")
 
@@ -155,7 +159,7 @@ def test_quota_increment(qm: QuotaManager) -> None:
     provider.search_linkedin_profiles(
         company="Boeing",
         role_keywords=["quality"],
-        limit=5,
+        limit=2,
     )
 
     after = qm.remaining("serper")

@@ -64,13 +64,21 @@ def _seed_company_and_contacts(company_slug="acme"):
 
 class TestParseVerb:
     def test_approve_all(self):
-        assert parse_verb("APPROVE all") == ("APPROVE_ALL",)
-        assert parse_verb("approve all") == ("APPROVE_ALL",)
-        assert parse_verb("APPROVE ALL") == ("APPROVE_ALL",)
+        assert parse_verb("APPROVE all") == ("APPROVE_ALL", False)
+        assert parse_verb("approve all") == ("APPROVE_ALL", False)
+        assert parse_verb("APPROVE ALL") == ("APPROVE_ALL", False)
+
+    def test_approve_all_force(self):
+        assert parse_verb("APPROVE all --force") == ("APPROVE_ALL", True)
+        assert parse_verb("approve all --force") == ("APPROVE_ALL", True)
 
     def test_approve_single_id(self):
-        assert parse_verb("APPROVE 1") == ("APPROVE", 1)
-        assert parse_verb("approve 42") == ("APPROVE", 42)
+        assert parse_verb("APPROVE 1") == ("APPROVE", 1, False)
+        assert parse_verb("approve 42") == ("APPROVE", 42, False)
+
+    def test_approve_single_id_force(self):
+        assert parse_verb("APPROVE 1 --force") == ("APPROVE", 1, True)
+        assert parse_verb("approve 42 --force") == ("APPROVE", 42, True)
 
     def test_revise(self):
         result = parse_verb('REVISE 2 COLD_EMAIL "Too formal, be casual"')
