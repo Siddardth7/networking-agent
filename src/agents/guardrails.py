@@ -16,6 +16,8 @@ __all__ = [
     "hard_check",
     "HardCheckResult",
     "BLOCKLIST",
+    "find_placeholder",
+    "redact_placeholders",
 ]
 
 _VOICE_DOC_PATH = Path.home() / ".networking-agent" / "voice.md"
@@ -106,6 +108,34 @@ _BRACKET_PATTERN = re.compile(r"\[[A-Z][A-Z0-9_]+\]")
 # Technical metric: a number adjacent to ``%`` or ``+``.  Picks up
 # ``12%`` / ``15+`` while ignoring time references like ``in 15 minutes``.
 _METRIC_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*[%+]")
+
+# Replacement text for redacted placeholder tokens. Deliberately NOT a
+# bracketed all-caps token so the redacted body can never re-trip the
+# detector or be mistaken for a live placeholder.
+_REDACTION_TEXT = "(placeholder removed)"
+
+
+def find_placeholder(text: str) -> Optional[str]:
+    """Return the first bracketed placeholder token in *text*, or None.
+
+    Inputs: any draft text. Output: the matched ``[ALL_CAPS]`` token or
+    ``None``. No side effects. Used by the drafter to trigger an
+    anti-placeholder regeneration (AUDIT-A1) before the hard gate ever
+    sees the draft.
+    """
+    match = _BRACKET_PATTERN.search(text)
+    return match.group(0) if match is not None else None
+
+
+def redact_placeholders(text: str) -> str:
+    """Replace every bracketed placeholder token with a redaction marker.
+
+    Inputs: draft text that failed the placeholder hard check. Output:
+    the same text with each ``[ALL_CAPS]`` token replaced by
+    ``(placeholder removed)``. No side effects. Guarantees a placeholder
+    token is never serialized to the DB or a Markdown artifact (AUDIT-A2).
+    """
+    return _BRACKET_PATTERN.sub(_REDACTION_TEXT, text)
 
 
 @dataclass

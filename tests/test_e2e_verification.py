@@ -196,8 +196,10 @@ class TestNoFlaggedDraftReachesApproval:
         ids = self._seed_selected(3)
 
         client = _StagedClient()
-        # Contact 0 — placeholder leak → HARD_FAIL on LinkedIn connection.
+        # Contact 0 — placeholder leak survives the corrective regen
+        # (AUDIT-A1) → HARD_FAIL on LinkedIn connection.
         client.enqueue_draft("Hey [RESEARCH_NEEDED] — wanted to connect.")
+        client.enqueue_draft("Hey [RESEARCH_NEEDED] — regen still dirty.")
         client.enqueue_draft("Clean post-connection.")
         client.enqueue_critic_pass()
         client.enqueue_draft("Subject: Hi\n\nClean cold email body.")

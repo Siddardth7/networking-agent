@@ -133,8 +133,9 @@ class TestHardFailShortCircuit:
         # Draft #2 is clean → critic call passes.
         client = _DraftAndCriticClient(
             draft_texts=[
-                "Hey [RESEARCH_NEEDED] saw your work.",  # HARD_FAIL
-                "Clean follow-up.",                      # OK
+                "Hey [RESEARCH_NEEDED] saw your work.",   # gen 1 — placeholder
+                "Hey [RESEARCH_NEEDED] regen still bad.",  # AUDIT-A1 regen
+                "Clean follow-up.",                        # OK
             ],
             critic_scores={dim: 5 for dim in RUBRIC_DIMENSIONS},
         )
@@ -143,8 +144,9 @@ class TestHardFailShortCircuit:
         by_channel = {d.channel: d for d in result[ids[0]]}
         assert by_channel["LINKEDIN_CONNECTION"].quality_code == "HARD_FAIL"
         # The hard_check short-circuit means only ONE critic call happened
-        # (for the clean post-connection draft). Total: 2 drafts + 1 critic.
-        assert client.calls == 3
+        # (for the clean post-connection draft). Total: 2 first-pass drafts
+        # + 1 anti-placeholder regen (AUDIT-A1) + 1 critic.
+        assert client.calls == 4
 
 
 # ---------------------------------------------------------------------------

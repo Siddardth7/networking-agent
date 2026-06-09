@@ -13,8 +13,13 @@ from pathlib import Path
 from typing import Optional
 
 from src.agents.achievement_matcher import load_resume_library, match_achievements
-from src.agents.critic import critique_draft
-from src.agents.guardrails import check_draft, hard_check
+from src.agents.critic import critique_draft, hard_fail_trace
+from src.agents.guardrails import (
+    check_draft,
+    find_placeholder,
+    hard_check,
+    redact_placeholders,
+)
 from src.agents.shared import (
     CHANNEL_CONSTRAINTS,
     call_claude,
@@ -130,6 +135,16 @@ def _load_contact(contact_id: int) -> Optional[dict]:
         conn.close()
 
 
+# Regeneration note injected when the first generation leaked a bracketed
+# placeholder token (AUDIT-A1). The {token} slot names the offender so the
+# model knows exactly what to remove.
+_PLACEHOLDER_REGEN_NOTE = (
+    "It contained the placeholder token {token}. NEVER emit bracketed "
+    "placeholder tokens. If a specific fact is unavailable, omit that "
+    "sentence entirely, or anchor on the contact's actual title instead."
+)
+
+
 _FACT_DISCIPLINE = """## FACT DISCIPLINE — non-negotiable
 
 You may only state facts that appear verbatim (or in trivially-paraphrased
@@ -187,7 +202,16 @@ def _build_prompt(
     persona_template: str,
     voice_doc: str,
     anti_phrases: Optional[list[str]] = None,
+    extra_instructions: Optional[list[str]] = None,
 ) -> str:
+    """Compose the full grounded generation prompt for one (contact, channel).
+
+    Inputs: contact row dict, channel, persona, provenance-tagged bullets,
+    persona template text, voice doc text, plus optional regeneration
+    context: *anti_phrases* (blocklist hits to avoid) and
+    *extra_instructions* (fault-specific notes such as the anti-placeholder
+    rule, AUDIT-A1). Output: the prompt string. No side effects.
+    """
     hook = contact.get("hook") or "GENERIC"
     approved_facts = _render_approved_facts(bullets)
 
@@ -200,6 +224,14 @@ def _build_prompt(
             f"\n\n## CRITICAL: DO NOT USE THESE PHRASES OR ANYTHING SIMILAR\n"
             f"{joined}\n"
             f"If you were going to write something like that, rephrase it entirely."
+        )
+
+    extra_section = ""
+    if extra_instructions:
+        joined_notes = "\n".join(f"- {note}" for note in extra_instructions)
+        extra_section = (
+            f"\n\n## REGENERATION NOTES — your previous attempt had these "
+            f"problems; fix every one\n{joined_notes}"
         )
 
     return f"""{persona_template}{voice_section}
@@ -218,7 +250,7 @@ def _build_prompt(
 
 ## Channel Constraints
 {_CHANNEL_CONSTRAINTS[channel]}
-{anti_phrase_section}
+{anti_phrase_section}{extra_section}
 
 Now write the message. Output ONLY the message text (and subject line if applicable) — no preamble, no explanation."""
 
@@ -254,14 +286,27 @@ def _draft_one_channel(
     prompt = _build_prompt(contact, channel, Persona(contact["persona"]), bullets, persona_template, voice_doc)
     text = _call_claude(prompt, anthropic_client)
 
-    # Soft guardrail pass 1
+    # Generation-fault pass: collect every detectable fault in the first
+    # generation, then regenerate ONCE with all corrective notes combined.
+    # Placeholder prevention (AUDIT-A1) lives here — upstream of hard_check —
+    # so the generator gets a chance to fix itself before the gate fires.
+    anti_phrases: list[str] = []
+    extra_notes: list[str] = []
+
     bad_phrase = check_draft(text)
     if bad_phrase is not None:
-        # Regen once with anti-phrase nudge (list form so future iterations
-        # can carry forward multiple phrases without prompt changes).
+        anti_phrases.append(bad_phrase)
+
+    placeholder = find_placeholder(text)
+    if placeholder is not None:
+        extra_notes.append(_PLACEHOLDER_REGEN_NOTE.format(token=placeholder))
+
+    if anti_phrases or extra_notes:
         prompt2 = _build_prompt(
             contact, channel, Persona(contact["persona"]), bullets,
-            persona_template, voice_doc, anti_phrases=[bad_phrase],
+            persona_template, voice_doc,
+            anti_phrases=anti_phrases or None,
+            extra_instructions=extra_notes or None,
         )
         text = _call_claude(prompt2, anthropic_client)
         soft_failed = check_draft(text) is not None
@@ -288,7 +333,13 @@ def _draft_one_channel(
 
     if not hc.passed:
         # Hard fail short-circuits — no critic, no soft considerations.
-        return body, subject, True, hc.quality_code, None
+        # The reason is persisted in the trace column so the marketer and
+        # artifact can explain the hold (AUDIT-A9), and any surviving
+        # placeholder tokens are redacted so they are never serialized
+        # to the DB or an artifact (AUDIT-A2).
+        if find_placeholder(body) is not None:
+            body = redact_placeholders(body)
+        return body, subject, True, hc.quality_code, hard_fail_trace(hc.reason)
 
     # Layer 4: automated critic (Sonnet). Runs only when hard checks pass
     # and the user hasn't disabled it via config. Critic verdict can

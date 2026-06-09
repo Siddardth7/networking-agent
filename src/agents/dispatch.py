@@ -18,9 +18,14 @@ from pathlib import Path
 from typing import Optional
 
 from src.agents.achievement_matcher import load_resume_library, match_achievements
-from src.agents.critic import critique_draft
+from src.agents.critic import critique_draft, hard_fail_trace
 from src.agents.drafter import _build_prompt, _load_persona_template
-from src.agents.guardrails import check_draft, hard_check
+from src.agents.guardrails import (
+    check_draft,
+    find_placeholder,
+    hard_check,
+    redact_placeholders,
+)
 from src.agents.shared import (
     CHANNEL_CONSTRAINTS,
     DEFAULT_TIMEOUT_SECONDS,
@@ -291,6 +296,12 @@ def dispatch_revision(
     critic_trace: Optional[str] = None
     if not hc.passed:
         quality_code = hc.quality_code  # HARD_FAIL
+        # Persist the gate's reason (AUDIT-A9) and redact any placeholder
+        # tokens so they are never serialized (AUDIT-A2) — revision path
+        # mirrors the first-draft path.
+        critic_trace = hard_fail_trace(hc.reason)
+        if find_placeholder(body) is not None:
+            body = redact_placeholders(body)
     else:
         critic_code: Optional[str] = None
         if cfg.enable_critic:

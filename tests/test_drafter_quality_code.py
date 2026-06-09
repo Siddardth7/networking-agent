@@ -106,8 +106,12 @@ class TestQualityCodePersisted:
 
     def test_research_needed_placeholder_marked_hard_fail(self, db_path):
         _, ids = _seed(1)
+        # AUDIT-A1: a placeholder in the first generation now triggers one
+        # corrective regen; only a draft that is STILL dirty afterwards is
+        # HARD_FAILed (and redacted, AUDIT-A2).
         client = _mk_client([
-            "Hey — saw your [RESEARCH_NEEDED] post recently.",  # HARD_FAIL
+            "Hey — saw your [RESEARCH_NEEDED] post recently.",  # gen 1
+            "Hey — still citing [RESEARCH_NEEDED] here.",  # regen, still dirty
             "Conversational follow-up.",
             "Subject: hi\n\nBody.",
         ])

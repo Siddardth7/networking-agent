@@ -184,19 +184,29 @@ class TestDrafterPersistsTrace:
             # Every dimension should be 5 in this mock
             assert all(v == 5 for v in trace["scores"].values())
 
-    def test_hard_fail_skips_critic_trace(self, db_path):
+    def test_hard_fail_carries_hard_check_trace(self, db_path):
         contact_id = _seed_one_contact()
         client = _Client(
-            draft_texts=["Hey [RESEARCH_NEEDED] saw your work.", "Clean follow-up."],
+            draft_texts=[
+                "Hey [RESEARCH_NEEDED] saw your work.",  # gen 1
+                "Hey [RESEARCH_NEEDED] regen still dirty.",  # AUDIT-A1 regen
+                "Clean follow-up.",
+            ],
             critic_scores={d: 5 for d in RUBRIC_DIMENSIONS},
         )
         result = draft_for_contacts([contact_id], anthropic_client=client)
 
         by_channel = {d.channel: d for d in result[contact_id]}
-        # HARD_FAIL short-circuits before the critic runs.
+        # HARD_FAIL short-circuits before the critic runs, but the trace now
+        # carries the hard_check reason so the hold is explainable (AUDIT-A9).
         hf = by_channel["LINKEDIN_CONNECTION"]
         assert hf.quality_code == "HARD_FAIL"
-        assert hf.critic_trace is None
+        assert hf.critic_trace is not None
+        trace = json.loads(hf.critic_trace)
+        assert trace["quality_code"] == "HARD_FAIL"
+        assert "Placeholder" in trace["reason"]
+        # No per-dimension scores — this was not a critic verdict.
+        assert trace["scores"] == {}
 
 
 # ---------------------------------------------------------------------------

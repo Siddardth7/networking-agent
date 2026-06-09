@@ -22,7 +22,7 @@ from typing import Optional
 
 from src.core.config import SONNET_MODEL
 
-__all__ = ["CriticResult", "critique_draft", "RUBRIC_DIMENSIONS"]
+__all__ = ["CriticResult", "critique_draft", "hard_fail_trace", "RUBRIC_DIMENSIONS"]
 
 
 # Rubric dimensions, each scored 0–5 by the critic.  Any score below
@@ -76,6 +76,24 @@ class CriticResult:
         both readers.
         """
         return json.dumps(asdict(self), separators=(",", ":"))
+
+
+def hard_fail_trace(reason: Optional[str]) -> str:
+    """Serialize a deterministic hard-gate failure in the critic-trace shape.
+
+    Inputs: the ``HardCheckResult.reason`` string from ``guardrails.hard_check``.
+    Output: JSON string matching the ``CriticResult.to_json()`` schema so the
+    marketer and artifact renderers can display *why* a HARD_FAIL draft was
+    held without a second code path (AUDIT-A9). No side effects.
+    """
+    reason_str = reason or "hard guardrail check failed"
+    return CriticResult(
+        passed=False,
+        quality_code="HARD_FAIL",
+        scores={},
+        issues=[reason_str],
+        reason=reason_str,
+    ).to_json()
 
 
 # ---------------------------------------------------------------------------
