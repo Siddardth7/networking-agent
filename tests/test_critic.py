@@ -12,6 +12,7 @@ import pytest
 from src.agents.critic import (
     MIN_SCORE,
     RUBRIC_DIMENSIONS,
+    SEVERE_SCORE,
     CriticResult,
     _build_tool_schema,
     critique_draft,
@@ -97,11 +98,12 @@ class TestVerdict:
         assert result.passed is True
         assert result.quality_code == "OK"
 
-    def test_any_dimension_below_min_holds(self):
-        # Specificity tanks → CRITIC_HOLD even with strong scores elsewhere.
+    def test_severe_dimension_holds(self):
+        # AUDIT-A3 recalibration: a single SEVERE score (<= 1) holds even
+        # with strong scores elsewhere; a single borderline 2 now passes.
         client = Mock()
         bad = {dim: 5 for dim in RUBRIC_DIMENSIONS}
-        bad["specificity"] = MIN_SCORE - 1
+        bad["specificity"] = SEVERE_SCORE
         client.messages.create.return_value = _make_critic_response(
             bad, issues=["specificity: generic eVTOL line, no real signal"],
         )

@@ -22,11 +22,19 @@ from typing import Optional
 
 from src.core.config import SONNET_MODEL
 
-__all__ = ["CriticResult", "critique_draft", "hard_fail_trace", "RUBRIC_DIMENSIONS"]
+__all__ = [
+    "CriticResult",
+    "critique_draft",
+    "evaluate_scores",
+    "hard_fail_trace",
+    "RUBRIC_DIMENSIONS",
+    "MIN_SCORE",
+    "SEVERE_SCORE",
+    "MAX_WEAK_DIMS",
+]
 
 
-# Rubric dimensions, each scored 0–5 by the critic.  Any score below
-# MIN_SCORE flips the draft to CRITIC_HOLD.
+# Rubric dimensions, each scored 0–5 by the critic.
 RUBRIC_DIMENSIONS: tuple[str, ...] = (
     "specificity",      # references something real, not generic flattery
     "one_ask",          # one clear CTA, no multi-ask, no hedge stacking
@@ -36,7 +44,42 @@ RUBRIC_DIMENSIONS: tuple[str, ...] = (
     "relevance",        # sender's background connects to recipient's role/context
 )
 
-MIN_SCORE = 3  # 0–5 scale; any dimension below this triggers CRITIC_HOLD
+# Decision-rule constants (AUDIT-A3 recalibration).
+#
+# The original rule — hold when ANY dimension scores below MIN_SCORE —
+# held 28/30 drafts (93%) on the 2026-06-06 Joby run, making unattended
+# runs impossible. The recalibrated rule holds a draft only when the
+# failure is unambiguous:
+#
+#   - any dimension <= SEVERE_SCORE (egregious single failure, including
+#     grounded_facts <= 1 = fabrication evidence — the P0 signal), OR
+#   - more than MAX_WEAK_DIMS dimensions below MIN_SCORE (broadly weak).
+#
+# A single borderline dimension (score 2) no longer blocks an otherwise
+# solid draft. On the captured June-6 fixture set this lands the hold
+# rate at 33% — inside the 20-40% calibration band. See
+# tests/test_critic_calibration.py for the regression fixtures.
+MIN_SCORE = 3      # dimensions below this are "weak"
+SEVERE_SCORE = 1   # any dimension at or below this always holds
+MAX_WEAK_DIMS = 2  # hold when MORE than this many dimensions are weak
+
+
+def evaluate_scores(scores: dict[str, int]) -> tuple[bool, list[str]]:
+    """Apply the recalibrated hold rule to a critic score map.
+
+    Inputs: ``{dimension: 0..5}`` map. Output: ``(passed, failing_dims)``
+    where *failing_dims* names the dimensions that triggered the hold
+    (empty when passed). Pure function, no side effects — this is the
+    single source of truth for the CRITIC_HOLD decision, kept separate
+    from the LLM call so calibration is testable offline (AUDIT-A32).
+    """
+    severe = [d for d, s in scores.items() if s <= SEVERE_SCORE]
+    if severe:
+        return False, severe
+    weak = [d for d, s in scores.items() if s < MIN_SCORE]
+    if len(weak) > MAX_WEAK_DIMS:
+        return False, weak
+    return True, []
 
 
 @dataclass
@@ -157,8 +200,11 @@ _DIMENSION_DESCRIPTIONS: dict[str, str] = {
     ),
     "grounded_facts": (
         "Every concrete claim must trace to APPROVED FACTS or the sender's "
-        "identity. 0 = invents facts, attributes coursework as employer work, "
-        "or makes claims that cannot be checked; 5 = strictly sourced."
+        "identity. 0-1 = invents facts or metrics, or attributes coursework "
+        "as employer work (fabrication). The ABSENCE of APPROVED FACTS is "
+        "not itself a failure: when no facts were available, score on "
+        "whether the draft stays within the sender's identity (a modest, "
+        "claim-free draft with no facts available deserves a 3+)."
     ),
     "economy": (
         "Is the message appropriately concise for the channel? 0 = bloated "
@@ -255,11 +301,11 @@ def critique_draft(
     issues_raw = data.get("issues") or []
     issues = [str(x) for x in issues_raw if x]
 
-    failing = [d for d, s in scores.items() if s < MIN_SCORE]
-    if failing:
+    passed, failing = evaluate_scores(scores)
+    if not passed:
         reason = (
-            f"critic flagged {len(failing)} dimension(s) "
-            f"below {MIN_SCORE}: {', '.join(failing)}"
+            f"critic held the draft on {len(failing)} dimension(s): "
+            f"{', '.join(f'{d}={scores[d]}' for d in failing)}"
         )
         return CriticResult(
             passed=False,
@@ -305,5 +351,8 @@ def _build_critique_prompt(
 {subject_line}{body}
 
 Score each rubric dimension 0–5 and list specific issues. Score strictly:
-the default is 3, and a draft must EARN a 4 or 5. Any score below {MIN_SCORE}
-on any dimension will block the draft from being sent."""
+the default is 3, and a draft must EARN a 4 or 5. Reserve scores of
+{SEVERE_SCORE} or below for unambiguous failures (fabricated facts, no ask
+or hopelessly stacked asks, unusable tone) — a draft is blocked when any
+dimension is that bad, or when more than {MAX_WEAK_DIMS} dimensions fall
+below {MIN_SCORE}."""

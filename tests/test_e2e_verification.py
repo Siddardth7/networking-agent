@@ -19,7 +19,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.agents.artifact_writer import write_artifact
-from src.agents.critic import RUBRIC_DIMENSIONS, MIN_SCORE
+from src.agents.critic import RUBRIC_DIMENSIONS, SEVERE_SCORE
 from src.agents.drafter import draft_for_contacts
 from src.agents.finder import find_contacts
 from src.agents.marketer import run_approval_loop
@@ -86,7 +86,7 @@ class _StagedClient:
 
     def enqueue_critic_fail(self, dimension: str):
         bad = {d: 5 for d in RUBRIC_DIMENSIONS}
-        bad[dimension] = MIN_SCORE - 1
+        bad[dimension] = SEVERE_SCORE  # AUDIT-A3: severe holds
         self.queue.append(("critic", bad))
 
     def enqueue_draft(self, text: str):

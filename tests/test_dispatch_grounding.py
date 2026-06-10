@@ -12,7 +12,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.agents.critic import RUBRIC_DIMENSIONS, MIN_SCORE
+from src.agents.critic import RUBRIC_DIMENSIONS, SEVERE_SCORE
 from src.agents.dispatch import _build_revision_prompt, dispatch_revision
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import Channel, DraftDispatchRequest, Persona
@@ -194,7 +194,7 @@ class TestDispatchPersistsQualityCode:
     def test_critic_hold_revision_recorded(self):
         contact_id, draft_id = _seed_contact_with_draft()
         bad = {dim: 5 for dim in RUBRIC_DIMENSIONS}
-        bad["specificity"] = MIN_SCORE - 1
+        bad["specificity"] = SEVERE_SCORE  # AUDIT-A3: severe holds
         client = _DispatchClient(
             texts=["Generic revision."], critic_scores=bad,
         )

@@ -11,7 +11,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.agents.critic import RUBRIC_DIMENSIONS, MIN_SCORE
+from src.agents.critic import RUBRIC_DIMENSIONS, SEVERE_SCORE
 from src.agents.drafter import draft_for_contacts
 from src.agents.marketer import _contact_has_hard_fail, run_approval_loop
 from src.core.db import get_connection, init_db, with_writer
@@ -100,7 +100,7 @@ class TestCriticVerdictPersisted:
     def test_critic_low_score_yields_critic_hold(self, db_path):
         _, ids = _seed(with_email=False)
         bad = {dim: 5 for dim in RUBRIC_DIMENSIONS}
-        bad["specificity"] = MIN_SCORE - 1
+        bad["specificity"] = SEVERE_SCORE  # AUDIT-A3: severe holds
         client = _DraftAndCriticClient(
             draft_texts=["Generic.", "Also generic."],
             critic_scores=bad,

@@ -13,7 +13,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.agents.artifact_writer import _format_critic_trace, write_artifact
-from src.agents.critic import CriticResult, RUBRIC_DIMENSIONS, MIN_SCORE
+from src.agents.critic import CriticResult, RUBRIC_DIMENSIONS, MIN_SCORE, SEVERE_SCORE
 from src.agents.drafter import draft_for_contacts
 from src.agents.marketer import _format_critic_for_reviewer, run_approval_loop
 from src.core.db import get_connection, init_db, with_writer
@@ -141,7 +141,7 @@ class TestDrafterPersistsTrace:
     def test_held_draft_carries_trace(self, db_path):
         contact_id = _seed_one_contact()
         bad = {d: 5 for d in RUBRIC_DIMENSIONS}
-        bad["specificity"] = MIN_SCORE - 1
+        bad["specificity"] = SEVERE_SCORE  # AUDIT-A3: severe holds
         client = _Client(
             draft_texts=["Hello world.", "Follow-up text."],
             critic_scores=bad,
@@ -153,7 +153,7 @@ class TestDrafterPersistsTrace:
             assert d.critic_trace is not None
             trace = json.loads(d.critic_trace)
             assert trace["passed"] is False
-            assert trace["scores"]["specificity"] == MIN_SCORE - 1
+            assert trace["scores"]["specificity"] == SEVERE_SCORE
 
         # DB row also carries the trace
         conn = get_connection()
