@@ -369,10 +369,12 @@ class TestPartialFailureAggregation:
 
         real_fn = drafter_module._draft_all_channels_for_contact
 
-        def selective_fail(contact_id, anthropic_client, library_path):
+        def selective_fail(contact_id, anthropic_client, library_path,
+                           opener_registry=None):
             if contact_id == failing_cid:
                 raise RuntimeError(f"boom for {contact_id}")
-            return real_fn(contact_id, anthropic_client, library_path)
+            return real_fn(contact_id, anthropic_client, library_path,
+                           opener_registry)
 
         monkeypatch.setattr(drafter_module, "_draft_all_channels_for_contact", selective_fail)
 

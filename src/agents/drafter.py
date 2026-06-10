@@ -7,7 +7,9 @@ Traceability: DESIGN.md §4 (Drafter phases), §6 (Drafting subsystem)
 from __future__ import annotations
 
 import concurrent.futures
+import re
 import sqlite3
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -29,7 +31,13 @@ from src.core.config import HAIKU_MODEL, load_config
 from src.core.db import get_connection, with_writer
 from src.core.schemas import Channel, FocusArea, Persona, ProjectType
 
-__all__ = ["Draft", "DrafterPartialFailure", "draft_for_contacts"]
+__all__ = [
+    "Draft",
+    "DrafterPartialFailure",
+    "OpenerRegistry",
+    "draft_for_contacts",
+    "normalize_opener",
+]
 
 # Cap workers to avoid hitting Anthropic Tier 1 rate limits (50 RPM)
 _MAX_WORKERS = 6
@@ -143,6 +151,66 @@ _PLACEHOLDER_REGEN_NOTE = (
     "placeholder tokens. If a specific fact is unavailable, omit that "
     "sentence entirely, or anchor on the contact's actual title instead."
 )
+
+# Regeneration note injected when the opener has already been used by the
+# maximum allowed number of contacts in this run (AUDIT-A6, Layer 1-A).
+_OPENER_REGEN_NOTE = (
+    'It opened with "{opener}" — the same opening already used for other '
+    "contacts in this batch. Write a structurally different opening that "
+    "leads with something specific to THIS person."
+)
+
+# Cross-contact opener bookkeeping (AUDIT-A6). Openers are normalized to a
+# short lowercase word window so trivial punctuation differences do not
+# defeat the repetition check.
+_OPENER_WORD_WINDOW = 12
+# Em-dash counts as a sentence break for opener purposes — "Saw your work
+# on X — would value connecting" and "Saw your work on X." share an opener.
+_SENTENCE_SPLIT_RE = re.compile(r"[.!?\n—]")
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9\s]")
+
+
+def normalize_opener(text: str) -> str:
+    """Normalize a draft's opening for cross-contact repetition checks.
+
+    Inputs: full draft body text. Output: the first sentence, lowercased,
+    stripped of non-alphanumerics, capped at ``_OPENER_WORD_WINDOW`` words
+    (empty string for empty input). Pure function, no side effects.
+    """
+    first_sentence = _SENTENCE_SPLIT_RE.split(text, maxsplit=1)[0]
+    cleaned = _NON_ALNUM_RE.sub(" ", first_sentence.lower())
+    words = cleaned.split()
+    return " ".join(words[:_OPENER_WORD_WINDOW])
+
+
+class OpenerRegistry:
+    """Thread-safe per-run registry of opener usage per channel.
+
+    The drafter fans out one thread per contact; this registry is the
+    only cross-contact state, guarded by its own lock. ``is_overused``
+    answers "have ``max_repeats`` contacts already used this opener on
+    this channel?" and ``register`` records a final draft's opener.
+    """
+
+    def __init__(self, max_repeats: int = 2) -> None:
+        self.max_repeats = max_repeats
+        self._lock = threading.Lock()
+        self._counts: dict[tuple[str, str], int] = {}
+
+    def is_overused(self, channel: str, opener_key: str) -> bool:
+        """True when *opener_key* already hit the per-channel repeat cap."""
+        if not opener_key:
+            return False
+        with self._lock:
+            return self._counts.get((channel, opener_key), 0) >= self.max_repeats
+
+    def register(self, channel: str, opener_key: str) -> None:
+        """Record one more use of *opener_key* on *channel*."""
+        if not opener_key:
+            return
+        with self._lock:
+            key = (channel, opener_key)
+            self._counts[key] = self._counts.get(key, 0) + 1
 
 
 _FACT_DISCIPLINE = """## FACT DISCIPLINE — non-negotiable
@@ -274,6 +342,7 @@ def _draft_one_channel(
     linkedin_char_limit: int = 200,
     email_word_limit: int = 150,
     enable_critic: bool = True,
+    opener_registry: Optional[OpenerRegistry] = None,
 ) -> tuple[str, Optional[str], bool, str, Optional[str]]:
     """Generate one draft for (contact, channel).
 
@@ -301,6 +370,18 @@ def _draft_one_channel(
     if placeholder is not None:
         extra_notes.append(_PLACEHOLDER_REGEN_NOTE.format(token=placeholder))
 
+    # Cross-contact opener variety (AUDIT-A6): if this opener already hit
+    # the per-run repeat cap, ask for a structurally different opening.
+    if opener_registry is not None:
+        check_body = (
+            parse_email_body_subject(text)[0]
+            if channel == Channel.COLD_EMAIL
+            else text
+        )
+        if opener_registry.is_overused(channel.value, normalize_opener(check_body)):
+            raw_opener = _SENTENCE_SPLIT_RE.split(check_body, maxsplit=1)[0][:80]
+            extra_notes.append(_OPENER_REGEN_NOTE.format(opener=raw_opener))
+
     if anti_phrases or extra_notes:
         prompt2 = _build_prompt(
             contact, channel, Persona(contact["persona"]), bullets,
@@ -319,6 +400,14 @@ def _draft_one_channel(
         if channel == Channel.COLD_EMAIL
         else (text, None)
     )
+
+    # Register the final opener; a draft that still repeats an overused
+    # opener after its regen is kept visible to the reviewer as SOFT_FLAG.
+    if opener_registry is not None:
+        final_key = normalize_opener(body)
+        if opener_registry.is_overused(channel.value, final_key):
+            soft_failed = True
+        opener_registry.register(channel.value, final_key)
 
     # Hard-fail gate: brackets, fabricated metrics, length. Operates on the
     # body (subject excluded from word/char counts intentionally).
@@ -424,6 +513,7 @@ def _draft_all_channels_for_contact(
     contact_id: int,
     anthropic_client,
     library_path: Optional[str],
+    opener_registry: Optional[OpenerRegistry] = None,
 ) -> list[Draft]:
     contact = _load_contact(contact_id)
     if contact is None:
@@ -467,6 +557,7 @@ def _draft_all_channels_for_contact(
             linkedin_char_limit=cfg.linkedin_char_limit,
             email_word_limit=cfg.email_word_limit,
             enable_critic=cfg.enable_critic,
+            opener_registry=opener_registry,
         )
         generated.append((channel, body, subject, quality_flag, quality_code, critic_trace))
 
@@ -540,6 +631,10 @@ def draft_for_contacts(
         from src.core.config import get_anthropic_client
         anthropic_client = get_anthropic_client()
 
+    # One registry per run — the only shared state between contact
+    # workers, used to enforce cross-contact opener variety (AUDIT-A6).
+    opener_registry = OpenerRegistry(max_repeats=load_config().opener_max_repeats)
+
     workers = min(_MAX_WORKERS, max(1, len(contact_ids)))
     results: dict[int, list[Draft]] = {}
     errors: list[tuple[int, Exception]] = []
@@ -557,6 +652,7 @@ def draft_for_contacts(
                 cid,
                 anthropic_client,
                 library_path,
+                opener_registry,
             ): cid
             for cid in contact_ids
         }

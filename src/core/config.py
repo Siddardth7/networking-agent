@@ -95,6 +95,10 @@ class Config:
     # critic review and only pass through guardrails.
     enable_critic: bool = True
 
+    # Layer 1-A (variety): max contacts per run that may share the same
+    # normalized opener per channel before the drafter forces a rewrite.
+    opener_max_repeats: int = 2
+
 
 def _check_permissions(path: Path) -> None:
     """Raise ConfigSecurityError if path mode is not 0o600."""
@@ -187,6 +191,7 @@ def load_config() -> Config:
     email_word_limit = int(yaml_quality.get("email_word_limit", 150))
     batch_hard_fail_threshold = float(yaml_quality.get("batch_hard_fail_threshold", 0.0))
     enable_critic = bool(yaml_quality.get("enable_critic", True))
+    opener_max_repeats = int(yaml_quality.get("opener_max_repeats", 2))
 
     return Config(
         anthropic_api_key=anthropic_api_key,
@@ -199,6 +204,7 @@ def load_config() -> Config:
         email_word_limit=email_word_limit,
         batch_hard_fail_threshold=batch_hard_fail_threshold,
         enable_critic=enable_critic,
+        opener_max_repeats=opener_max_repeats,
     )
 
 

@@ -19,3 +19,4 @@ quality:
   email_word_limit: 150       # cold-email body word cap
   batch_hard_fail_threshold: 0.0  # warn if HARD_FAIL fraction exceeds this
   enable_critic: true         # Layer 4 automated critic pass
+  opener_max_repeats: 2       # max contacts per run sharing the same opener
