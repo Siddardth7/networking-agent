@@ -18,6 +18,8 @@ from src.agents.achievement_matcher import load_resume_library, match_achievemen
 from src.agents.critic import critique_draft, hard_fail_trace
 from src.agents.guardrails import (
     check_draft,
+    detect_multi_ask,
+    detect_redundant_intro,
     find_placeholder,
     hard_check,
     redact_placeholders,
@@ -160,6 +162,21 @@ _OPENER_REGEN_NOTE = (
     "leads with something specific to THIS person."
 )
 
+# Regeneration note injected when the draft stacked more than one ask
+# (AUDIT-A7) — a main driver of June-6 critic holds.
+_ONE_ASK_REGEN_NOTE = (
+    "It made more than one ask. Make exactly ONE ask — drop every "
+    "secondary request ('otherwise...', 'also, if you know someone...', "
+    "'or if there's a better person...')."
+)
+
+# Regeneration note injected when the self-intro repeats between the body
+# and the signature (AUDIT-A8).
+_INTRO_REGEN_NOTE = (
+    "It stated the sender's program/school more than once (body AND "
+    "signature). State the identity exactly once."
+)
+
 # Cross-contact opener bookkeeping (AUDIT-A6). Openers are normalized to a
 # short lowercase word window so trivial punctuation differences do not
 # defeat the repetition check.
@@ -238,7 +255,22 @@ or the Contact Information section. In particular:
 
 4. **Specificity floor.** If the only specific thing you can say is
    generic to the company (e.g., "your eVTOL work"), prefer a shorter
-   message that omits the generic line entirely."""
+   message that omits the generic line entirely.
+
+5. **No false attribution of company news.** Company-level news or
+   announcements may inform your phrasing, but NEVER present them as the
+   contact's own posts, statements, or personal work ("your recent
+   posts", "saw your work on <company initiative>") unless the signal
+   explicitly came from the person themselves.
+
+## MESSAGE STRUCTURE — non-negotiable
+
+- **One ask only.** Make exactly ONE ask. Never stack a second request —
+  no "otherwise...", no "also, if you know someone...", no "or if
+  there's a better person on your team...". One message, one clear CTA.
+- **Identity stated once.** Say who you are (program, school, timeline)
+  at most ONCE. If your signature carries the program and school, do not
+  repeat them in the body."""
 
 
 def _render_approved_facts(bullets: list) -> str:
@@ -357,8 +389,16 @@ def _draft_one_channel(
 
     # Generation-fault pass: collect every detectable fault in the first
     # generation, then regenerate ONCE with all corrective notes combined.
-    # Placeholder prevention (AUDIT-A1) lives here — upstream of hard_check —
-    # so the generator gets a chance to fix itself before the gate fires.
+    # Placeholder prevention (AUDIT-A1), multi-ask (AUDIT-A7), redundant
+    # self-intro (AUDIT-A8), and opener variety (AUDIT-A6) all live here —
+    # upstream of hard_check — so the generator gets one chance to fix
+    # itself before any gate fires.
+    check_body = (
+        parse_email_body_subject(text)[0]
+        if channel == Channel.COLD_EMAIL
+        else text
+    )
+
     anti_phrases: list[str] = []
     extra_notes: list[str] = []
 
@@ -370,19 +410,22 @@ def _draft_one_channel(
     if placeholder is not None:
         extra_notes.append(_PLACEHOLDER_REGEN_NOTE.format(token=placeholder))
 
+    if detect_multi_ask(check_body):
+        extra_notes.append(_ONE_ASK_REGEN_NOTE)
+
+    if detect_redundant_intro(check_body):
+        extra_notes.append(_INTRO_REGEN_NOTE)
+
     # Cross-contact opener variety (AUDIT-A6): if this opener already hit
     # the per-run repeat cap, ask for a structurally different opening.
-    if opener_registry is not None:
-        check_body = (
-            parse_email_body_subject(text)[0]
-            if channel == Channel.COLD_EMAIL
-            else text
-        )
-        if opener_registry.is_overused(channel.value, normalize_opener(check_body)):
-            raw_opener = _SENTENCE_SPLIT_RE.split(check_body, maxsplit=1)[0][:80]
-            extra_notes.append(_OPENER_REGEN_NOTE.format(opener=raw_opener))
+    if opener_registry is not None and opener_registry.is_overused(
+        channel.value, normalize_opener(check_body)
+    ):
+        raw_opener = _SENTENCE_SPLIT_RE.split(check_body, maxsplit=1)[0][:80]
+        extra_notes.append(_OPENER_REGEN_NOTE.format(opener=raw_opener))
 
-    if anti_phrases or extra_notes:
+    regenerated = bool(anti_phrases or extra_notes)
+    if regenerated:
         prompt2 = _build_prompt(
             contact, channel, Persona(contact["persona"]), bullets,
             persona_template, voice_doc,
@@ -390,15 +433,20 @@ def _draft_one_channel(
             extra_instructions=extra_notes or None,
         )
         text = _call_claude(prompt2, anthropic_client)
-        soft_failed = check_draft(text) is not None
-    else:
-        soft_failed = False
 
     # Parse body/subject before length-checking so we measure what's sent.
     body, subject = (
         _parse_email_body_subject(text)
         if channel == Channel.COLD_EMAIL
         else (text, None)
+    )
+
+    # A fault that survives its corrective regen stays visible to the
+    # reviewer as SOFT_FLAG (placeholders escalate to HARD_FAIL below).
+    soft_failed = regenerated and (
+        check_draft(text) is not None
+        or detect_multi_ask(body)
+        or detect_redundant_intro(body)
     )
 
     # Register the final opener; a draft that still repeats an overused

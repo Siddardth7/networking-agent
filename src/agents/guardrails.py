@@ -13,6 +13,8 @@ from typing import Optional
 
 __all__ = [
     "check_draft",
+    "detect_multi_ask",
+    "detect_redundant_intro",
     "hard_check",
     "HardCheckResult",
     "BLOCKLIST",
@@ -136,6 +138,76 @@ def redact_placeholders(text: str) -> str:
     token is never serialized to the DB or a Markdown artifact (AUDIT-A2).
     """
     return _BRACKET_PATTERN.sub(_REDACTION_TEXT, text)
+
+
+# ---------------------------------------------------------------------------
+# Generation-quality detectors (AUDIT-A7 / AUDIT-A8) — used by the drafter
+# to trigger a corrective regen; persistent faults become SOFT_FLAG.
+# ---------------------------------------------------------------------------
+
+# Phrases that signal a call-to-action. A SENTENCE containing any of these
+# counts as one ask; two ask-sentences (or an ask-sentence with a stacked
+# hedge) is a multi-ask.
+_ASK_PHRASE_RES: tuple[re.Pattern, ...] = (
+    re.compile(r"\b\d+\s*minutes?\b", re.IGNORECASE),
+    re.compile(r"\b(would|could|can) (you|we)\b", re.IGNORECASE),
+    re.compile(r"\bknow (anyone|someone)\b", re.IGNORECASE),
+    re.compile(r"\b(right|better) person\b", re.IGNORECASE),
+    re.compile(r"\bsomeone (on|from) (the|your) team\b", re.IGNORECASE),
+    re.compile(r"\bhiring side\b", re.IGNORECASE),
+    re.compile(r"\b(happy|glad|open) to (chat|connect|talk)\b", re.IGNORECASE),
+)
+
+# Hedge connectors that stack a second request onto an ask sentence:
+# "...15 minutes, or if there's a better person on your team...".
+_HEDGE_RE = re.compile(r"\b(otherwise|alternatively|also,?\s+if|or if)\b", re.IGNORECASE)
+
+_ASK_SENTENCE_SPLIT_RE = re.compile(r"[.!?\n]")
+
+
+def detect_multi_ask(text: str) -> bool:
+    """Return True when *text* makes more than one ask (AUDIT-A7).
+
+    Inputs: draft body text. Output: bool. No side effects. Three
+    deterministic signals: two or more questions, two or more sentences
+    each containing an ask phrase, or an ask sentence with a stacked
+    hedge ("otherwise / also, if / or if"). A single sentence that
+    happens to contain several ask phrases ("Would you have 15
+    minutes?") is still one ask.
+    """
+    if text.count("?") >= 2:
+        return True
+    sentences = _ASK_SENTENCE_SPLIT_RE.split(text)
+    ask_sentences = [
+        s for s in sentences
+        if any(p.search(s) for p in _ASK_PHRASE_RES)
+    ]
+    if len(ask_sentences) >= 2:
+        return True
+    return any(_HEDGE_RE.search(s) for s in ask_sentences)
+
+
+# Identity phrases that should appear at most once per message. The body
+# stating "MS Aerospace Engineering student at UIUC" AND the signature
+# repeating program + school is the AUDIT-A8 redundancy.
+_IDENTITY_MARKERS: tuple[str, ...] = (
+    "uiuc",
+    "university of illinois",
+    "urbana-champaign",
+    "aerospace engineering",
+    "ms aerospace",
+)
+
+
+def detect_redundant_intro(text: str) -> bool:
+    """Return True when the self-intro repeats in *text* (AUDIT-A8).
+
+    Inputs: draft body text (including any signature the model wrote).
+    Output: bool — True when any single identity marker (school /
+    program) appears two or more times. No side effects.
+    """
+    lowered = text.lower()
+    return any(lowered.count(marker) >= 2 for marker in _IDENTITY_MARKERS)
 
 
 @dataclass
