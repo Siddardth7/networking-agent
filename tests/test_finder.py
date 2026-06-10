@@ -351,7 +351,9 @@ class TestGenerateHook:
             full_name="A", title="Technical Recruiter",
             linkedin_url="", company_slug="x"
         )
-        assert _generate_hook(c) == "GENERIC"
+        # AUDIT-A5: a real title now yields a title-derived hook instead of
+        # the GENERIC sentinel.
+        assert _generate_hook(c) == "your work as Technical Recruiter"
 
     def test_uiuc_tier1_in_title(self):
         c = ContactCandidate(

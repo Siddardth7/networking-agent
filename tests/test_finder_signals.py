@@ -72,8 +72,9 @@ class TestHookTiers:
         hook = _generate_hook(self._candidate(title="Composites Engineer"))
         assert hook == "your composites work"
 
-    def test_tier4_company_news_used_when_no_specific_signal(self):
-        # No hook_signal, generic title, no UIUC/employer match → Tier 4.
+    def test_company_news_never_used_as_hook(self):
+        # AUDIT-A4: news is phrasing material in shared_signals, never the
+        # hook string. With no better signal the title-derived hook wins.
         hook = _generate_hook(
             ContactCandidate(
                 full_name="X", title="Project Lead",
@@ -81,12 +82,13 @@ class TestHookTiers:
             ),
             company_news="Acme closed Series D funding for autonomous flight testing.",
         )
-        assert hook.startswith("Acme closed Series D")
+        assert hook == "your work as Project Lead"
 
     def test_generic_when_nothing_matches(self):
+        # AUDIT-A5: GENERIC is reachable only when even the title is empty.
         hook = _generate_hook(
             ContactCandidate(
-                full_name="X", title="Project Lead",
+                full_name="X", title=None,
                 linkedin_url="https://linkedin.com/in/x", company_slug="acme",
             ),
         )

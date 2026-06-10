@@ -6,6 +6,7 @@ Traceability: DESIGN.md §4 (Finder phases), §6 (Hook generation), §8.12 (HUNT
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
@@ -16,7 +17,7 @@ from src.providers.quota_manager import QuotaManager
 from src.providers.retry import QuotaExhausted
 from src.providers.serper import SerperProvider
 
-__all__ = ["find_contacts"]
+__all__ = ["find_contacts", "is_acceptable_hook", "looks_like_verbatim_news"]
 
 _ROLE_KEYWORDS = [
     "quality engineer",
@@ -166,6 +167,60 @@ def _classify_contact(
     return persona, focus_area, hook_signal
 
 
+# Verbatim-news detection (AUDIT-A4). The June-6 run pasted raw Serper
+# news snippets ("May 15 2026. Joby's Commitment to ... · May 5 2026.
+# Joby Reports First Quarter 2026 Financial Results.") directly into two
+# contacts' hooks. These patterns identify headline-shaped strings so
+# they can never be used as a hook again.
+_NEWS_DATE_RE = re.compile(
+    r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}\b"
+)
+_NEWS_MARKER_RE = re.compile(
+    r"(?i)(\bannounc\w+\b|\breports?\b|\bfinancial results\b"
+    r"|\bpress release\b|\bquarterly\b|\bseries [a-e] funding\b"
+    r"|\bcommitment to\b)"
+)
+
+# Maximum length for a hook string. Anything longer reads as pasted
+# content, not a conversational anchor.
+_MAX_HOOK_LEN = 120
+
+
+def looks_like_verbatim_news(text: str) -> bool:
+    """Return True when *text* is shaped like a pasted news headline.
+
+    Inputs: any candidate hook string. Output: bool. No side effects.
+    Three deterministic signals: a dateline ("May 15"), a headline
+    separator ("·"), or press-release phrasing ("Reports ... Financial
+    Results", "announced", "Series D funding"). Personal signals like
+    "led 787 empennage stress team" do not trip any of them.
+    """
+    if "·" in text:
+        return True
+    if _NEWS_DATE_RE.search(text):
+        return True
+    if _NEWS_MARKER_RE.search(text):
+        return True
+    return False
+
+
+def is_acceptable_hook(hook: Optional[str]) -> bool:
+    """Whitelist gate for hook shapes (AUDIT-A5).
+
+    Inputs: candidate hook string (may be None). Output: True only when
+    the hook is usable as a personalization anchor: non-empty, not the
+    GENERIC sentinel, single-line, within ``_MAX_HOOK_LEN`` characters,
+    and not a verbatim news headline. No side effects.
+    """
+    if not hook or hook == "GENERIC":
+        return False
+    if "\n" in hook or len(hook) > _MAX_HOOK_LEN:
+        return False
+    if looks_like_verbatim_news(hook):
+        return False
+    return True
+
+
 def _generate_hook(
     candidate: ContactCandidate,
     hook_signal: Optional[str] = None,
@@ -176,24 +231,28 @@ def _generate_hook(
     Tier ordering (most-specific first):
 
     Tier 0 — *hook_signal*: a verbatim signal extracted by the classifier
-             from the LinkedIn snippet. This is what makes the opener
-             genuinely personalized — when present we always prefer it.
+             from the LinkedIn snippet, accepted only when it passes the
+             ``is_acceptable_hook`` whitelist (news-shaped extractions
+             are rejected, AUDIT-A4).
     Tier 1 — UIUC alumni signal in title or URL.
     Tier 2 — shared employer (word-boundary match on title).
     Tier 3 — title-keyword specialty bucket.
-    Tier 4 — *company_news*: a snippet from the per-run company news
-             search. Shared across all contacts for the company; acts
-             as a low-resolution fallback before GENERIC.
-    Tier 5 — ``GENERIC`` sentinel. The drafter / marketer treat this as
+    Tier 3.5 — title-derived hook ("your work as <title>") so the drafter
+             always has a real anchor before GENERIC (AUDIT-A5).
+    Tier 4 — ``GENERIC`` sentinel. The drafter / marketer treat this as
              a "no real hook" state.
+
+    *company_news* is deliberately NEVER returned as the hook — it is
+    recorded in ``shared_signals`` as phrasing material only (AUDIT-A4).
     """
-    import re
+    del company_news  # never a hook; kept in the signature for callers
 
     title_lower = (candidate.title or "").lower()
     url_lower = (candidate.linkedin_url or "").lower()
 
-    # Tier 0: explicit hook_signal from the classifier (LinkedIn snippet).
-    if hook_signal:
+    # Tier 0: explicit hook_signal from the classifier (LinkedIn snippet),
+    # gated through the shape whitelist.
+    if hook_signal and is_acceptable_hook(hook_signal):
         return hook_signal
 
     # Tier 1: UIUC alumni signal
@@ -219,11 +278,17 @@ def _generate_hook(
     if any(k in title_lower for k in ["additive", "3d print"]):
         return "your additive manufacturing work"
 
-    # Tier 4: company news (Layer 1d — single per-run search).
-    if company_news:
-        return company_news
+    # Tier 3.5: title-derived hook — always prefer the contact's real
+    # title over GENERIC so the drafter has something true to anchor on
+    # instead of reaching for filler or a placeholder.
+    title = (candidate.title or "").strip()
+    if title:
+        hook = f"your work as {title}"
+        if len(hook) > _MAX_HOOK_LEN:
+            hook = hook[: _MAX_HOOK_LEN - 3].rstrip() + "..."
+        return hook
 
-    # Tier 5: generic fallback
+    # Tier 4: generic fallback
     return "GENERIC"
 
 
