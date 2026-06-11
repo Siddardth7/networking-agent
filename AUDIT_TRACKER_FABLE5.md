@@ -43,7 +43,7 @@ Severity: P0 safety/correctness · P1 quality holes blocking unattended runs
 | A28 | F5 | P3 | repo | Dev venv was Python 3.9 vs requires-python >=3.11; `pip install -e .` broken (no build-system) | venv predates pyproject | Rebuild .venv on python3.11; add [build-system] + setuptools package config to pyproject | RESOLVED |
 | A29 | F5 | P3 | src hygiene | print() throughout marketer/cli/orchestrator/artifact_writer; no logging module | CLI-first design | Justified: marketer REPL + CLI commands use print as their user interface (SA: "acceptable for a CLI"); artifact_writer's path print is consumed by the CLI contract. logging.getLogger added to agents' non-UI error paths | RESOLVED |
 | A30 | DA §4.6 / CV | P1 | pipeline | Cold-email path unvalidated (no verified emails in June-6 run); Hunter quota exhausted | External quota, not code | wontfix: requires live Hunter quota (external blocker) — recorded in OPEN_QUESTIONS_FABLE5.md; cold-email code paths are unit-tested | WONTFIX |
-| A31 | F5 | P3 | docs | CHANGELOG/README/DESIGN do not describe the June-6 critic work or v0.2.0 changes | Work uncommitted | CHANGELOG [0.2.0] section; README quality-gate section; DESIGN.md patches where implementation diverged; version bump | RESOLVED |
+| A31 | F5 | P3 | docs | CHANGELOG/README/DESIGN do not describe the June-6 critic work or v0.2.0 changes | Work uncommitted | CHANGELOG [0.2.0] section; README quality-gate + voice trust-model sections; version bump to 0.2.0. DESIGN.md itself lives OUTSIDE this repo and the spec forbids edits outside networking-agent/ — drift recorded in docs/DESIGN_DRIFT_v0.2.0.md instead | RESOLVED |
 | A32 | DA §5.6 / spec §4.2 | P0 | critic/tests | No regression fixtures from the June-6 run | Fixtures never captured | 30 real score vectors from state.db encoded as fixtures; assertions: hold rate 20–40%, Morgan+Marc POST pass, Yueyang POST + Nathan CONN fail, placeholder strings HARD_FAIL | RESOLVED |
 | A33 | spec §4.8 | P1 | dispatch/providers | Dispatch/quota/retry hygiene exposed by tests | — | Verified: test_dispatch (2 files), test_hunter, test_quota_manager, test_retry all present and green; coverage dispatch 81%→raised, hunter/quota covered | RESOLVED |
 
@@ -63,9 +63,21 @@ Severity: P0 safety/correctness · P1 quality holes blocking unattended runs
 12. **A10–A15 commits** — commit the June-6 uncommitted work in logical units.
 13. **A31** — docs: CHANGELOG 0.2.0, pyproject bump, README, DESIGN patches.
 
-## Verification gate results
+## Verification gate results (2026-06-10)
 
-Filled at the end of the pass — see CHANGELOG and final report.
+- `ruff check src tests` — clean (0 errors; was 254)
+- `ruff format --check src tests` — clean (77 files)
+- `pytest -q` — 485 passed, 0 failed (was 409)
+- `pytest --cov=src --cov-fail-under=80` — 90.2% (critic 100%, guardrails
+  99%, drafter 94%, all >= the 85% target on the named files)
+- `python -m compileall -q src` — clean
+- `from src.orchestrator import *` — imports clean
+- June-6 fixture re-run (tests/test_critic_calibration.py): hold rate 33%
+  (band 20-40%); Morgan/Marc POST pass; Yueyang POST (multi-ask) and Nathan
+  CONN (placeholder) still fail; grounded_facts <= 1 always holds; every held
+  draft carries a populated held reason
+- `pip install -e ".[dev]"` — works (build-system added)
+- Editable-install + venv rebuilt on Python 3.11.15 (was 3.9.6)
 
 ## Grep-gate justifications (spec §6)
 

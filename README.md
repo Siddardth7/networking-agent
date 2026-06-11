@@ -2,7 +2,7 @@
 
 A Claude Code plugin that automates professional networking outreach for aerospace and space-tech job seekers. It discovers relevant contacts at target companies, drafts personalized LinkedIn and cold-email messages using your resume and voice, and walks through an approval loop before writing a final outreach artifact — all from slash commands inside Claude Code.
 
-**Status:** v0.1.0 — pipeline complete, production-ready for personal use.
+**Status:** v0.2.0 — pipeline complete with an automated quality gate (hard guardrails + Sonnet critic), production-ready for personal use.
 
 ---
 
@@ -97,6 +97,39 @@ The Drafter agent uses `~/.networking-agent/voice.md` to match your writing styl
 cp config/voice.example.md ~/.networking-agent/voice.md
 # Then edit voice.md to describe your preferred tone, phrases to avoid, etc.
 ```
+
+**Trust model:** the full text of `voice.md` (and the bullets in
+`resume_library.yaml`) is embedded verbatim in every drafting prompt. Treat
+both files like code you wrote yourself — if you copy-paste a third-party
+"voice template", any instructions hidden in it will be followed by the
+drafting model. The agent caps `voice.md` at 16 KB (extra content is
+truncated with a warning), but it does not attempt to sanitize the content;
+only install templates you have read and trust.
+
+---
+
+## Quality Gate
+
+Every generated draft passes through three layers before it can be approved:
+
+1. **Generation-fault regen (drafter).** Blocklist phrases, bracketed
+   placeholder tokens, multi-asks, repeated self-intros, and openers already
+   used by `quality.opener_max_repeats` other contacts in the run each
+   trigger ONE corrective regeneration with explicit fix instructions.
+2. **Hard guardrails (deterministic).** Placeholder tokens, metrics that do
+   not appear in the APPROVED FACTS, and over-length messages are marked
+   `HARD_FAIL` — bodies with surviving placeholders are redacted before they
+   are stored. HARD_FAIL drafts cannot be approved without `--force`.
+3. **Critic (Sonnet).** Six rubric dimensions scored 0-5. A draft is held
+   (`CRITIC_HOLD`) only when a dimension is severe (<= 1, including
+   fabrication evidence) or more than two dimensions are weak (< 3).
+   Scores, issues, and a `Held because:` reason are persisted to
+   `drafts.critic_trace` and shown in the approval loop and the artifact.
+
+Faults that survive their regen are `SOFT_FLAG`ged — visible to the reviewer
+but approvable. Tune the gate in `config.yaml` under `quality:`
+(`linkedin_char_limit`, `email_word_limit`, `enable_critic`,
+`opener_max_repeats`, `batch_hard_fail_threshold`).
 
 ---
 

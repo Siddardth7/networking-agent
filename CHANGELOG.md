@@ -6,6 +6,95 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-10
+
+Quality release: closes every open item from DRAFTER_AUDIT_2026-06-06 and the
+remaining STRICT_AUDIT_v0.1.0 follow-ups. Full issue ledger with per-item
+status: AUDIT_TRACKER_FABLE5.md.
+
+### Added
+- **A10-A15** Layers 1-6 from the 2026-06-06 session, previously uncommitted:
+  snippet-derived hook signals + shared_signals (Layer 1), provenance-tagged
+  APPROVED FACTS + FACT DISCIPLINE (Layer 2), hard guardrail gate (Layer 3),
+  Sonnet critic with persisted critic_trace (Layer 4 + migration 003), the
+  HARD_FAIL/CRITIC_HOLD marketer gate + batch checkpoint (Layer 5), and the
+  shared drafter/dispatch implementation (Layer 6).
+- **A6** Cross-contact opener diversification (Layer 1-A): a normalized opener
+  may be used by at most `quality.opener_max_repeats` contacts per run
+  (default 2); overuse triggers a corrective regen, persistent repeats are
+  SOFT_FLAGged.
+- **A7** Drafter-level single-ask enforcement: deterministic multi-ask
+  detector (two questions / two ask-sentences / hedge-stacked ask) with one
+  corrective regen; prompt gains an explicit one-ask rule.
+- **A8** Self-intro deduplication: identity markers appearing twice (body +
+  signature) trigger a regen; prompt instructs identity-once.
+- **A9** Every held draft now carries a populated held reason: hard_check
+  reasons persist to `drafts.critic_trace`, and the artifact + marketer render
+  a `Held because:` line for HARD_FAIL and CRITIC_HOLD drafts.
+- **A20** Typed `EmptyLLMResponseError` (src/core/errors.py) replaces
+  IndexError/AttributeError on malformed LLM responses.
+- **A25** `SerperProvider.close()` / `HunterProvider.close()` httpx lifecycle.
+- **A32** Critic regression fixtures: the 30 real score vectors from the
+  2026-06-06 Joby run are encoded in tests/test_critic_calibration.py.
+
+### Changed
+- **A3** Critic decision rule recalibrated: hold only on a severe dimension
+  (score <= 1, including grounded_facts fabrication evidence) or more than two
+  weak dimensions (< 3). Hold rate on the June-6 fixture set drops 93% -> 33%
+  (target band 20-40%); Morgan/Marc passing drafts still pass, Yueyang
+  multi-ask and Nathan placeholder still fail. grounded_facts rubric
+  clarified: absence of APPROVED FACTS is not fabrication.
+- **A5** Hook generation: new title-derived tier (`your work as <title>`)
+  preferred over the GENERIC sentinel; `is_acceptable_hook` whitelist gates
+  classifier signals.
+- **A16** FACT DISCIPLINE rule 5: company-level news may never be attributed
+  to the contact personally ("your recent posts").
+- **A26** voice.md and resume_library.yaml now resolve next to config.yaml,
+  honoring `NETWORKING_AGENT_CONFIG`.
+- **A28** pyproject gains [build-system] + setuptools package config —
+  `pip install -e .` works; version bumped to 0.2.0; dependencies declared.
+- **A31** README documents the quality gate and the voice.md trust model.
+  DESIGN-drift notes recorded in docs/DESIGN_DRIFT_v0.2.0.md (the original
+  DESIGN.md lives outside this repository and is intentionally untouched).
+
+### Fixed
+- **A1** Placeholder tokens are now *prevented*, not just caught: a
+  placeholder in the first generation triggers one corrective regen with an
+  explicit anti-placeholder instruction before the hard gate runs.
+- **A2** Placeholder bodies are never serialized: a draft that still contains
+  a bracketed token after regen is HARD_FAILed and redacted
+  (`(placeholder removed)`) before any DB insert, in both the drafter and the
+  dispatch revision path.
+- **A4** Raw company-news strings can no longer become hooks: verbatim-news
+  detector (datelines, headline separators, press-release phrasing) rejects
+  them in every tier; news stays in shared_signals as phrasing material.
+- **A17** voice.md is size-capped at 16 KB on load (truncated with a logged
+  warning) to bound prompt-injection/token blow-up from pasted templates.
+- **A18** config.yaml permission check now fstats the open descriptor
+  (TOCTOU window closed).
+- **A19** Quota increments run under `BEGIN IMMEDIATE` — the check-then-update
+  pair is atomic across processes, not just threads.
+- **A21** Hunter lookups use the stored `companies.domain` when present; slug
+  inference is only the fallback.
+- **A23** Persona templates, voice doc, and resume library are read with
+  explicit utf-8 encoding.
+- **A27** Repo is ruff-lint and ruff-format clean (254 violations fixed).
+
+### Removed
+- Hook Tier 4 "company news as hook string" (replaced by the title-derived
+  tier; news is context, never a hook).
+
+### Wontfix (with reasons — see AUDIT_TRACKER_FABLE5.md)
+- **A22** dispatch executor-per-call timeout pattern: once-per-REVISE, tested,
+  zero user-visible gain from swapping to httpx timeouts.
+- **A24** purge.log hardening + state-transition audit log: explicitly
+  deferred by STRICT_AUDIT itself; no unattended send in v0.2.0.
+- **A30** Cold-email path live validation: blocked on Hunter quota (external);
+  recorded in OPEN_QUESTIONS_FABLE5.md. Unit coverage exists.
+
+### Tests
+- 409 -> 485 passing; coverage 90.2% (critic 100%, guardrails 99%, drafter 94%).
+
 ## [0.1.1] - 2026-05-25
 
 Hotfix release addressing HIGH and MEDIUM findings from the pre-ship audit (STRICT_AUDIT_v0.1.0.md).
