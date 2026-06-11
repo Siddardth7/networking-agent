@@ -7,9 +7,8 @@ Traceability: PLAN.md Phase 9, DESIGN.md §8.11
 from __future__ import annotations
 
 import sys
-from typing import Optional
 
-from src.core.db import get_connection, with_writer, init_db
+from src.core.db import get_connection, init_db, with_writer
 
 __all__ = ["run_pipeline"]
 
@@ -17,6 +16,7 @@ __all__ = ["run_pipeline"]
 # ---------------------------------------------------------------------------
 # DB helpers
 # ---------------------------------------------------------------------------
+
 
 def _get_or_create_company(slug: str) -> dict:
     """Return the companies row for *slug*, creating a NEW entry if absent.
@@ -112,6 +112,7 @@ def _batch_quality_checkpoint(company_id: int) -> None:
 # Orchestrator
 # ---------------------------------------------------------------------------
 
+
 def run_pipeline(
     company_slug: str,
     anthropic_client=None,
@@ -151,21 +152,27 @@ def run_pipeline(
     # Resolve real implementations lazily so tests can stub without side-imports
     if _run_checks is None:
         from src.cli.network_check import run_checks as _rc
+
         _run_checks = _rc
     if _find_contacts is None:
         from src.agents.finder import find_contacts as _fc
+
         _find_contacts = _fc
     if _run_selection_gate is None:
         from src.cli.selection_gate import run_selection_gate as _sg
+
         _run_selection_gate = _sg
     if _draft_for_contacts is None:
         from src.agents.drafter import draft_for_contacts as _dc
+
         _draft_for_contacts = _dc
     if _run_approval_loop is None:
         from src.agents.marketer import run_approval_loop as _al
+
         _run_approval_loop = _al
     if _write_artifact is None:
         from src.agents.artifact_writer import write_artifact as _wa
+
         _write_artifact = _wa
 
     company = _get_or_create_company(company_slug)
@@ -216,6 +223,7 @@ def run_pipeline(
         return
 
     from src.core.config import load_config  # noqa: PLC0415
+
     _cfg = load_config()
     _find_contacts(company_slug, limit=_cfg.finder_limit, anthropic_client=anthropic_client)
 

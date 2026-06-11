@@ -5,14 +5,13 @@ Covers: 2 contacts × 3 channels = 6 drafts; guardrail regen; quality_flag; cont
 
 from __future__ import annotations
 
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
 import pytest
 
 from src.agents.drafter import Draft, DrafterPartialFailure, draft_for_contacts
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import Channel
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -28,6 +27,7 @@ def db_path(tmp_path, monkeypatch):
     # persistence, and atomicity. Critic-specific behavior lives in
     # tests/test_critic.py and tests/test_drafter_critic.py.
     from src.core.config import Config, load_config  # local import keeps top tidy
+
     real = load_config
 
     def _no_critic_cfg():
@@ -59,7 +59,8 @@ def _seed_contacts(n: int = 2, with_email: bool = True) -> tuple[int, list[int]]
     init_db()
     with with_writer() as conn:
         cursor = conn.execute(
-            "INSERT INTO companies (slug, name, state) VALUES ('acme-corp', 'Acme Corp', 'SELECTED')"
+            "INSERT INTO companies (slug, name, state) "
+            "VALUES ('acme-corp', 'Acme Corp', 'SELECTED')"
         )
         company_id = cursor.lastrowid
         contact_ids = []
@@ -87,11 +88,13 @@ def _seed_contacts(n: int = 2, with_email: bool = True) -> tuple[int, list[int]]
 def _make_anthropic(responses: list[str]):
     """Build a mock Anthropic client that returns *responses* in order."""
     client = Mock()
+
     def _create(**kwargs):
         text = responses.pop(0)
         msg = Mock()
         msg.content = [Mock(text=text)]
         return msg
+
     client.messages.create.side_effect = _create
     return client
 
@@ -154,14 +157,17 @@ class TestDraftForContacts:
         assert all(r["state"] == "DRAFTED" for r in states)
 
     def test_blocklist_phrase_triggers_one_regen(self, db_path):
-        """If the first draft for a channel contains a blocklist phrase, exactly one regen call is made."""
+        """If the first draft for a channel contains a blocklist phrase,
+        exactly one regen call is made."""
         _, contact_ids = _seed_contacts(1)
         # 3 channels; first channel (LINKEDIN_CONNECTION) triggers regen
-        # Sequence: bad, good-regen, good, good  (3 channels = 3 initial calls; first is bad → +1 regen)
+        # Sequence: bad, good-regen, good, good
+        # (3 channels = 3 initial calls; first is bad → +1 regen)
         responses = [
-            "I noticed your profile — want to connect?",  # LINKEDIN_CONNECTION: BAD → triggers regen
+            # LINKEDIN_CONNECTION: BAD → triggers regen
+            "I noticed your profile — want to connect?",
             "Clean regen: your composites background caught my eye.",  # regen result
-            "Post-connection follow-up message.",           # LINKEDIN_POST_CONNECTION
+            "Post-connection follow-up message.",  # LINKEDIN_POST_CONNECTION
             "Subject: Aerospace role\n\nHi, wanted to reach out.",  # COLD_EMAIL
         ]
         client = _make_anthropic(responses)
@@ -173,19 +179,22 @@ class TestDraftForContacts:
         assert len(result[contact_ids[0]]) == 3
 
     def test_double_blocklist_sets_quality_flag(self, db_path):
-        """When both the initial draft AND the regen contain blocklist phrases, quality_flag=True."""
+        """When both the initial draft AND the regen contain blocklist
+        phrases, quality_flag=True."""
         _, contact_ids = _seed_contacts(1)
         responses = [
-            "I noticed your profile.",                     # LINKEDIN_CONNECTION: BAD
-            "I admire your composites work greatly.",      # regen: ALSO BAD → quality_flag
-            "Clean post-connection message.",              # LINKEDIN_POST_CONNECTION
-            "Subject: Role inquiry\n\nHello.",             # COLD_EMAIL
+            "I noticed your profile.",  # LINKEDIN_CONNECTION: BAD
+            "I admire your composites work greatly.",  # regen: ALSO BAD → quality_flag
+            "Clean post-connection message.",  # LINKEDIN_POST_CONNECTION
+            "Subject: Role inquiry\n\nHello.",  # COLD_EMAIL
         ]
         client = _make_anthropic(responses)
         result = draft_for_contacts(contact_ids, anthropic_client=client)
 
         drafts = result[contact_ids[0]]
-        linkedin_conn_draft = next(d for d in drafts if d.channel == Channel.LINKEDIN_CONNECTION.value)
+        linkedin_conn_draft = next(
+            d for d in drafts if d.channel == Channel.LINKEDIN_CONNECTION.value
+        )
         assert linkedin_conn_draft.quality_flag is True
 
         # Also verify the DB row has quality_flag=1
@@ -283,9 +292,7 @@ class TestAtomicDraftSequence:
         # Verify atomicity: contact stayed SELECTED, no draft rows exist.
         conn = get_connection()
         try:
-            state_row = conn.execute(
-                "SELECT state FROM contacts WHERE id = ?", (cid,)
-            ).fetchone()
+            state_row = conn.execute("SELECT state FROM contacts WHERE id = ?", (cid,)).fetchone()
             draft_rows = conn.execute(
                 "SELECT id FROM drafts WHERE contact_id = ?", (cid,)
             ).fetchall()
@@ -331,12 +338,10 @@ class TestAtomicDraftSequence:
 
         conn = get_connection()
         try:
-            rows = conn.execute(
-                "SELECT body FROM drafts WHERE contact_id = ?", (cid,)
-            ).fetchall()
-            state = conn.execute(
-                "SELECT state FROM contacts WHERE id = ?", (cid,)
-            ).fetchone()["state"]
+            rows = conn.execute("SELECT body FROM drafts WHERE contact_id = ?", (cid,)).fetchall()
+            state = conn.execute("SELECT state FROM contacts WHERE id = ?", (cid,)).fetchone()[
+                "state"
+            ]
         finally:
             conn.close()
 
@@ -369,12 +374,10 @@ class TestPartialFailureAggregation:
 
         real_fn = drafter_module._draft_all_channels_for_contact
 
-        def selective_fail(contact_id, anthropic_client, library_path,
-                           opener_registry=None):
+        def selective_fail(contact_id, anthropic_client, library_path, opener_registry=None):
             if contact_id == failing_cid:
                 raise RuntimeError(f"boom for {contact_id}")
-            return real_fn(contact_id, anthropic_client, library_path,
-                           opener_registry)
+            return real_fn(contact_id, anthropic_client, library_path, opener_registry)
 
         monkeypatch.setattr(drafter_module, "_draft_all_channels_for_contact", selective_fail)
 

@@ -19,10 +19,10 @@ from src.agents.finder import (
 from src.core.db import get_connection, init_db
 from src.core.schemas import ContactCandidate, EmailResult, FocusArea, Persona
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def db_path(tmp_path, monkeypatch):
@@ -45,11 +45,12 @@ def _make_classifier_response(persona: str, focus_area: str, hook_signal: str = 
 # Hook tier ordering
 # ---------------------------------------------------------------------------
 
+
 class TestHookTiers:
-    def _candidate(self, title: str = "Stress Engineer", url: str = "https://linkedin.com/in/x") -> ContactCandidate:
-        return ContactCandidate(
-            full_name="A", title=title, linkedin_url=url, company_slug="x"
-        )
+    def _candidate(
+        self, title: str = "Stress Engineer", url: str = "https://linkedin.com/in/x"
+    ) -> ContactCandidate:
+        return ContactCandidate(full_name="A", title=title, linkedin_url=url, company_slug="x")
 
     def test_tier0_hook_signal_wins_over_title_specialty(self):
         # Even though title would trigger Tier 3 ("structures work"),
@@ -77,8 +78,10 @@ class TestHookTiers:
         # hook string. With no better signal the title-derived hook wins.
         hook = _generate_hook(
             ContactCandidate(
-                full_name="X", title="Project Lead",
-                linkedin_url="https://linkedin.com/in/x", company_slug="acme",
+                full_name="X",
+                title="Project Lead",
+                linkedin_url="https://linkedin.com/in/x",
+                company_slug="acme",
             ),
             company_news="Acme closed Series D funding for autonomous flight testing.",
         )
@@ -88,8 +91,10 @@ class TestHookTiers:
         # AUDIT-A5: GENERIC is reachable only when even the title is empty.
         hook = _generate_hook(
             ContactCandidate(
-                full_name="X", title=None,
-                linkedin_url="https://linkedin.com/in/x", company_slug="acme",
+                full_name="X",
+                title=None,
+                linkedin_url="https://linkedin.com/in/x",
+                company_slug="acme",
             ),
         )
         assert hook == "GENERIC"
@@ -107,15 +112,18 @@ class TestHookTiers:
 # Classifier output shape — returns 3-tuple
 # ---------------------------------------------------------------------------
 
+
 class TestClassifierTuple:
     def test_returns_persona_focus_signal(self):
         client = Mock()
         client.messages.create.return_value = _make_classifier_response(
-            "PEER_ENGINEER", "COMPOSITE_DESIGN",
+            "PEER_ENGINEER",
+            "COMPOSITE_DESIGN",
             hook_signal="led bonded repair certification effort",
         )
         candidate = ContactCandidate(
-            full_name="J", title="Composites Engineer",
+            full_name="J",
+            title="Composites Engineer",
             linkedin_url="https://linkedin.com/in/j",
             company_slug="x",
             snippet="Composites engineer; led bonded repair certification effort at OEM X.",
@@ -128,11 +136,15 @@ class TestClassifierTuple:
     def test_empty_signal_returns_none(self):
         client = Mock()
         client.messages.create.return_value = _make_classifier_response(
-            "PEER_ENGINEER", "PEER", hook_signal="",
+            "PEER_ENGINEER",
+            "PEER",
+            hook_signal="",
         )
         candidate = ContactCandidate(
-            full_name="J", title="Engineer",
-            linkedin_url="https://linkedin.com/in/j", company_slug="x",
+            full_name="J",
+            title="Engineer",
+            linkedin_url="https://linkedin.com/in/j",
+            company_slug="x",
         )
         _, _, signal = _classify_contact(candidate, "x", client)
         assert signal is None
@@ -141,11 +153,15 @@ class TestClassifierTuple:
         long = "x" * 200
         client = Mock()
         client.messages.create.return_value = _make_classifier_response(
-            "PEER_ENGINEER", "PEER", hook_signal=long,
+            "PEER_ENGINEER",
+            "PEER",
+            hook_signal=long,
         )
         candidate = ContactCandidate(
-            full_name="J", title="Engineer",
-            linkedin_url="https://linkedin.com/in/j", company_slug="x",
+            full_name="J",
+            title="Engineer",
+            linkedin_url="https://linkedin.com/in/j",
+            company_slug="x",
         )
         _, _, signal = _classify_contact(candidate, "x", client)
         assert signal is not None
@@ -154,10 +170,13 @@ class TestClassifierTuple:
     def test_snippet_passed_into_user_message(self):
         client = Mock()
         client.messages.create.return_value = _make_classifier_response(
-            "PEER_ENGINEER", "PEER", hook_signal="",
+            "PEER_ENGINEER",
+            "PEER",
+            hook_signal="",
         )
         candidate = ContactCandidate(
-            full_name="J", title="Engineer",
+            full_name="J",
+            title="Engineer",
             linkedin_url="https://linkedin.com/in/j",
             company_slug="x",
             snippet="UNIQUESNIPPETMARKER123 about composites.",
@@ -171,11 +190,15 @@ class TestClassifierTuple:
     def test_missing_snippet_uses_none_marker(self):
         client = Mock()
         client.messages.create.return_value = _make_classifier_response(
-            "PEER_ENGINEER", "PEER", hook_signal="",
+            "PEER_ENGINEER",
+            "PEER",
+            hook_signal="",
         )
         candidate = ContactCandidate(
-            full_name="J", title="Engineer",
-            linkedin_url="https://linkedin.com/in/j", company_slug="x",
+            full_name="J",
+            title="Engineer",
+            linkedin_url="https://linkedin.com/in/j",
+            company_slug="x",
             snippet=None,
         )
         _classify_contact(candidate, "x", client)
@@ -186,6 +209,7 @@ class TestClassifierTuple:
 # ---------------------------------------------------------------------------
 # Tier 4: _fetch_company_news_signal
 # ---------------------------------------------------------------------------
+
 
 class TestFetchCompanyNews:
     def test_returns_first_non_empty_snippet(self):
@@ -223,12 +247,15 @@ class TestFetchCompanyNews:
 # find_contacts integration: shared_signals persisted with snippet + news
 # ---------------------------------------------------------------------------
 
+
 class TestFindContactsPersistsSignals:
     def _candidate(self, name: str, snippet: str) -> ContactCandidate:
         return ContactCandidate(
-            full_name=name, title="Composites Engineer",
+            full_name=name,
+            title="Composites Engineer",
             linkedin_url=f"https://linkedin.com/in/{name.lower()}",
-            company_slug="acme-corp", snippet=snippet,
+            company_slug="acme-corp",
+            snippet=snippet,
         )
 
     def test_shared_signals_written_with_profile_and_news(self, db_path):
@@ -241,17 +268,22 @@ class TestFindContactsPersistsSignals:
 
         hp = Mock()
         hp.find_email.return_value = EmailResult(
-            email="a@acme.com", verified=True, confidence=90, source="hunter",
+            email="a@acme.com",
+            verified=True,
+            confidence=90,
+            source="hunter",
         )
 
         client = Mock()
         client.messages.create.return_value = _make_classifier_response(
-            "PEER_ENGINEER", "COMPOSITE_DESIGN",
+            "PEER_ENGINEER",
+            "COMPOSITE_DESIGN",
             hook_signal="led bonded composite repair certification",
         )
 
-        find_contacts("acme-corp", limit=1, serper_provider=sp,
-                      hunter_provider=hp, anthropic_client=client)
+        find_contacts(
+            "acme-corp", limit=1, serper_provider=sp, hunter_provider=hp, anthropic_client=client
+        )
 
         conn = get_connection()
         try:
@@ -273,25 +305,33 @@ class TestFindContactsPersistsSignals:
         sp = Mock()
         sp.search_linkedin_profiles.return_value = [
             ContactCandidate(
-                full_name="Bob", title="Composites Engineer",
+                full_name="Bob",
+                title="Composites Engineer",
                 linkedin_url="https://linkedin.com/in/bob",
-                company_slug="acme-corp", snippet=None,
+                company_slug="acme-corp",
+                snippet=None,
             ),
         ]
         sp.search_general.return_value = None
 
         hp = Mock()
         hp.find_email.return_value = EmailResult(
-            email=None, verified=False, confidence=0, source="hunter",
+            email=None,
+            verified=False,
+            confidence=0,
+            source="hunter",
         )
 
         client = Mock()
         client.messages.create.return_value = _make_classifier_response(
-            "PEER_ENGINEER", "COMPOSITE_DESIGN", hook_signal="",
+            "PEER_ENGINEER",
+            "COMPOSITE_DESIGN",
+            hook_signal="",
         )
 
-        find_contacts("acme-corp", limit=1, serper_provider=sp,
-                      hunter_provider=hp, anthropic_client=client)
+        find_contacts(
+            "acme-corp", limit=1, serper_provider=sp, hunter_provider=hp, anthropic_client=client
+        )
 
         conn = get_connection()
         try:

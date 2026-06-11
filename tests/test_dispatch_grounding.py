@@ -15,12 +15,12 @@ import pytest
 from src.agents.critic import RUBRIC_DIMENSIONS, SEVERE_SCORE
 from src.agents.dispatch import _build_revision_prompt, dispatch_revision
 from src.core.db import get_connection, init_db, with_writer
-from src.core.schemas import Channel, DraftDispatchRequest, Persona
-
+from src.core.schemas import Channel, DraftDispatchRequest
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def tmp_db(tmp_path, monkeypatch):
@@ -54,6 +54,7 @@ def _seed_contact_with_draft(channel=Channel.LINKEDIN_CONNECTION):
 # _build_revision_prompt — must carry first-pass grounding
 # ---------------------------------------------------------------------------
 
+
 class TestRevisionPromptGrounding:
     def _contact(self) -> dict:
         return {
@@ -67,10 +68,13 @@ class TestRevisionPromptGrounding:
 
     def test_prompt_includes_approved_facts_and_discipline(self):
         prompt = _build_revision_prompt(
-            self._contact(), Channel.COLD_EMAIL, bullets=[],
+            self._contact(),
+            Channel.COLD_EMAIL,
+            bullets=[],
             persona_template="PERSONA TEMPLATE",
             voice_doc="VOICE DOC",
-            prior_body="old draft", feedback="be more specific",
+            prior_body="old draft",
+            feedback="be more specific",
         )
         # First-pass grounding survives the revision prompt.
         assert "## APPROVED FACTS" in prompt
@@ -81,18 +85,24 @@ class TestRevisionPromptGrounding:
 
     def test_prompt_carries_persona_template_and_voice(self):
         prompt = _build_revision_prompt(
-            self._contact(), Channel.COLD_EMAIL, bullets=[],
+            self._contact(),
+            Channel.COLD_EMAIL,
+            bullets=[],
             persona_template="UNIQUE-PERSONA-TEMPLATE-MARKER",
             voice_doc="UNIQUE-VOICE-MARKER",
-            prior_body="old", feedback="x",
+            prior_body="old",
+            feedback="x",
         )
         assert "UNIQUE-PERSONA-TEMPLATE-MARKER" in prompt
         assert "UNIQUE-VOICE-MARKER" in prompt
 
     def test_prompt_includes_prior_body_and_feedback(self):
         prompt = _build_revision_prompt(
-            self._contact(), Channel.COLD_EMAIL, bullets=[],
-            persona_template="x", voice_doc="",
+            self._contact(),
+            Channel.COLD_EMAIL,
+            bullets=[],
+            persona_template="x",
+            voice_doc="",
             prior_body="THE-PRIOR-BODY-MARKER",
             feedback="THE-FEEDBACK-MARKER",
         )
@@ -104,9 +114,13 @@ class TestRevisionPromptGrounding:
 
     def test_anti_phrases_list_appears(self):
         prompt = _build_revision_prompt(
-            self._contact(), Channel.COLD_EMAIL, bullets=[],
-            persona_template="x", voice_doc="",
-            prior_body="a", feedback="b",
+            self._contact(),
+            Channel.COLD_EMAIL,
+            bullets=[],
+            persona_template="x",
+            voice_doc="",
+            prior_body="a",
+            feedback="b",
             anti_phrases=["I noticed", "your impressive work"],
         )
         assert '"I noticed"' in prompt
@@ -116,6 +130,7 @@ class TestRevisionPromptGrounding:
 # ---------------------------------------------------------------------------
 # dispatch_revision: quality_code persisted; HARD_FAIL → GUARDRAIL_FLAGGED
 # ---------------------------------------------------------------------------
+
 
 class _DispatchClient:
     """Mock that returns plain text for drafter calls and a configurable
@@ -162,7 +177,8 @@ class TestDispatchPersistsQualityCode:
         conn = get_connection()
         try:
             row = conn.execute(
-                "SELECT quality_code FROM drafts WHERE id = ?", (resp.new_draft_id,),
+                "SELECT quality_code FROM drafts WHERE id = ?",
+                (resp.new_draft_id,),
             ).fetchone()
         finally:
             conn.close()
@@ -185,7 +201,8 @@ class TestDispatchPersistsQualityCode:
         conn = get_connection()
         try:
             row = conn.execute(
-                "SELECT quality_code FROM drafts WHERE id = ?", (resp.new_draft_id,),
+                "SELECT quality_code FROM drafts WHERE id = ?",
+                (resp.new_draft_id,),
             ).fetchone()
         finally:
             conn.close()
@@ -196,7 +213,8 @@ class TestDispatchPersistsQualityCode:
         bad = {dim: 5 for dim in RUBRIC_DIMENSIONS}
         bad["specificity"] = SEVERE_SCORE  # AUDIT-A3: severe holds
         client = _DispatchClient(
-            texts=["Generic revision."], critic_scores=bad,
+            texts=["Generic revision."],
+            critic_scores=bad,
         )
         req = DraftDispatchRequest(
             contact_id=contact_id,
@@ -212,7 +230,8 @@ class TestDispatchPersistsQualityCode:
         conn = get_connection()
         try:
             row = conn.execute(
-                "SELECT quality_code FROM drafts WHERE id = ?", (resp.new_draft_id,),
+                "SELECT quality_code FROM drafts WHERE id = ?",
+                (resp.new_draft_id,),
             ).fetchone()
         finally:
             conn.close()

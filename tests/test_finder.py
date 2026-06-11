@@ -10,11 +10,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.agents.finder import find_contacts, _generate_hook
+from src.agents.finder import _generate_hook, find_contacts
 from src.core.db import get_connection, init_db
 from src.core.schemas import ContactCandidate, EmailResult, FocusArea, Persona
 from src.providers.retry import QuotaExhausted
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -154,9 +153,7 @@ class TestFindContacts:
         )
         conn = get_connection()
         try:
-            row = conn.execute(
-                "SELECT state FROM companies WHERE slug = 'acme-corp'"
-            ).fetchone()
+            row = conn.execute("SELECT state FROM companies WHERE slug = 'acme-corp'").fetchone()
             assert row["state"] == "FOUND"
         finally:
             conn.close()
@@ -174,11 +171,10 @@ class TestFindContacts:
         )
         conn = get_connection()
         try:
-            company = conn.execute(
-                "SELECT id FROM companies WHERE slug = 'acme-corp'"
-            ).fetchone()
+            company = conn.execute("SELECT id FROM companies WHERE slug = 'acme-corp'").fetchone()
             contacts = conn.execute(
-                "SELECT full_name, persona, focus_area, hook, email FROM contacts WHERE company_id = ? ORDER BY id",
+                "SELECT full_name, persona, focus_area, hook, email "
+                "FROM contacts WHERE company_id = ? ORDER BY id",
                 (company["id"],),
             ).fetchall()
         finally:
@@ -191,9 +187,7 @@ class TestFindContacts:
         assert contacts[0]["email"] == "alice@acme.com"
         assert contacts[1]["hook"] == "your structures work"
 
-    def test_hunter_exhausted_marks_remaining_contacts(
-        self, db_path, mock_serper, mock_anthropic
-    ):
+    def test_hunter_exhausted_marks_remaining_contacts(self, db_path, mock_serper, mock_anthropic):
         init_db()
         hunter = Mock()
         hunter.find_email.side_effect = [
@@ -220,9 +214,7 @@ class TestFindContacts:
 
         conn = get_connection()
         try:
-            company = conn.execute(
-                "SELECT id FROM companies WHERE slug = 'acme-corp'"
-            ).fetchone()
+            company = conn.execute("SELECT id FROM companies WHERE slug = 'acme-corp'").fetchone()
             contacts = conn.execute(
                 "SELECT email, source_provider FROM contacts WHERE company_id = ? ORDER BY id",
                 (company["id"],),
@@ -251,9 +243,7 @@ class TestFindContacts:
         assert results == []
         conn = get_connection()
         try:
-            row = conn.execute(
-                "SELECT state FROM companies WHERE slug = 'empty-corp'"
-            ).fetchone()
+            row = conn.execute("SELECT state FROM companies WHERE slug = 'empty-corp'").fetchone()
             assert row["state"] == "FOUND"
         finally:
             conn.close()
@@ -290,14 +280,11 @@ class TestFindContacts:
 
         # First run left company in FOUND state; reset it to NEW to simulate a retry
         from src.core.db import with_writer
+
         with with_writer() as conn:
-            conn.execute(
-                "UPDATE companies SET state = 'NEW' WHERE slug = 'acme-corp'"
-            )
+            conn.execute("UPDATE companies SET state = 'NEW' WHERE slug = 'acme-corp'")
             # Manually mark existing contacts as NEW to simulate partial run
-            conn.execute(
-                "UPDATE contacts SET state = 'NEW' WHERE 1"
-            )
+            conn.execute("UPDATE contacts SET state = 'NEW' WHERE 1")
 
         results = find_contacts(
             "acme-corp",
@@ -313,43 +300,37 @@ class TestFindContacts:
 class TestGenerateHook:
     def test_composites_tier3(self):
         c = ContactCandidate(
-            full_name="A", title="Composites Engineer",
-            linkedin_url="", company_slug="x"
+            full_name="A", title="Composites Engineer", linkedin_url="", company_slug="x"
         )
         assert _generate_hook(c) == "your composites work"
 
     def test_structural_tier3(self):
         c = ContactCandidate(
-            full_name="A", title="Stress Engineer",
-            linkedin_url="", company_slug="x"
+            full_name="A", title="Stress Engineer", linkedin_url="", company_slug="x"
         )
         assert _generate_hook(c) == "your structures work"
 
     def test_manufacturing_tier3(self):
         c = ContactCandidate(
-            full_name="A", title="Supplier Quality Engineer",
-            linkedin_url="", company_slug="x"
+            full_name="A", title="Supplier Quality Engineer", linkedin_url="", company_slug="x"
         )
         assert _generate_hook(c) == "your manufacturing and quality background"
 
     def test_materials_tier3(self):
         c = ContactCandidate(
-            full_name="A", title="Materials Scientist",
-            linkedin_url="", company_slug="x"
+            full_name="A", title="Materials Scientist", linkedin_url="", company_slug="x"
         )
         assert _generate_hook(c) == "your materials science background"
 
     def test_additive_tier3(self):
         c = ContactCandidate(
-            full_name="A", title="Additive Manufacturing Lead",
-            linkedin_url="", company_slug="x"
+            full_name="A", title="Additive Manufacturing Lead", linkedin_url="", company_slug="x"
         )
         assert _generate_hook(c) == "your additive manufacturing work"
 
     def test_generic_fallback(self):
         c = ContactCandidate(
-            full_name="A", title="Technical Recruiter",
-            linkedin_url="", company_slug="x"
+            full_name="A", title="Technical Recruiter", linkedin_url="", company_slug="x"
         )
         # AUDIT-A5: a real title now yields a title-derived hook instead of
         # the GENERIC sentinel.
@@ -357,14 +338,12 @@ class TestGenerateHook:
 
     def test_uiuc_tier1_in_title(self):
         c = ContactCandidate(
-            full_name="A", title="UIUC Aerospace PhD",
-            linkedin_url="", company_slug="x"
+            full_name="A", title="UIUC Aerospace PhD", linkedin_url="", company_slug="x"
         )
         assert _generate_hook(c) == "we share a UIUC background"
 
     def test_shared_employer_tier2(self):
         c = ContactCandidate(
-            full_name="A", title="ex-Boeing Quality Engineer",
-            linkedin_url="", company_slug="x"
+            full_name="A", title="ex-Boeing Quality Engineer", linkedin_url="", company_slug="x"
         )
         assert _generate_hook(c) == "you also spent time at Boeing"

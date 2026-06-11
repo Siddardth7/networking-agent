@@ -15,7 +15,6 @@ Traceability: DRAFTER_ROOT_CAUSE_AUDIT.md Layer 6.
 from __future__ import annotations
 
 import concurrent.futures
-from typing import Optional
 
 from src.core.config import HAIKU_MODEL
 from src.core.errors import EmptyLLMResponseError
@@ -57,7 +56,7 @@ CHANNEL_CONSTRAINTS: dict[Channel, str] = {
 }
 
 
-def parse_email_body_subject(text: str) -> tuple[str, Optional[str]]:
+def parse_email_body_subject(text: str) -> tuple[str, str | None]:
     """Split a COLD_EMAIL response into ``(body, subject)``.
 
     Expected format: ``"Subject: <text>\\n\\n<body>"``. When the leading
@@ -66,14 +65,15 @@ def parse_email_body_subject(text: str) -> tuple[str, Optional[str]]:
     """
     lines = text.strip().split("\n")
     if lines and lines[0].lower().startswith("subject:"):
-        subject = lines[0][len("subject:"):].strip()
+        subject = lines[0][len("subject:") :].strip()
         body = "\n".join(lines[1:]).lstrip("\n").strip()
         return body, subject
     return text.strip(), None
 
 
-def call_claude(prompt: str, anthropic_client, model: str = HAIKU_MODEL,
-                max_tokens: int = 600) -> str:
+def call_claude(
+    prompt: str, anthropic_client, model: str = HAIKU_MODEL, max_tokens: int = 600
+) -> str:
     """Single Anthropic call. Returns stripped first-content-block text.
 
     Inputs: prompt text, an Anthropic client (or test double), model id,
@@ -110,7 +110,11 @@ def call_claude_with_timeout(
     """
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(
-            call_claude, prompt, anthropic_client, model, max_tokens,
+            call_claude,
+            prompt,
+            anthropic_client,
+            model,
+            max_tokens,
         )
         try:
             return future.result(timeout=timeout)

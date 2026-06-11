@@ -12,7 +12,10 @@ class TestCheckDraft:
         # Use a phrase guaranteed not to overlap with either the seed
         # BLOCKLIST or any phrase commonly found under voice.md's
         # "## Forbidden Phrases" heading (which is merged in at import).
-        assert check_draft("Saw your team's SAMPE paper on bonded composite repair — sharp work.") is None
+        assert (
+            check_draft("Saw your team's SAMPE paper on bonded composite repair — sharp work.")
+            is None
+        )
 
     def test_i_noticed_detected(self):
         result = check_draft("I noticed your profile and wanted to connect.")

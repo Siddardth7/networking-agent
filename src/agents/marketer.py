@@ -10,14 +10,13 @@ import json
 import re
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
 
 from src.core.db import get_connection, with_writer
 
 __all__ = ["ApprovalResult", "run_approval_loop"]
 
 
-def _format_critic_for_reviewer(trace_json: Optional[str]) -> Optional[str]:
+def _format_critic_for_reviewer(trace_json: str | None) -> str | None:
     """Render a critic_trace JSON as one or two compact lines for the marketer
     approval loop. Returns None when the trace is missing / unparseable / empty.
 
@@ -39,9 +38,7 @@ def _format_critic_for_reviewer(trace_json: Optional[str]) -> Optional[str]:
     if reason:
         parts.append(f"  Held because: {reason}")
     if scores:
-        parts.append("  Critic scores: " + " ".join(
-            f"{dim}={val}" for dim, val in scores.items()
-        ))
+        parts.append("  Critic scores: " + " ".join(f"{dim}={val}" for dim, val in scores.items()))
     if issues:
         parts.append("  Critic issues:")
         for issue in issues:
@@ -61,7 +58,8 @@ class ApprovalResult:
 # DB helpers
 # ---------------------------------------------------------------------------
 
-def _load_company(company_id: int) -> Optional[dict]:
+
+def _load_company(company_id: int) -> dict | None:
     conn = get_connection()
     try:
         row = conn.execute(
@@ -172,6 +170,7 @@ def _mark_company_approved(company_id: int) -> None:
 # Rendering helpers
 # ---------------------------------------------------------------------------
 
+
 def _char_word_count(text: str) -> str:
     chars = len(text)
     words = len(text.split()) if text.strip() else 0
@@ -182,8 +181,7 @@ def _render_contact_block(contact: dict, index: int) -> str:
     lines = []
     flagged_drafts = [d for d in contact["drafts"] if d.get("quality_flag")]
     hard_fails = [
-        d for d in contact["drafts"]
-        if (d.get("quality_code") or "OK") in _BLOCKING_QUALITY_CODES
+        d for d in contact["drafts"] if (d.get("quality_code") or "OK") in _BLOCKING_QUALITY_CODES
     ]
     n_flagged = len(flagged_drafts)
     n_hard = len(hard_fails)
@@ -257,7 +255,7 @@ def _print_help() -> None:
     print("  APPROVE <id> --force  — approve even if drafts are HARD_FAIL (manual override)")
     print("  APPROVE all           — approve all remaining contacts (HARD_FAIL blocked)")
     print("  APPROVE all --force   — approve all incl. HARD_FAIL drafts (use with care)")
-    print("  REVISE <id> <channel> \"<feedback>\" — request a revision")
+    print('  REVISE <id> <channel> "<feedback>" — request a revision')
     print("  SKIP <id>             — skip this contact")
     print("  SHOW <id> raw         — show raw draft text for a contact")
     print("  quit / q              — exit the approval loop\n")
@@ -277,7 +275,7 @@ _SKIP_RE = re.compile(r"^skip\s+(\d+)\s*$", re.IGNORECASE)
 _SHOW_RE = re.compile(r"^show\s+(\d+)\s+raw\s*$", re.IGNORECASE)
 
 
-def parse_verb(line: str) -> Optional[tuple]:
+def parse_verb(line: str) -> tuple | None:
     """Parse a user command line into a (verb, ...) tuple.
 
     Returns one of:
@@ -318,6 +316,7 @@ def parse_verb(line: str) -> Optional[tuple]:
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
+
 
 def run_approval_loop(
     company_id: int,
@@ -361,7 +360,8 @@ def run_approval_loop(
 
         # Filter out already approved/skipped by index
         pending = [
-            (i + 1, c) for i, c in enumerate(contacts)
+            (i + 1, c)
+            for i, c in enumerate(contacts)
             if (i + 1) not in approved_indices and (i + 1) not in skipped_indices
         ]
 
@@ -440,8 +440,8 @@ def run_approval_loop(
                 continue
             if hard and force:
                 print(
-                    f"  ⚠️  --force override: approving HARD_FAIL draft(s). "
-                    f"You have manually accepted responsibility for this content."
+                    "  ⚠️  --force override: approving HARD_FAIL draft(s). "
+                    "You have manually accepted responsibility for this content."
                 )
             draft_ids = [d["id"] for d in contact["drafts"]]
             log_ids = _approve_drafts(contact["id"], draft_ids)
@@ -496,6 +496,7 @@ def run_approval_loop(
                 continue
 
             from src.core.schemas import Channel, DraftDispatchRequest
+
             try:
                 channel_enum = Channel(channel_str)
             except ValueError:
@@ -512,6 +513,7 @@ def run_approval_loop(
             # Resolve dispatch lazily (allows tests without dispatch module)
             if _dispatch_fn is None:
                 from src.agents.dispatch import dispatch_revision as _dr
+
                 _resolved = _dr
             else:
                 _resolved = _dispatch_fn

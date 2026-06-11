@@ -14,18 +14,17 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
-import src.core.db as db_module
+from src.cli.network_dry_run import _build_serper_query, run_dry_run
 from src.core.db import init_db
-from src.cli.network_dry_run import run_dry_run, _build_serper_query
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_args(company: str | None = "lockheed-martin", limit: int = 5) -> argparse.Namespace:
     """Build a minimal Namespace matching what argparse would produce."""
@@ -52,6 +51,7 @@ def _make_quota_manager(serper_remaining: int = 80, hunter_remaining: int = 20) 
 # Fixture: isolated DB so module-level _DB_PATH doesn't interfere
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path: Path, monkeypatch):
     """Point the DB module at a fresh temp database for each test."""
@@ -65,6 +65,7 @@ def isolated_db(tmp_path: Path, monkeypatch):
 # Test 1: Output contains the planned Serper query with company slug
 # ---------------------------------------------------------------------------
 
+
 def test_output_contains_planned_query(capsys):
     """The dry-run output must include the full Serper query for the company."""
     args = _make_args(company="lockheed-martin", limit=5)
@@ -75,12 +76,16 @@ def test_output_contains_planned_query(capsys):
     captured = capsys.readouterr()
     assert rc == 0
     assert 'site:linkedin.com/in "lockheed-martin"' in captured.out
-    assert "(quality OR structures OR composites OR manufacturing OR materials OR additive)" in captured.out
+    assert (
+        "(quality OR structures OR composites OR manufacturing OR materials OR additive)"
+        in captured.out
+    )
 
 
 # ---------------------------------------------------------------------------
 # Test 2: Output contains "5 Serper + 5 Hunter" with --limit 5
 # ---------------------------------------------------------------------------
+
 
 def test_output_shows_limit_5_calls(capsys):
     """With --limit 5, the output should say '5 Serper + 5 Hunter API calls'."""
@@ -98,6 +103,7 @@ def test_output_shows_limit_5_calls(capsys):
 # Test 3: Output contains "3 Serper + 3 Hunter" with --limit 3
 # ---------------------------------------------------------------------------
 
+
 def test_output_shows_limit_3_calls(capsys):
     """With --limit 3, the output should say '3 Serper + 3 Hunter API calls'."""
     args = _make_args(company="blue-origin", limit=3)
@@ -113,6 +119,7 @@ def test_output_shows_limit_3_calls(capsys):
 # ---------------------------------------------------------------------------
 # Test 4: No API calls made — can_query must never be called
 # ---------------------------------------------------------------------------
+
 
 def test_no_api_calls_made(capsys):
     """Dry-run must NEVER call can_query; it may only call remaining() for display."""
@@ -145,6 +152,7 @@ def test_quota_remaining_displayed(capsys):
 # Test 5: Missing company → returns 1
 # ---------------------------------------------------------------------------
 
+
 def test_missing_company_returns_error(capsys):
     """When company is None/empty the function must return exit code 1."""
     args = _make_args(company=None, limit=5)
@@ -169,6 +177,7 @@ def test_empty_company_returns_error(capsys):
 # Helper: _build_serper_query unit tests
 # ---------------------------------------------------------------------------
 
+
 def test_build_serper_query_format():
     """Verify the query string format exactly matches the DESIGN spec."""
     result = _build_serper_query("lockheed-martin")
@@ -190,12 +199,14 @@ def test_build_serper_query_different_slug():
 # Lines 71–76: quota_manager=None path — QuotaManager import succeeds
 # ---------------------------------------------------------------------------
 
+
 def test_no_quota_manager_injection_succeeds(capsys, monkeypatch):
     """When _quota_manager=None and QuotaManager loads fine, remaining is shown."""
     mock_qm = _make_quota_manager(serper_remaining=55, hunter_remaining=10)
 
     # Patch the QuotaManager class inside the module so no real DB/API is hit
     import src.cli.network_dry_run as dry_run_mod
+
     monkeypatch.setattr(
         dry_run_mod,
         "__builtins__",  # not used — patch via sys.modules instead
@@ -204,6 +215,7 @@ def test_no_quota_manager_injection_succeeds(capsys, monkeypatch):
 
     # Patch at the provider module level so the import inside run_dry_run finds it
     import unittest.mock as mock_lib
+
     with mock_lib.patch.dict(
         "sys.modules",
         {"src.providers.quota_manager": mock_lib.MagicMock(QuotaManager=lambda: mock_qm)},
@@ -219,6 +231,7 @@ def test_no_quota_manager_injection_succeeds(capsys, monkeypatch):
 # ---------------------------------------------------------------------------
 # Lines 71–76: quota_manager=None path — QuotaManager import fails → qm=None
 # ---------------------------------------------------------------------------
+
 
 def test_no_quota_manager_import_fails_shows_na(capsys, monkeypatch):
     """When _quota_manager=None and QuotaManager import raises, quota shows N/A."""
@@ -242,6 +255,7 @@ def test_no_quota_manager_import_fails_shows_na(capsys, monkeypatch):
 # Lines 81, 84–85: _remaining returns "N/A" when qm.remaining() raises
 # ---------------------------------------------------------------------------
 
+
 def test_remaining_exception_shows_na(capsys):
     """When qm.remaining() raises an exception, quota values fall back to N/A."""
     qm = MagicMock()
@@ -259,9 +273,11 @@ def test_remaining_exception_shows_na(capsys):
 # Lines 102–117: __main__ block — simulate argparse.parse_args + sys.exit
 # ---------------------------------------------------------------------------
 
+
 def test_main_block_runs_with_valid_args(capsys, monkeypatch):
     """Simulate the __main__ block by patching parse_args and sys.exit."""
     import unittest.mock as mock_lib
+
     import src.cli.network_dry_run as dry_run_mod
 
     mock_qm = _make_quota_manager(serper_remaining=40, hunter_remaining=8)
@@ -273,15 +289,18 @@ def test_main_block_runs_with_valid_args(capsys, monkeypatch):
     def fake_exit(code):
         exit_codes.append(code)
 
-    with mock_lib.patch("argparse.ArgumentParser.parse_args", return_value=parsed_ns), \
-         mock_lib.patch("sys.exit", side_effect=fake_exit), \
-         mock_lib.patch.dict(
-             "sys.modules",
-             {"src.providers.quota_manager": mock_lib.MagicMock(QuotaManager=lambda: mock_qm)},
-         ):
+    with (
+        mock_lib.patch("argparse.ArgumentParser.parse_args", return_value=parsed_ns),
+        mock_lib.patch("sys.exit", side_effect=fake_exit),
+        mock_lib.patch.dict(
+            "sys.modules",
+            {"src.providers.quota_manager": mock_lib.MagicMock(QuotaManager=lambda: mock_qm)},
+        ),
+    ):
         # Execute the __main__ block by running the module body directly
         import importlib
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "__main__",
             dry_run_mod.__file__,
@@ -299,6 +318,7 @@ def test_main_block_runs_with_valid_args(capsys, monkeypatch):
 def test_main_block_argparser_configured(monkeypatch):
     """The __main__ block builds a parser that accepts --company and --limit."""
     import unittest.mock as mock_lib
+
     import src.cli.network_dry_run as dry_run_mod
 
     # Capture the ArgumentParser that gets built
@@ -313,14 +333,17 @@ def test_main_block_argparser_configured(monkeypatch):
 
     parsed_ns = argparse.Namespace(company="raytheon-tech", limit=3)
 
-    with mock_lib.patch.object(argparse.ArgumentParser, "__init__", capturing_init), \
-         mock_lib.patch("argparse.ArgumentParser.parse_args", return_value=parsed_ns), \
-         mock_lib.patch("sys.exit", side_effect=lambda c: exit_codes.append(c)), \
-         mock_lib.patch.dict(
-             "sys.modules",
-             {"src.providers.quota_manager": None},
-         ):
+    with (
+        mock_lib.patch.object(argparse.ArgumentParser, "__init__", capturing_init),
+        mock_lib.patch("argparse.ArgumentParser.parse_args", return_value=parsed_ns),
+        mock_lib.patch("sys.exit", side_effect=lambda c: exit_codes.append(c)),
+        mock_lib.patch.dict(
+            "sys.modules",
+            {"src.providers.quota_manager": None},
+        ),
+    ):
         import importlib.util
+
         spec = importlib.util.spec_from_file_location("__main__", dry_run_mod.__file__)
         mod = importlib.util.module_from_spec(spec)
         mod.__name__ = "__main__"

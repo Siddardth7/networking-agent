@@ -1,4 +1,6 @@
-"""Single-writer-multiple-reader contract: all writes must hold WRITE_LOCK. Readers use get_connection() directly without the lock."""
+"""Single-writer-multiple-reader contract: all writes must hold WRITE_LOCK.
+
+Readers use get_connection() directly without the lock."""
 
 from __future__ import annotations
 
@@ -6,9 +8,9 @@ import os
 import sqlite3
 import threading
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
 
 # ---------------------------------------------------------------------------
 # Module-level path — override in tests via monkeypatch

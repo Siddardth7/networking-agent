@@ -11,7 +11,6 @@ from __future__ import annotations
 import datetime
 import json
 from pathlib import Path
-from typing import Optional
 
 from src.core.db import get_connection, with_writer
 from src.core.schemas import Channel
@@ -19,7 +18,7 @@ from src.core.schemas import Channel
 __all__ = ["write_artifact"]
 
 
-def _format_critic_trace(trace_json: Optional[str]) -> Optional[str]:
+def _format_critic_trace(trace_json: str | None) -> str | None:
     """Render a critic_trace JSON blob as a compact markdown summary.
 
     Returns None when there's nothing useful to show (no trace, parse
@@ -54,6 +53,7 @@ def _format_critic_trace(trace_json: Optional[str]) -> Optional[str]:
             lines.append(f"  - {issue}")
     return "\n".join(lines)
 
+
 # Default output directory (overridable via _output_dir for tests)
 _DEFAULT_OUTPUT_DIR: Path = Path.home() / ".networking-agent" / "drafts"
 
@@ -65,7 +65,7 @@ _CHANNEL_LABELS: dict[str, str] = {
 }
 
 
-def _load_company(company_id: int) -> Optional[dict]:
+def _load_company(company_id: int) -> dict | None:
     """Return the companies row for *company_id*, or None if not found."""
     conn = get_connection()
     try:
@@ -227,15 +227,14 @@ def _update_company_state_to_approved(company_id: int) -> None:
     """Transition the company state from DRAFTED → APPROVED."""
     with with_writer() as conn:
         conn.execute(
-            "UPDATE companies SET state = 'APPROVED', updated_at = CURRENT_TIMESTAMP "
-            "WHERE id = ?",
+            "UPDATE companies SET state = 'APPROVED', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (company_id,),
         )
 
 
 def write_artifact(
     company_id: int,
-    _output_dir: Optional[Path] = None,
+    _output_dir: Path | None = None,
 ) -> Path:
     """Write a Markdown artifact for *company_id* and mark the company APPROVED.
 

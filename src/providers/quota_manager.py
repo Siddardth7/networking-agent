@@ -25,7 +25,6 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from src.core.db import _DB_PATH, get_connection, with_writer
 from src.providers.retry import QuotaExhausted
@@ -59,7 +58,7 @@ class QuotaManager:
     99
     """
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         self._db_path: Path = Path(db_path) if db_path is not None else _DB_PATH
 
     # ------------------------------------------------------------------

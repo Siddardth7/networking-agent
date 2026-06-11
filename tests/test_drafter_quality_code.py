@@ -13,10 +13,10 @@ import pytest
 from src.agents.drafter import draft_for_contacts
 from src.core.db import get_connection, init_db, with_writer
 
-
 # ---------------------------------------------------------------------------
 # Fixtures (mirror tests/test_drafter.py for parity)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def db_path(tmp_path, monkeypatch):
@@ -27,6 +27,7 @@ def db_path(tmp_path, monkeypatch):
     # quality_code persistence. Critic-specific behavior is in
     # tests/test_critic.py and tests/test_drafter_critic.py.
     from src.core.config import Config, load_config
+
     real = load_config
 
     def _no_critic_cfg():
@@ -77,11 +78,13 @@ def _seed(n: int = 1, with_email: bool = True) -> tuple[int, list[int]]:
 
 def _mk_client(responses: list[str]):
     client = Mock()
+
     def _create(**kwargs):
         text = responses.pop(0)
         msg = Mock()
         msg.content = [Mock(text=text)]
         return msg
+
     client.messages.create.side_effect = _create
     return client
 
@@ -90,14 +93,17 @@ def _mk_client(responses: list[str]):
 # quality_code persistence
 # ---------------------------------------------------------------------------
 
+
 class TestQualityCodePersisted:
     def test_clean_draft_has_quality_code_ok(self, db_path):
         _, ids = _seed(1)
-        client = _mk_client([
-            "Brief connection note.",
-            "Conversational follow-up.",
-            "Subject: hi\n\nBody.",
-        ])
+        client = _mk_client(
+            [
+                "Brief connection note.",
+                "Conversational follow-up.",
+                "Subject: hi\n\nBody.",
+            ]
+        )
         result = draft_for_contacts(ids, anthropic_client=client)
 
         for d in result[ids[0]]:
@@ -109,12 +115,14 @@ class TestQualityCodePersisted:
         # AUDIT-A1: a placeholder in the first generation now triggers one
         # corrective regen; only a draft that is STILL dirty afterwards is
         # HARD_FAILed (and redacted, AUDIT-A2).
-        client = _mk_client([
-            "Hey — saw your [RESEARCH_NEEDED] post recently.",  # gen 1
-            "Hey — still citing [RESEARCH_NEEDED] here.",  # regen, still dirty
-            "Conversational follow-up.",
-            "Subject: hi\n\nBody.",
-        ])
+        client = _mk_client(
+            [
+                "Hey — saw your [RESEARCH_NEEDED] post recently.",  # gen 1
+                "Hey — still citing [RESEARCH_NEEDED] here.",  # regen, still dirty
+                "Conversational follow-up.",
+                "Subject: hi\n\nBody.",
+            ]
+        )
         result = draft_for_contacts(ids, anthropic_client=client)
 
         drafts = result[ids[0]]
@@ -137,11 +145,13 @@ class TestQualityCodePersisted:
     def test_overlong_linkedin_note_marked_hard_fail(self, db_path):
         _, ids = _seed(1)
         long_note = "x" * 250  # > 200-char LinkedIn cap
-        client = _mk_client([
-            long_note,
-            "Conversational follow-up.",
-            "Subject: hi\n\nBody.",
-        ])
+        client = _mk_client(
+            [
+                long_note,
+                "Conversational follow-up.",
+                "Subject: hi\n\nBody.",
+            ]
+        )
         result = draft_for_contacts(ids, anthropic_client=client)
         conn_draft = next(d for d in result[ids[0]] if d.channel == "LINKEDIN_CONNECTION")
         assert conn_draft.quality_code == "HARD_FAIL"
@@ -151,14 +161,17 @@ class TestQualityCodePersisted:
 # COLD_EMAIL skipped when contact has no email
 # ---------------------------------------------------------------------------
 
+
 class TestColdEmailSkippedWhenNoAddress:
     def test_two_drafts_only_when_no_email(self, db_path):
         _, ids = _seed(1, with_email=False)
         # Only 2 LLM calls expected (LinkedIn connection + post-connection).
-        client = _mk_client([
-            "Connection note.",
-            "Post-connection follow-up.",
-        ])
+        client = _mk_client(
+            [
+                "Connection note.",
+                "Post-connection follow-up.",
+            ]
+        )
         result = draft_for_contacts(ids, anthropic_client=client)
 
         channels = {d.channel for d in result[ids[0]]}
@@ -167,13 +180,17 @@ class TestColdEmailSkippedWhenNoAddress:
 
     def test_all_three_drafts_when_email_present(self, db_path):
         _, ids = _seed(1, with_email=True)
-        client = _mk_client([
-            "Connection note.",
-            "Post-connection follow-up.",
-            "Subject: hi\n\nBody.",
-        ])
+        client = _mk_client(
+            [
+                "Connection note.",
+                "Post-connection follow-up.",
+                "Subject: hi\n\nBody.",
+            ]
+        )
         result = draft_for_contacts(ids, anthropic_client=client)
         channels = {d.channel for d in result[ids[0]]}
         assert channels == {
-            "LINKEDIN_CONNECTION", "LINKEDIN_POST_CONNECTION", "COLD_EMAIL",
+            "LINKEDIN_CONNECTION",
+            "LINKEDIN_POST_CONNECTION",
+            "COLD_EMAIL",
         }

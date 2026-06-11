@@ -9,7 +9,6 @@ import pytest
 from src.cli.selection_gate import _parse_selection, run_selection_gate
 from src.core.db import get_connection, init_db, with_writer
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -34,7 +33,8 @@ def _seed_db(n_contacts: int = 3) -> tuple[int, list[int]]:
         contact_ids = []
         for i in range(n_contacts):
             cursor = conn.execute(
-                "INSERT INTO contacts (company_id, full_name, title, hook, state) VALUES (?, ?, ?, ?, 'NEW')",
+                "INSERT INTO contacts (company_id, full_name, title, hook, "
+                "state) VALUES (?, ?, ?, ?, 'NEW')",
                 (company_id, f"Contact {i + 1}", f"Engineer {i + 1}", f"hook_{i + 1}"),
             )
             contact_ids.append(cursor.lastrowid)
@@ -106,9 +106,7 @@ class TestRunSelectionGate:
             c2 = conn.execute(
                 "SELECT selected, state FROM contacts WHERE id = ?", (contact_ids[1],)
             ).fetchone()
-            co = conn.execute(
-                "SELECT state FROM companies WHERE id = ?", (company_id,)
-            ).fetchone()
+            co = conn.execute("SELECT state FROM companies WHERE id = ?", (company_id,)).fetchone()
         finally:
             conn.close()
 
@@ -125,9 +123,7 @@ class TestRunSelectionGate:
 
         conn = get_connection()
         try:
-            co = conn.execute(
-                "SELECT state FROM companies WHERE id = ?", (company_id,)
-            ).fetchone()
+            co = conn.execute("SELECT state FROM companies WHERE id = ?", (company_id,)).fetchone()
             selected = conn.execute(
                 "SELECT COUNT(*) AS n FROM contacts WHERE company_id = ? AND selected = 1",
                 (company_id,),
@@ -145,9 +141,7 @@ class TestRunSelectionGate:
 
         conn = get_connection()
         try:
-            co = conn.execute(
-                "SELECT state FROM companies WHERE id = ?", (company_id,)
-            ).fetchone()
+            co = conn.execute("SELECT state FROM companies WHERE id = ?", (company_id,)).fetchone()
             selected = conn.execute(
                 "SELECT COUNT(*) AS n FROM contacts WHERE company_id = ? AND selected = 1",
                 (company_id,),

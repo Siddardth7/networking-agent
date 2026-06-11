@@ -14,9 +14,6 @@ Traceability: DESIGN.md §8.3 · DRAFTER_ROOT_CAUSE_AUDIT.md §2.6, Layer 6
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
-
 from src.agents.achievement_matcher import load_resume_library, match_achievements
 from src.agents.critic import critique_draft, hard_fail_trace
 from src.agents.drafter import _build_prompt, _load_persona_template, _load_voice_doc
@@ -57,7 +54,8 @@ _parse_email_body_subject = parse_email_body_subject
 # DB helpers
 # ---------------------------------------------------------------------------
 
-def _load_contact(contact_id: int) -> Optional[dict]:
+
+def _load_contact(contact_id: int) -> dict | None:
     conn = get_connection()
     try:
         row = conn.execute(
@@ -71,7 +69,7 @@ def _load_contact(contact_id: int) -> Optional[dict]:
         conn.close()
 
 
-def _load_prior_draft(draft_id: int) -> Optional[dict]:
+def _load_prior_draft(draft_id: int) -> dict | None:
     conn = get_connection()
     try:
         row = conn.execute(
@@ -91,7 +89,7 @@ def _latest_version_for_channel(contact_id: int, channel: Channel) -> int:
             "SELECT MAX(version) FROM drafts WHERE contact_id = ? AND channel = ?",
             (contact_id, channel.value),
         ).fetchone()
-        return (row[0] or 0)
+        return row[0] or 0
     finally:
         conn.close()
 
@@ -100,11 +98,11 @@ def _insert_revised_draft(
     contact_id: int,
     channel: Channel,
     body: str,
-    subject: Optional[str],
+    subject: str | None,
     version: int,
     quality_flag: bool,
     quality_code: str = "OK",
-    critic_trace: Optional[str] = None,
+    critic_trace: str | None = None,
 ) -> int:
     """Insert a new draft row and return its id.
 
@@ -117,8 +115,16 @@ def _insert_revised_draft(
             "INSERT INTO drafts (contact_id, channel, body, subject, version, "
             "quality_flag, quality_code, critic_trace) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (contact_id, channel.value, body, subject, version,
-             int(quality_flag), quality_code, critic_trace),
+            (
+                contact_id,
+                channel.value,
+                body,
+                subject,
+                version,
+                int(quality_flag),
+                quality_code,
+                critic_trace,
+            ),
         )
         return cursor.lastrowid
 
@@ -126,6 +132,7 @@ def _insert_revised_draft(
 # ---------------------------------------------------------------------------
 # Prompt construction — fully-grounded, mirrors the first-draft contract
 # ---------------------------------------------------------------------------
+
 
 def _build_revision_prompt(
     contact: dict,
@@ -135,7 +142,7 @@ def _build_revision_prompt(
     voice_doc: str,
     prior_body: str,
     feedback: str,
-    anti_phrases: Optional[list[str]] = None,
+    anti_phrases: list[str] | None = None,
 ) -> str:
     """Build the REVISE prompt using the *same* grounding as the first draft.
 
@@ -151,7 +158,12 @@ def _build_revision_prompt(
         persona = Persona.PEER_ENGINEER
 
     base_prompt = _build_prompt(
-        contact, channel, persona, bullets, persona_template, voice_doc,
+        contact,
+        channel,
+        persona,
+        bullets,
+        persona_template,
+        voice_doc,
         anti_phrases=anti_phrases,
     )
 
@@ -159,7 +171,8 @@ def _build_revision_prompt(
     # revision-specific tail so we keep all grounding but redirect the
     # task.
     base_no_tail = base_prompt.rsplit(
-        "Now write the message.", 1,
+        "Now write the message.",
+        1,
     )[0].rstrip()
 
     return (
@@ -177,11 +190,12 @@ def _build_revision_prompt(
 # Main dispatch function
 # ---------------------------------------------------------------------------
 
+
 def dispatch_revision(
     req: DraftDispatchRequest,
     anthropic_client=None,
     _timeout: float = _TIMEOUT_SECONDS,
-    _library_path: Optional[str] = None,
+    _library_path: str | None = None,
 ) -> DraftDispatchResponse:
     """Regenerate a single draft with user feedback, fully-grounded.
 
@@ -194,6 +208,7 @@ def dispatch_revision(
     if anthropic_client is None:
         try:
             from src.core.config import get_anthropic_client
+
             anthropic_client = get_anthropic_client()
         except ValueError as exc:
             return DraftDispatchResponse(status="ERROR", error_message=str(exc))
@@ -231,7 +246,10 @@ def dispatch_revision(
 
     library = load_resume_library(_library_path)
     bullets = match_achievements(
-        focus_area, contact.get("title") or "", library, top_n=3,
+        focus_area,
+        contact.get("title") or "",
+        library,
+        top_n=3,
     )
     persona_template = _load_persona_template(persona)
 
@@ -246,17 +264,27 @@ def dispatch_revision(
     # --- Attempt 1 ---
     try:
         prompt1 = _build_revision_prompt(
-            contact, req.channel, bullets, persona_template, voice_doc,
-            prior_body, feedback,
+            contact,
+            req.channel,
+            bullets,
+            persona_template,
+            voice_doc,
+            prior_body,
+            feedback,
         )
         text1 = call_claude_with_timeout(
-            prompt1, anthropic_client, _timeout, model=_MODEL, max_tokens=600,
+            prompt1,
+            anthropic_client,
+            _timeout,
+            model=_MODEL,
+            max_tokens=600,
         )
     except TimeoutError as exc:
         return DraftDispatchResponse(status="ERROR", error_message=str(exc))
     except Exception as exc:
         return DraftDispatchResponse(
-            status="ERROR", error_message=f"LLM call failed: {exc}",
+            status="ERROR",
+            error_message=f"LLM call failed: {exc}",
         )
 
     bad_phrase = check_draft(text1)
@@ -266,17 +294,28 @@ def dispatch_revision(
         # Regen once with anti-phrase nudge.
         try:
             prompt2 = _build_revision_prompt(
-                contact, req.channel, bullets, persona_template, voice_doc,
-                prior_body, feedback, anti_phrases=[bad_phrase],
+                contact,
+                req.channel,
+                bullets,
+                persona_template,
+                voice_doc,
+                prior_body,
+                feedback,
+                anti_phrases=[bad_phrase],
             )
             final_text = call_claude_with_timeout(
-                prompt2, anthropic_client, _timeout, model=_MODEL, max_tokens=600,
+                prompt2,
+                anthropic_client,
+                _timeout,
+                model=_MODEL,
+                max_tokens=600,
             )
         except TimeoutError as exc:
             return DraftDispatchResponse(status="ERROR", error_message=str(exc))
         except Exception as exc:
             return DraftDispatchResponse(
-                status="ERROR", error_message=f"LLM regen failed: {exc}",
+                status="ERROR",
+                error_message=f"LLM regen failed: {exc}",
             )
         soft_failed = check_draft(final_text) is not None
 
@@ -289,12 +328,14 @@ def dispatch_revision(
     # Hard gate.
     source_facts = "\n".join(b.text for b in bullets) if bullets else None
     hc = hard_check(
-        body, source_facts=source_facts, channel=req.channel.value,
+        body,
+        source_facts=source_facts,
+        channel=req.channel.value,
         linkedin_char_limit=cfg.linkedin_char_limit,
         email_word_limit=cfg.email_word_limit,
     )
 
-    critic_trace: Optional[str] = None
+    critic_trace: str | None = None
     if not hc.passed:
         quality_code = hc.quality_code  # HARD_FAIL
         # Persist the gate's reason (AUDIT-A9) and redact any placeholder
@@ -304,12 +345,15 @@ def dispatch_revision(
         if find_placeholder(body) is not None:
             body = redact_placeholders(body)
     else:
-        critic_code: Optional[str] = None
+        critic_code: str | None = None
         if cfg.enable_critic:
             try:
                 cr = critique_draft(
-                    body=body, contact=contact, channel=req.channel.value,
-                    source_facts=source_facts, anthropic_client=anthropic_client,
+                    body=body,
+                    contact=contact,
+                    channel=req.channel.value,
+                    source_facts=source_facts,
+                    anthropic_client=anthropic_client,
                     subject=subject,
                 )
             except Exception:
@@ -330,12 +374,19 @@ def dispatch_revision(
 
     try:
         new_id = _insert_revised_draft(
-            req.contact_id, req.channel, body, subject, next_version,
-            quality_flag, quality_code, critic_trace=critic_trace,
+            req.contact_id,
+            req.channel,
+            body,
+            subject,
+            next_version,
+            quality_flag,
+            quality_code,
+            critic_trace=critic_trace,
         )
     except Exception as exc:
         return DraftDispatchResponse(
-            status="ERROR", error_message=f"DB write failed: {exc}",
+            status="ERROR",
+            error_message=f"DB write failed: {exc}",
         )
 
     # Status mapping:

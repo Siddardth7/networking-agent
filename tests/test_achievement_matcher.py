@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 import yaml
 
 from src.agents.achievement_matcher import (
@@ -23,9 +22,21 @@ def _make_library() -> ResumeLibrary:
                 title="CFRP Fuselage Design",
                 focus_areas=[FocusArea.COMPOSITE_DESIGN, FocusArea.MANUFACTURING],
                 bullets=[
-                    Bullet(id="b1", text="Designed composite fuselage with 40% weight reduction.", keywords=["composite", "fuselage", "structural"]),
-                    Bullet(id="b2", text="Led vacuum infusion process for 1.2m CFRP panel.", keywords=["composite", "manufacturing", "infusion"]),
-                    Bullet(id="b3", text="Coupon testing — 98% correlation with FEA.", keywords=["composite", "test", "fea"]),
+                    Bullet(
+                        id="b1",
+                        text="Designed composite fuselage with 40% weight reduction.",
+                        keywords=["composite", "fuselage", "structural"],
+                    ),
+                    Bullet(
+                        id="b2",
+                        text="Led vacuum infusion process for 1.2m CFRP panel.",
+                        keywords=["composite", "manufacturing", "infusion"],
+                    ),
+                    Bullet(
+                        id="b3",
+                        text="Coupon testing — 98% correlation with FEA.",
+                        keywords=["composite", "test", "fea"],
+                    ),
                     Bullet(id="b4", text="Extra composite bullet.", keywords=["composite"]),
                 ],
             ),
@@ -34,8 +45,16 @@ def _make_library() -> ResumeLibrary:
                 title="Wing Box Analysis",
                 focus_areas=[FocusArea.STRUCTURAL_ANALYSIS],
                 bullets=[
-                    Bullet(id="s1", text="Ran NASTRAN on wing box — found buckling margin.", keywords=["structural", "fea", "nastran", "wing"]),
-                    Bullet(id="s2", text="Fatigue life estimation with S-N curves.", keywords=["structural", "fatigue", "analysis"]),
+                    Bullet(
+                        id="s1",
+                        text="Ran NASTRAN on wing box — found buckling margin.",
+                        keywords=["structural", "fea", "nastran", "wing"],
+                    ),
+                    Bullet(
+                        id="s2",
+                        text="Fatigue life estimation with S-N curves.",
+                        keywords=["structural", "fatigue", "analysis"],
+                    ),
                 ],
             ),
             Project(
@@ -43,7 +62,11 @@ def _make_library() -> ResumeLibrary:
                 title="Supplier Quality Internship",
                 focus_areas=[FocusArea.MANUFACTURING],
                 bullets=[
-                    Bullet(id="m1", text="Dispositioned 47 MRB tickets.", keywords=["quality", "mrb", "supplier"]),
+                    Bullet(
+                        id="m1",
+                        text="Dispositioned 47 MRB tickets.",
+                        keywords=["quality", "mrb", "supplier"],
+                    ),
                 ],
             ),
         ]
@@ -53,24 +76,24 @@ def _make_library() -> ResumeLibrary:
 class TestMatchAchievements:
     def test_composites_contact_gets_composites_bullets(self):
         lib = _make_library()
-        results = match_achievements(
-            FocusArea.COMPOSITE_DESIGN, "Composites Manager", lib, top_n=3
-        )
+        results = match_achievements(FocusArea.COMPOSITE_DESIGN, "Composites Manager", lib, top_n=3)
         assert len(results) == 3
         # All returned bullets should come from the composites project.
         # ProvenancedBullet exposes project_title and project_type so
         # the drafter can forbid re-attribution.
         for b in results:
             assert b.project_title == "CFRP Fuselage Design"
-            assert "composite" in b.text.lower() or "cfrp" in b.text.lower() or "coupon" in b.text.lower()
+            assert (
+                "composite" in b.text.lower()
+                or "cfrp" in b.text.lower()
+                or "coupon" in b.text.lower()
+            )
 
     def test_keyword_overlap_ranks_bullet_higher(self):
         lib = _make_library()
         # "Composites Manager" → "composite" matches in multiple bullets;
         # b1 has "composite" + "fuselage" matches; best overlap for title "Composites Manager"
-        results = match_achievements(
-            FocusArea.COMPOSITE_DESIGN, "Composites Manager", lib, top_n=3
-        )
+        results = match_achievements(FocusArea.COMPOSITE_DESIGN, "Composites Manager", lib, top_n=3)
         # b1 has "composite" in title (1 match); b2 has "composite" (1); b3 has "composite" (1)
         # b4 has only "composite" (1). All tied for this title.
         # Verify we get top_n=3 bullets
@@ -90,9 +113,7 @@ class TestMatchAchievements:
 
     def test_manufacturing_focus_gets_manufacturing_bullets(self):
         lib = _make_library()
-        results = match_achievements(
-            FocusArea.MANUFACTURING, "Quality Engineer", lib, top_n=3
-        )
+        results = match_achievements(FocusArea.MANUFACTURING, "Quality Engineer", lib, top_n=3)
         # Both composites_project and mfg_project have MANUFACTURING
         assert len(results) == 3
         # m1 ("Dispositioned 47 MRB tickets") is the only bullet whose
@@ -102,9 +123,7 @@ class TestMatchAchievements:
 
     def test_unmatched_focus_area_returns_empty(self):
         lib = _make_library()
-        results = match_achievements(
-            FocusArea.ADDITIVE, "Additive Engineer", lib, top_n=3
-        )
+        results = match_achievements(FocusArea.ADDITIVE, "Additive Engineer", lib, top_n=3)
         assert results == []
 
     def test_top_n_limits_results(self):
@@ -134,9 +153,7 @@ class TestLoadResumeLibrary:
                     "id": "p1",
                     "title": "Test Project",
                     "focus_areas": ["COMPOSITE_DESIGN"],
-                    "bullets": [
-                        {"id": "b1", "text": "A bullet.", "keywords": ["composite"]}
-                    ],
+                    "bullets": [{"id": "b1", "text": "A bullet.", "keywords": ["composite"]}],
                 }
             ]
         }

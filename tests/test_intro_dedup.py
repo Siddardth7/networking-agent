@@ -43,6 +43,7 @@ def db_path(tmp_path, monkeypatch):
     monkeypatch.setattr("src.providers.quota_manager._DB_PATH", path)
     monkeypatch.setattr("src.agents.drafter._MAX_WORKERS", 1)
     from src.core.config import Config, load_config
+
     real = load_config
 
     def _no_critic_cfg():
@@ -60,6 +61,7 @@ def db_path(tmp_path, monkeypatch):
 
 def _seed_one() -> int:
     from src.core.db import init_db, with_writer
+
     init_db()
     with with_writer() as conn:
         c = conn.execute(
@@ -96,11 +98,13 @@ def _mk_client(responses: list[str]):
 class TestDrafterDedupsIntro:
     def test_redundant_intro_triggers_regen(self, db_path):
         cid = _seed_one()
-        client = _mk_client([
-            REDUNDANT,           # POST-style fault on CONN gen 1
-            CLEAN,               # CONN regen
-            "Clean follow-up.",  # POST
-        ])
+        client = _mk_client(
+            [
+                REDUNDANT,  # POST-style fault on CONN gen 1
+                CLEAN,  # CONN regen
+                "Clean follow-up.",  # POST
+            ]
+        )
         results = draft_for_contacts([cid], anthropic_client=client)
         conn_draft = next(d for d in results[cid] if d.channel == "LINKEDIN_CONNECTION")
         assert conn_draft.body == CLEAN
@@ -109,11 +113,13 @@ class TestDrafterDedupsIntro:
 
     def test_persistent_redundancy_soft_flagged(self, db_path):
         cid = _seed_one()
-        client = _mk_client([
-            REDUNDANT,
-            REDUNDANT,  # regen still redundant
-            "Clean follow-up.",
-        ])
+        client = _mk_client(
+            [
+                REDUNDANT,
+                REDUNDANT,  # regen still redundant
+                "Clean follow-up.",
+            ]
+        )
         results = draft_for_contacts([cid], anthropic_client=client)
         conn_draft = next(d for d in results[cid] if d.channel == "LINKEDIN_CONNECTION")
         assert conn_draft.quality_code == "SOFT_FLAG"

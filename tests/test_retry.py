@@ -5,8 +5,8 @@ Tests for the retry/backoff policy in src/providers/retry.py.
 
 from __future__ import annotations
 
-import pytest
 import httpx
+import pytest
 
 from src.providers.retry import (
     AuthError,
@@ -14,7 +14,6 @@ from src.providers.retry import (
     QuotaExhausted,
     with_retry,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -58,10 +57,12 @@ def test_429_with_retry_after_uses_header_value(monkeypatch):
     messages: list[float] = []
     monkeypatch.setattr("src.providers.retry.time.sleep", lambda s: sleeps.append(s))
 
-    seq = _Sequence([
-        _make_response(429, headers={"Retry-After": "3"}),
-        _make_response(200),
-    ])
+    seq = _Sequence(
+        [
+            _make_response(429, headers={"Retry-After": "3"}),
+            _make_response(200),
+        ]
+    )
 
     result = with_retry(seq, on_rate_limit_message=lambda s: messages.append(s))
 
@@ -109,12 +110,14 @@ def test_503_retries_three_times_with_correct_backoff(monkeypatch):
     sleeps: list[float] = []
     monkeypatch.setattr("src.providers.retry.time.sleep", lambda s: sleeps.append(s))
 
-    seq = _Sequence([
-        _make_response(503),
-        _make_response(503),
-        _make_response(503),
-        _make_response(200),
-    ])
+    seq = _Sequence(
+        [
+            _make_response(503),
+            _make_response(503),
+            _make_response(503),
+            _make_response(200),
+        ]
+    )
 
     result = with_retry(seq)
 
@@ -176,10 +179,12 @@ def test_429_without_retry_after_uses_default_backoff(monkeypatch):
     sleeps: list[float] = []
     monkeypatch.setattr("src.providers.retry.time.sleep", lambda s: sleeps.append(s))
 
-    seq = _Sequence([
-        _make_response(429),  # no Retry-After
-        _make_response(200),
-    ])
+    seq = _Sequence(
+        [
+            _make_response(429),  # no Retry-After
+            _make_response(200),
+        ]
+    )
 
     with_retry(seq)
 

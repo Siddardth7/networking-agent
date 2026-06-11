@@ -11,12 +11,7 @@ from src.core.schemas import (
     ContactCandidate,
     DraftDispatchRequest,
     DraftDispatchResponse,
-    FocusArea,
     Persona,
-    PipelineState,
-    ContactState,
-    EmailResult,
-    RetryDecision,
 )
 
 
@@ -25,9 +20,16 @@ def test_star_import_succeeds():
     from src.core.schemas import __all__  # noqa: F401
 
     expected = {
-        "Persona", "FocusArea", "Channel", "PipelineState", "ContactState",
-        "ContactCandidate", "EmailResult", "RetryDecision",
-        "DraftDispatchRequest", "DraftDispatchResponse",
+        "Persona",
+        "FocusArea",
+        "Channel",
+        "PipelineState",
+        "ContactState",
+        "ContactCandidate",
+        "EmailResult",
+        "RetryDecision",
+        "DraftDispatchRequest",
+        "DraftDispatchResponse",
     }
     assert expected.issubset(set(__all__))
 

@@ -26,8 +26,7 @@ SINGLE_ASK = "Saw your MRB work. Would you have 15 minutes in the next couple we
 class TestDetectMultiAsk:
     def test_two_questions_flagged(self):
         assert detect_multi_ask(
-            "Are you mostly auditing, or do you get into material certs? "
-            "Could we grab 15 minutes?"
+            "Are you mostly auditing, or do you get into material certs? Could we grab 15 minutes?"
         )
 
     def test_two_ask_sentences_flagged(self):
@@ -50,9 +49,7 @@ class TestDetectMultiAsk:
 
     def test_single_ask_with_minutes_and_would_you_passes(self):
         # One sentence containing two ask-ish phrases is still ONE ask.
-        assert not detect_multi_ask(
-            "Would you have 15 minutes next week to talk composites?"
-        )
+        assert not detect_multi_ask("Would you have 15 minutes next week to talk composites?")
 
     def test_no_ask_passes(self):
         # Zero asks is the critic's problem (one_ask rubric), not multi-ask.
@@ -66,6 +63,7 @@ def db_path(tmp_path, monkeypatch):
     monkeypatch.setattr("src.providers.quota_manager._DB_PATH", path)
     monkeypatch.setattr("src.agents.drafter._MAX_WORKERS", 1)
     from src.core.config import Config, load_config
+
     real = load_config
 
     def _no_critic_cfg():
@@ -118,11 +116,13 @@ def _mk_client(responses: list[str]):
 class TestDrafterEnforcesSingleAsk:
     def test_multi_ask_triggers_regen(self, db_path):
         cid = _seed_one()
-        client = _mk_client([
-            MULTI_ASK,    # CONN gen 1 — multi-ask
-            SINGLE_ASK,   # CONN regen — clean
-            "Clean follow-up.",  # POST
-        ])
+        client = _mk_client(
+            [
+                MULTI_ASK,  # CONN gen 1 — multi-ask
+                SINGLE_ASK,  # CONN regen — clean
+                "Clean follow-up.",  # POST
+            ]
+        )
         results = draft_for_contacts([cid], anthropic_client=client)
         conn_draft = next(d for d in results[cid] if d.channel == "LINKEDIN_CONNECTION")
         assert conn_draft.body == SINGLE_ASK
@@ -131,11 +131,13 @@ class TestDrafterEnforcesSingleAsk:
 
     def test_persistent_multi_ask_soft_flagged(self, db_path):
         cid = _seed_one()
-        client = _mk_client([
-            MULTI_ASK,  # CONN gen 1
-            MULTI_ASK,  # CONN regen — still multi-ask
-            "Clean follow-up.",
-        ])
+        client = _mk_client(
+            [
+                MULTI_ASK,  # CONN gen 1
+                MULTI_ASK,  # CONN regen — still multi-ask
+                "Clean follow-up.",
+            ]
+        )
         results = draft_for_contacts([cid], anthropic_client=client)
         conn_draft = next(d for d in results[cid] if d.channel == "LINKEDIN_CONNECTION")
         assert conn_draft.quality_code == "SOFT_FLAG"

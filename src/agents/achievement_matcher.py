@@ -8,7 +8,6 @@ Traceability: DESIGN.md §6 (Drafting Subsystem — achievement matching);
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import yaml
 from pydantic import BaseModel
@@ -64,7 +63,7 @@ class ProvenancedBullet(BaseModel):
     project_type: ProjectType
 
 
-def load_resume_library(path: Optional[str] = None) -> ResumeLibrary:
+def load_resume_library(path: str | None = None) -> ResumeLibrary:
     """Load the resume library YAML.
 
     Inputs: optional explicit *path*; defaults to resume_library.yaml in
@@ -107,14 +106,16 @@ def match_achievements(
             continue
         for bullet in project.bullets:
             score = sum(1 for kw in bullet.keywords if kw.lower() in title_lower)
-            scored.append((
-                score,
-                ProvenancedBullet(
-                    text=bullet.text,
-                    project_title=project.title,
-                    project_type=project.type,
-                ),
-            ))
+            scored.append(
+                (
+                    score,
+                    ProvenancedBullet(
+                        text=bullet.text,
+                        project_title=project.title,
+                        project_type=project.type,
+                    ),
+                )
+            )
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return [b for _, b in scored[:top_n]]

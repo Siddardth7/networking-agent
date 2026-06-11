@@ -33,36 +33,322 @@ from src.agents.guardrails import hard_check
 # "OK" = passed the original critic with no backfilled trace;
 # dict = real backfilled critic score vector.
 JOBY_RUN_2026_06_06: list[tuple[str, str, object]] = [
-    ("Anuj Pant", "CONN", {"specificity": 3, "one_ask": 3, "tone": 3, "grounded_facts": 1, "economy": 4, "relevance": 3}),
-    ("Anuj Pant", "POST", {"specificity": 2, "one_ask": 2, "tone": 4, "grounded_facts": 3, "economy": 3, "relevance": 4}),
-    ("Arun Bhure", "CONN", {"specificity": 2, "one_ask": 4, "tone": 3, "grounded_facts": 1, "economy": 4, "relevance": 3}),
-    ("Arun Bhure", "POST", {"specificity": 3, "one_ask": 4, "tone": 4, "grounded_facts": 3, "economy": 3, "relevance": 4}),
-    ("Jaime Preston", "CONN", {"specificity": 2, "one_ask": 4, "tone": 4, "grounded_facts": 3, "economy": 4, "relevance": 3}),
-    ("Jaime Preston", "POST", {"specificity": 2, "one_ask": 2, "tone": 4, "grounded_facts": 3, "economy": 3, "relevance": 4}),
-    ("Jimmy Shedden", "CONN", {"specificity": 2, "one_ask": 4, "tone": 3, "grounded_facts": 1, "economy": 4, "relevance": 3}),
-    ("Jimmy Shedden", "POST", {"specificity": 2, "one_ask": 1, "tone": 4, "grounded_facts": 4, "economy": 3, "relevance": 4}),
-    ("Jose Zarate", "CONN", {"specificity": 2, "one_ask": 3, "tone": 4, "grounded_facts": 2, "economy": 4, "relevance": 4}),
-    ("Jose Zarate", "POST", {"specificity": 3, "one_ask": 2, "tone": 4, "grounded_facts": 4, "economy": 3, "relevance": 4}),
-    ("Marc Le", "CONN", {"specificity": 2, "one_ask": 4, "tone": 3, "grounded_facts": 1, "economy": 4, "relevance": 3}),
+    (
+        "Anuj Pant",
+        "CONN",
+        {
+            "specificity": 3,
+            "one_ask": 3,
+            "tone": 3,
+            "grounded_facts": 1,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Anuj Pant",
+        "POST",
+        {
+            "specificity": 2,
+            "one_ask": 2,
+            "tone": 4,
+            "grounded_facts": 3,
+            "economy": 3,
+            "relevance": 4,
+        },
+    ),
+    (
+        "Arun Bhure",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 3,
+            "grounded_facts": 1,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Arun Bhure",
+        "POST",
+        {
+            "specificity": 3,
+            "one_ask": 4,
+            "tone": 4,
+            "grounded_facts": 3,
+            "economy": 3,
+            "relevance": 4,
+        },
+    ),
+    (
+        "Jaime Preston",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 4,
+            "grounded_facts": 3,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Jaime Preston",
+        "POST",
+        {
+            "specificity": 2,
+            "one_ask": 2,
+            "tone": 4,
+            "grounded_facts": 3,
+            "economy": 3,
+            "relevance": 4,
+        },
+    ),
+    (
+        "Jimmy Shedden",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 3,
+            "grounded_facts": 1,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Jimmy Shedden",
+        "POST",
+        {
+            "specificity": 2,
+            "one_ask": 1,
+            "tone": 4,
+            "grounded_facts": 4,
+            "economy": 3,
+            "relevance": 4,
+        },
+    ),
+    (
+        "Jose Zarate",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 3,
+            "tone": 4,
+            "grounded_facts": 2,
+            "economy": 4,
+            "relevance": 4,
+        },
+    ),
+    (
+        "Jose Zarate",
+        "POST",
+        {
+            "specificity": 3,
+            "one_ask": 2,
+            "tone": 4,
+            "grounded_facts": 4,
+            "economy": 3,
+            "relevance": 4,
+        },
+    ),
+    (
+        "Marc Le",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 3,
+            "grounded_facts": 1,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
     ("Marc Le", "POST", "OK"),
-    ("Michael Tucker", "CONN", {"specificity": 2, "one_ask": 4, "tone": 3, "grounded_facts": 2, "economy": 4, "relevance": 3}),
-    ("Michael Tucker", "POST", {"specificity": 2, "one_ask": 2, "tone": 3, "grounded_facts": 2, "economy": 3, "relevance": 3}),
-    ("Mitchell Garrity", "CONN", {"specificity": 2, "one_ask": 4, "tone": 4, "grounded_facts": 2, "economy": 5, "relevance": 2}),
-    ("Mitchell Garrity", "POST", {"specificity": 3, "one_ask": 2, "tone": 4, "grounded_facts": 3, "economy": 3, "relevance": 2}),
-    ("Morgan Mader", "CONN", {"specificity": 3, "one_ask": 4, "tone": 3, "grounded_facts": 3, "economy": 4, "relevance": 3}),
+    (
+        "Michael Tucker",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 3,
+            "grounded_facts": 2,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Michael Tucker",
+        "POST",
+        {
+            "specificity": 2,
+            "one_ask": 2,
+            "tone": 3,
+            "grounded_facts": 2,
+            "economy": 3,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Mitchell Garrity",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 4,
+            "grounded_facts": 2,
+            "economy": 5,
+            "relevance": 2,
+        },
+    ),
+    (
+        "Mitchell Garrity",
+        "POST",
+        {
+            "specificity": 3,
+            "one_ask": 2,
+            "tone": 4,
+            "grounded_facts": 3,
+            "economy": 3,
+            "relevance": 2,
+        },
+    ),
+    (
+        "Morgan Mader",
+        "CONN",
+        {
+            "specificity": 3,
+            "one_ask": 4,
+            "tone": 3,
+            "grounded_facts": 3,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
     ("Morgan Mader", "POST", "OK"),
     ("Nathan DeGraaff", "CONN", "HARD_FAIL"),  # placeholder leak
-    ("Nathan DeGraaff", "POST", {"specificity": 2, "one_ask": 3, "tone": 4, "grounded_facts": 3, "economy": 3, "relevance": 4}),
-    ("Sarah Senay", "CONN", {"specificity": 2, "one_ask": 4, "tone": 4, "grounded_facts": 2, "economy": 4, "relevance": 3}),
-    ("Sarah Senay", "POST", {"specificity": 2, "one_ask": 4, "tone": 4, "grounded_facts": 3, "economy": 3, "relevance": 4}),
-    ("Tanveer Shakeel", "CONN", {"specificity": 2, "one_ask": 4, "tone": 3, "grounded_facts": 2, "economy": 4, "relevance": 3}),
-    ("Tanveer Shakeel", "POST", {"specificity": 2, "one_ask": 3, "tone": 4, "grounded_facts": 2, "economy": 3, "relevance": 3}),
-    ("Valerie Brown", "CONN", {"specificity": 2, "one_ask": 4, "tone": 3, "grounded_facts": 2, "economy": 4, "relevance": 3}),
-    ("Valerie Brown", "POST", {"specificity": 2, "one_ask": 3, "tone": 4, "grounded_facts": 3, "economy": 3, "relevance": 4}),
+    (
+        "Nathan DeGraaff",
+        "POST",
+        {
+            "specificity": 2,
+            "one_ask": 3,
+            "tone": 4,
+            "grounded_facts": 3,
+            "economy": 3,
+            "relevance": 4,
+        },
+    ),
+    (
+        "Sarah Senay",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 4,
+            "grounded_facts": 2,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Sarah Senay",
+        "POST",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 4,
+            "grounded_facts": 3,
+            "economy": 3,
+            "relevance": 4,
+        },
+    ),
+    (
+        "Tanveer Shakeel",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 3,
+            "grounded_facts": 2,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Tanveer Shakeel",
+        "POST",
+        {
+            "specificity": 2,
+            "one_ask": 3,
+            "tone": 4,
+            "grounded_facts": 2,
+            "economy": 3,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Valerie Brown",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 3,
+            "grounded_facts": 2,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Valerie Brown",
+        "POST",
+        {
+            "specificity": 2,
+            "one_ask": 3,
+            "tone": 4,
+            "grounded_facts": 3,
+            "economy": 3,
+            "relevance": 4,
+        },
+    ),
     ("Yucheng Luo", "CONN", "HARD_FAIL"),  # over-length note
-    ("Yucheng Luo", "POST", {"specificity": 3, "one_ask": 2, "tone": 4, "grounded_facts": 3, "economy": 3, "relevance": 4}),
-    ("Yueyang Hu", "CONN", {"specificity": 2, "one_ask": 4, "tone": 3, "grounded_facts": 2, "economy": 4, "relevance": 3}),
-    ("Yueyang Hu", "POST", {"specificity": 2, "one_ask": 1, "tone": 3, "grounded_facts": 3, "economy": 2, "relevance": 3}),
+    (
+        "Yucheng Luo",
+        "POST",
+        {
+            "specificity": 3,
+            "one_ask": 2,
+            "tone": 4,
+            "grounded_facts": 3,
+            "economy": 3,
+            "relevance": 4,
+        },
+    ),
+    (
+        "Yueyang Hu",
+        "CONN",
+        {
+            "specificity": 2,
+            "one_ask": 4,
+            "tone": 3,
+            "grounded_facts": 2,
+            "economy": 4,
+            "relevance": 3,
+        },
+    ),
+    (
+        "Yueyang Hu",
+        "POST",
+        {
+            "specificity": 2,
+            "one_ask": 1,
+            "tone": 3,
+            "grounded_facts": 3,
+            "economy": 2,
+            "relevance": 3,
+        },
+    ),
 ]
 
 
@@ -90,9 +376,7 @@ class TestNamedRegressionFixtures:
     """The specific drafts called out in DRAFTER_AUDIT_2026-06-06."""
 
     def _verdict(self, name: str, channel: str) -> object:
-        return next(
-            v for n, c, v in JOBY_RUN_2026_06_06 if n == name and c == channel
-        )
+        return next(v for n, c, v in JOBY_RUN_2026_06_06 if n == name and c == channel)
 
     def test_morgan_post_still_passes(self):
         assert not _held(self._verdict("Morgan Mader", "POST"))
@@ -122,29 +406,50 @@ class TestNamedRegressionFixtures:
 
 class TestDecisionRuleProperties:
     def test_any_severe_dimension_holds(self):
-        scores = {d: 5 for d in (
-            "specificity", "one_ask", "tone", "grounded_facts",
-            "economy", "relevance",
-        )}
+        scores = {
+            d: 5
+            for d in (
+                "specificity",
+                "one_ask",
+                "tone",
+                "grounded_facts",
+                "economy",
+                "relevance",
+            )
+        }
         scores["tone"] = SEVERE_SCORE
         passed, failing = evaluate_scores(scores)
         assert not passed
         assert failing == ["tone"]
 
     def test_single_weak_dimension_passes(self):
-        scores = {d: 4 for d in (
-            "specificity", "one_ask", "tone", "grounded_facts",
-            "economy", "relevance",
-        )}
+        scores = {
+            d: 4
+            for d in (
+                "specificity",
+                "one_ask",
+                "tone",
+                "grounded_facts",
+                "economy",
+                "relevance",
+            )
+        }
         scores["specificity"] = MIN_SCORE - 1
         passed, _ = evaluate_scores(scores)
         assert passed
 
     def test_too_many_weak_dimensions_hold(self):
-        scores = {d: 4 for d in (
-            "specificity", "one_ask", "tone", "grounded_facts",
-            "economy", "relevance",
-        )}
+        scores = {
+            d: 4
+            for d in (
+                "specificity",
+                "one_ask",
+                "tone",
+                "grounded_facts",
+                "economy",
+                "relevance",
+            )
+        }
         for dim in ("specificity", "tone", "economy"):
             scores[dim] = MIN_SCORE - 1
         assert len([s for s in scores.values() if s < MIN_SCORE]) > MAX_WEAK_DIMS
@@ -153,10 +458,17 @@ class TestDecisionRuleProperties:
         assert set(failing) == {"specificity", "tone", "economy"}
 
     def test_all_clean_passes(self):
-        scores = {d: 3 for d in (
-            "specificity", "one_ask", "tone", "grounded_facts",
-            "economy", "relevance",
-        )}
+        scores = {
+            d: 3
+            for d in (
+                "specificity",
+                "one_ask",
+                "tone",
+                "grounded_facts",
+                "economy",
+                "relevance",
+            )
+        }
         passed, failing = evaluate_scores(scores)
         assert passed
         assert failing == []
@@ -165,11 +477,14 @@ class TestDecisionRuleProperties:
 class TestPlaceholderStringsStillHardFail:
     """P0 non-readmission: the hard gate is independent of critic tuning."""
 
-    @pytest.mark.parametrize("body", [
-        "Saw your work at [" + "RESEARCH_NEEDED] recently.",
-        "Excited about [COMPANY]'s mission and [TEAM].",
-        "Your work on [PROGRAM_NAME] stood out.",
-    ])
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "Saw your work at [" + "RESEARCH_NEEDED] recently.",
+            "Excited about [COMPANY]'s mission and [TEAM].",
+            "Your work on [PROGRAM_NAME] stood out.",
+        ],
+    )
     def test_placeholder_hard_fails(self, body):
         result = hard_check(body, channel="LINKEDIN_POST_CONNECTION")
         assert not result.passed

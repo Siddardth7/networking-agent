@@ -17,13 +17,13 @@ from pathlib import Path
 import pytest
 
 import src.core.db as db_module
-from src.core.db import init_db, with_writer, get_connection
 from src.cli.network_purge import run_purge
-
+from src.core.db import get_connection, init_db, with_writer
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_args(
     *,
@@ -86,9 +86,7 @@ def _count(table: str, where: str, value: int) -> int:
     """Return the row count for a simple WHERE condition."""
     conn = get_connection()
     try:
-        row = conn.execute(
-            f"SELECT COUNT(*) FROM {table} WHERE {where} = ?", (value,)
-        ).fetchone()
+        row = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {where} = ?", (value,)).fetchone()
         return row[0]
     finally:
         conn.close()
@@ -97,6 +95,7 @@ def _count(table: str, where: str, value: int) -> int:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -110,6 +109,7 @@ def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 # ---------------------------------------------------------------------------
 # Test 1: Purge contact deletes rows in contacts, drafts, outreach_log
 # ---------------------------------------------------------------------------
+
 
 class TestPurgeContact:
     def test_contact_rows_deleted(self, tmp_path: Path) -> None:
@@ -141,6 +141,7 @@ class TestPurgeContact:
 # ---------------------------------------------------------------------------
 # Test 2: --all without --confirm refuses, returns 1, no DB changes
 # ---------------------------------------------------------------------------
+
 
 class TestAllWithoutConfirm:
     def test_refuses_without_confirm(self, tmp_path: Path, capsys) -> None:
@@ -178,6 +179,7 @@ class TestAllWithoutConfirm:
 # ---------------------------------------------------------------------------
 # Test 3: Audit log line written with correct content
 # ---------------------------------------------------------------------------
+
 
 class TestAuditLog:
     def test_contact_audit_line(self, tmp_path: Path) -> None:
@@ -238,6 +240,7 @@ class TestAuditLog:
 # Test 4: Purge company removes drafts dir
 # ---------------------------------------------------------------------------
 
+
 class TestPurgeCompany:
     def test_company_data_deleted(self, tmp_path: Path) -> None:
         """Purging a company deletes its contacts, drafts, outreach_log, and company row."""
@@ -292,6 +295,7 @@ class TestPurgeCompany:
 # Test 5: No flag refuses with message
 # ---------------------------------------------------------------------------
 
+
 class TestNoFlag:
     def test_no_flag_returns_1(self, tmp_path: Path) -> None:
         """Calling run_purge with no target flag must return 1."""
@@ -323,6 +327,7 @@ class TestNoFlag:
 # Test 6: --all --confirm purges everything
 # ---------------------------------------------------------------------------
 
+
 class TestPurgeAll:
     def test_all_confirm_clears_db(self, tmp_path: Path) -> None:
         """--all --confirm must delete every row from all tables."""
@@ -344,9 +349,7 @@ class TestPurgeAll:
         finally:
             conn.close()
 
-    def test_all_refuses_symlinked_drafts_dir(
-        self, tmp_path: Path, capsys
-    ) -> None:
+    def test_all_refuses_symlinked_drafts_dir(self, tmp_path: Path, capsys) -> None:
         """If drafts_dir is a symlink, --all must refuse rmtree but still purge DB."""
         import os
 
@@ -380,9 +383,7 @@ class TestPurgeAll:
         assert "symlink" in captured.out
         assert "symlink-skipped" in log_path.read_text()
 
-    def test_company_refuses_symlinked_slug_dir(
-        self, tmp_path: Path, capsys
-    ) -> None:
+    def test_company_refuses_symlinked_slug_dir(self, tmp_path: Path, capsys) -> None:
         """If drafts/<slug>/ is a symlink, --company must refuse rmtree but still purge DB."""
         import os
 

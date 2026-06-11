@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Callable
 
 import httpx
 import pytest
@@ -177,11 +176,13 @@ def test_429_retries_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("src.providers.retry.time.sleep", lambda s: sleeps.append(s))
 
     # Two 429s then a successful 200
-    client = _make_sequence_client([
-        (429, None),
-        (429, None),
-        (200, SERPER_RESPONSE),
-    ])
+    client = _make_sequence_client(
+        [
+            (429, None),
+            (429, None),
+            (200, SERPER_RESPONSE),
+        ]
+    )
 
     provider = SerperProvider(api_key="test-key", http_client=client)
 

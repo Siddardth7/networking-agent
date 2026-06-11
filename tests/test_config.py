@@ -8,19 +8,18 @@ All tests use tmp_path and monkeypatch so they never touch
 from __future__ import annotations
 
 import os
-import stat
 from pathlib import Path
 
 import pytest
 import yaml
 
 import src.core.config as config_module
-from src.core.config import Config, ConfigSecurityError, load_config, write_default_config
-
+from src.core.config import ConfigSecurityError, load_config, write_default_config
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _write_yaml(path: Path, data: dict, mode: int = 0o600) -> None:
     """Write *data* as YAML to *path* and set file permissions to *mode*."""
@@ -49,6 +48,7 @@ _VALID_YAML_DATA = {
 # Test 1: Environment variables take precedence over YAML / missing file
 # ---------------------------------------------------------------------------
 
+
 def test_env_vars_win(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Env vars should be used even when no config.yaml exists."""
     # Point module at a non-existent file inside tmp_path
@@ -73,6 +73,7 @@ def test_env_vars_win(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # Test 2: YAML with 0o600 is read correctly
 # ---------------------------------------------------------------------------
+
 
 def test_yaml_with_correct_permissions_is_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -101,9 +102,8 @@ def test_yaml_with_correct_permissions_is_read(
 # Test 3: YAML with 0o644 raises ConfigSecurityError
 # ---------------------------------------------------------------------------
 
-def test_yaml_with_bad_permissions_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+
+def test_yaml_with_bad_permissions_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A config.yaml with mode 0o644 must raise ConfigSecurityError."""
     cfg_path = tmp_path / "config.yaml"
     _write_yaml(cfg_path, _VALID_YAML_DATA, mode=0o644)
@@ -125,6 +125,7 @@ def test_yaml_with_bad_permissions_raises(
 # Test 4: write_default_config creates a file with mode 0o600
 # ---------------------------------------------------------------------------
 
+
 def test_write_default_config_creates_with_0o600(tmp_path: Path) -> None:
     """write_default_config should create config.yaml and chmod it to 0o600."""
     cfg_path = tmp_path / "subdir" / "config.yaml"
@@ -135,9 +136,7 @@ def test_write_default_config_creates_with_0o600(tmp_path: Path) -> None:
     assert cfg_path.exists(), "write_default_config must create the file"
 
     actual_mode = os.stat(cfg_path).st_mode & 0o777
-    assert actual_mode == 0o600, (
-        f"Expected 0o600 but got {oct(actual_mode)}"
-    )
+    assert actual_mode == 0o600, f"Expected 0o600 but got {oct(actual_mode)}"
 
     # Verify the written YAML is parseable and contains sentinel values
     data = yaml.safe_load(cfg_path.read_text())
@@ -150,18 +149,22 @@ def test_write_default_config_creates_with_0o600(tmp_path: Path) -> None:
 # NETWORKING_AGENT_CONFIG env override
 # ---------------------------------------------------------------------------
 
+
 def test_networking_agent_config_env_override(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """NETWORKING_AGENT_CONFIG should redirect load_config to a custom path."""
     custom_path = tmp_path / "custom" / "alt.yaml"
-    _write_yaml(custom_path, {
-        "keys": {
-            "anthropic_api_key": "override-anthro",
-            "serper_api_key": "override-serper",
-            "hunter_api_key": "override-hunter",
-        }
-    })
+    _write_yaml(
+        custom_path,
+        {
+            "keys": {
+                "anthropic_api_key": "override-anthro",
+                "serper_api_key": "override-serper",
+                "hunter_api_key": "override-hunter",
+            }
+        },
+    )
 
     # Point the default at a nonexistent file so we can prove the override wins
     monkeypatch.setattr(config_module, "_config_path", tmp_path / "default.yaml")

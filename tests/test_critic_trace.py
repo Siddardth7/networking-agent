@@ -7,28 +7,34 @@ drafts.critic_trace and surface in the artifact + marketer render.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
 from src.agents.artifact_writer import _format_critic_trace, write_artifact
-from src.agents.critic import CriticResult, RUBRIC_DIMENSIONS, MIN_SCORE, SEVERE_SCORE
+from src.agents.critic import MIN_SCORE, RUBRIC_DIMENSIONS, SEVERE_SCORE, CriticResult
 from src.agents.drafter import draft_for_contacts
 from src.agents.marketer import _format_critic_for_reviewer, run_approval_loop
 from src.core.db import get_connection, init_db, with_writer
-
 
 # ---------------------------------------------------------------------------
 # CriticResult.to_json shape
 # ---------------------------------------------------------------------------
 
+
 class TestCriticResultSerialization:
     def test_roundtrip(self):
         r = CriticResult(
-            passed=False, quality_code="CRITIC_HOLD",
-            scores={"specificity": 2, "one_ask": 5, "tone": 4,
-                    "grounded_facts": 5, "economy": 3, "relevance": 4},
+            passed=False,
+            quality_code="CRITIC_HOLD",
+            scores={
+                "specificity": 2,
+                "one_ask": 5,
+                "tone": 4,
+                "grounded_facts": 5,
+                "economy": 3,
+                "relevance": 4,
+            },
             issues=["specificity: generic opener"],
             reason="critic flagged 1 dimension(s) below 3: specificity",
         )
@@ -42,7 +48,8 @@ class TestCriticResultSerialization:
 
     def test_passing_result_also_serializes(self):
         r = CriticResult(
-            passed=True, quality_code="OK",
+            passed=True,
+            quality_code="OK",
             scores={d: 5 for d in RUBRIC_DIMENSIONS},
             issues=[],
         )
@@ -54,6 +61,7 @@ class TestCriticResultSerialization:
 # ---------------------------------------------------------------------------
 # Migration 003 — critic_trace column exists with default NULL
 # ---------------------------------------------------------------------------
+
 
 class TestMigration003:
     def test_column_present(self, tmp_path, monkeypatch):
@@ -87,6 +95,7 @@ class TestMigration003:
 # ---------------------------------------------------------------------------
 # Drafter persists trace on CRITIC_HOLD and on critic-pass
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def db_path(tmp_path, monkeypatch):
@@ -127,7 +136,11 @@ class _Client:
             tool = Mock()
             tool.type = "tool_use"
             payload = {dim: self.critic_scores.get(dim, 5) for dim in RUBRIC_DIMENSIONS}
-            payload["issues"] = ["specificity: too vague"] if any(v < MIN_SCORE for v in payload.values() if isinstance(v, int)) else []
+            payload["issues"] = (
+                ["specificity: too vague"]
+                if any(v < MIN_SCORE for v in payload.values() if isinstance(v, int))
+                else []
+            )
             tool.input = payload
             resp = Mock()
             resp.content = [tool]
@@ -213,17 +226,27 @@ class TestDrafterPersistsTrace:
 # Artifact + marketer surface the trace
 # ---------------------------------------------------------------------------
 
+
 class TestArtifactSurfacesTrace:
     def test_artifact_renders_scores_and_issues(self, tmp_path, monkeypatch):
         monkeypatch.setattr("src.core.db._DB_PATH", tmp_path / "a.db")
         init_db()
-        trace = json.dumps({
-            "passed": False, "quality_code": "CRITIC_HOLD",
-            "scores": {"specificity": 2, "one_ask": 5, "tone": 4,
-                       "grounded_facts": 5, "economy": 3, "relevance": 4},
-            "issues": ["specificity: opens with generic eVTOL line"],
-            "reason": "below threshold",
-        })
+        trace = json.dumps(
+            {
+                "passed": False,
+                "quality_code": "CRITIC_HOLD",
+                "scores": {
+                    "specificity": 2,
+                    "one_ask": 5,
+                    "tone": 4,
+                    "grounded_facts": 5,
+                    "economy": 3,
+                    "relevance": 4,
+                },
+                "issues": ["specificity: opens with generic eVTOL line"],
+                "reason": "below threshold",
+            }
+        )
         with with_writer() as conn:
             c = conn.execute(
                 "INSERT INTO companies (slug, name, state) VALUES ('a', 'A', 'DRAFTED')"
@@ -260,13 +283,22 @@ class TestMarketerSurfacesTrace:
     def test_render_includes_critic_lines_when_present(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setattr("src.core.db._DB_PATH", tmp_path / "m.db")
         init_db()
-        trace = json.dumps({
-            "passed": False, "quality_code": "CRITIC_HOLD",
-            "scores": {"specificity": 2, "tone": 5, "one_ask": 4,
-                       "grounded_facts": 5, "economy": 3, "relevance": 4},
-            "issues": ["specificity: vague opener"],
-            "reason": "below threshold",
-        })
+        trace = json.dumps(
+            {
+                "passed": False,
+                "quality_code": "CRITIC_HOLD",
+                "scores": {
+                    "specificity": 2,
+                    "tone": 5,
+                    "one_ask": 4,
+                    "grounded_facts": 5,
+                    "economy": 3,
+                    "relevance": 4,
+                },
+                "issues": ["specificity: vague opener"],
+                "reason": "below threshold",
+            }
+        )
         with with_writer() as conn:
             c = conn.execute(
                 "INSERT INTO companies (slug, name, state) VALUES ('a', 'A', 'DRAFTED')"

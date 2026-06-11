@@ -9,19 +9,17 @@ monkeypatch so the real ~/.networking-agent/state.db is never touched.
 from __future__ import annotations
 
 import argparse
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from src.core.db import init_db
-from src.core.migrations import run_migrations
 from src.providers.quota_manager import QuotaManager
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_args(add: str | None = None) -> argparse.Namespace:
     """Build a minimal argparse.Namespace for run_providers."""
@@ -33,6 +31,7 @@ def _make_args(add: str | None = None) -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def isolated_db(tmp_path: Path, monkeypatch) -> Path:
@@ -53,6 +52,7 @@ def qm(isolated_db: Path) -> QuotaManager:
 # Test 1 — No flags: both providers appear in output
 # ---------------------------------------------------------------------------
 
+
 def test_list_shows_both_providers(isolated_db, qm, capsys) -> None:
     """Without flags, output must contain 'serper' and 'hunter'."""
     from src.cli.network_providers import run_providers  # noqa: PLC0415
@@ -68,6 +68,7 @@ def test_list_shows_both_providers(isolated_db, qm, capsys) -> None:
 # ---------------------------------------------------------------------------
 # Test 2 — No flags: quota lines present for both providers
 # ---------------------------------------------------------------------------
+
 
 def test_list_shows_quota_remaining(isolated_db, qm, capsys) -> None:
     """Without flags, output must contain 'Quota remaining' for both providers."""
@@ -85,6 +86,7 @@ def test_list_shows_quota_remaining(isolated_db, qm, capsys) -> None:
 # Test 3 — --add flag prints v0.1.1 notice and returns 0
 # ---------------------------------------------------------------------------
 
+
 def test_add_flag_prints_stub_message(isolated_db, qm, capsys) -> None:
     """--add <name> must print the v0.1.1 notice and return 0."""
     from src.cli.network_providers import run_providers  # noqa: PLC0415
@@ -100,6 +102,7 @@ def test_add_flag_prints_stub_message(isolated_db, qm, capsys) -> None:
 # Test 4 — --add flag makes no DB changes or API calls
 # ---------------------------------------------------------------------------
 
+
 def test_add_flag_no_db_writes(isolated_db, qm, capsys, monkeypatch) -> None:
     """--add must not write to the DB and must not call any provider API."""
     from src.cli.network_providers import run_providers  # noqa: PLC0415
@@ -108,6 +111,7 @@ def test_add_flag_no_db_writes(isolated_db, qm, capsys, monkeypatch) -> None:
     write_calls: list[str] = []
 
     import src.core.db as _db_mod  # noqa: PLC0415
+
     original_with_writer = _db_mod.with_writer
 
     from contextlib import contextmanager  # noqa: PLC0415

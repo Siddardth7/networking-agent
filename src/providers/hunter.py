@@ -7,15 +7,15 @@ Traceability: DESIGN.md §4 (Provider Layer), §8.12 (Hard-stop quota enforcemen
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator, Optional
 
 import httpx
 
 from src.core.schemas import EmailResult
 from src.providers.base import EmailProvider, register_provider
 from src.providers.quota_manager import QuotaManager
-from src.providers.retry import AuthError, with_retry
+from src.providers.retry import with_retry
 
 __all__ = ["HunterProvider", "scrub_api_key_in_exc", "scrubbed_hunter_call"]
 
@@ -170,8 +170,8 @@ class HunterProvider(EmailProvider):
     def __init__(
         self,
         api_key: str,
-        quota_manager: Optional[QuotaManager] = None,
-        http_client: Optional[httpx.Client] = None,
+        quota_manager: QuotaManager | None = None,
+        http_client: httpx.Client | None = None,
     ) -> None:
         self._api_key = api_key
         self._quota_manager = quota_manager
@@ -244,9 +244,7 @@ class HunterProvider(EmailProvider):
         }
 
         with scrubbed_hunter_call(self._api_key):
-            response = with_retry(
-                lambda: self._http_client.get(_HUNTER_ENDPOINT, params=params)
-            )
+            response = with_retry(lambda: self._http_client.get(_HUNTER_ENDPOINT, params=params))
 
         # --- Parse response ---
         payload = response.json()
@@ -255,7 +253,7 @@ class HunterProvider(EmailProvider):
         if not data:
             return EmailResult(email=None, verified=False, confidence=0, source="hunter")
 
-        email: Optional[str] = data.get("email")
+        email: str | None = data.get("email")
         verification_status: str = data.get("verification", {}).get("status", "")
         verified: bool = verification_status in ("valid", "accept_all")
         confidence: int = int(data.get("score") or 0)

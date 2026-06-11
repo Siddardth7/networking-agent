@@ -23,6 +23,7 @@ def db_path(tmp_path, monkeypatch):
     monkeypatch.setattr("src.core.db._DB_PATH", path)
     monkeypatch.setattr("src.providers.quota_manager._DB_PATH", path)
     from src.core.config import Config, load_config
+
     real = load_config
 
     def _no_critic_cfg():
@@ -88,15 +89,15 @@ class TestUpstreamPrevention:
 
     def test_placeholder_first_gen_triggers_regen_with_instruction(self, db_path):
         cid = _seed_one_contact()
-        client = _mk_client([
-            f"Saw your {PLACEHOLDER_NOTE}. Would value connecting.",  # CONN gen 1
-            "Saw your manufacturing work at Acme. Would value connecting.",  # CONN regen
-            "Clean follow-up message.",  # POST gen 1
-        ])
-        results = draft_for_contacts([cid], anthropic_client=client)
-        conn_draft = next(
-            d for d in results[cid] if d.channel == "LINKEDIN_CONNECTION"
+        client = _mk_client(
+            [
+                f"Saw your {PLACEHOLDER_NOTE}. Would value connecting.",  # CONN gen 1
+                "Saw your manufacturing work at Acme. Would value connecting.",  # CONN regen
+                "Clean follow-up message.",  # POST gen 1
+            ]
         )
+        results = draft_for_contacts([cid], anthropic_client=client)
+        conn_draft = next(d for d in results[cid] if d.channel == "LINKEDIN_CONNECTION")
         assert conn_draft.quality_code == "OK"
         assert find_placeholder(conn_draft.body) is None
         # The regen prompt must carry an explicit anti-placeholder instruction.
@@ -105,10 +106,12 @@ class TestUpstreamPrevention:
 
     def test_clean_first_gen_does_not_regen(self, db_path):
         cid = _seed_one_contact()
-        client = _mk_client([
-            "Clean connection note.",
-            "Clean follow-up message.",
-        ])
+        client = _mk_client(
+            [
+                "Clean connection note.",
+                "Clean follow-up message.",
+            ]
+        )
         draft_for_contacts([cid], anthropic_client=client)
         assert client.messages.create.call_count == 2
 
@@ -119,15 +122,15 @@ class TestNeverSerializePlaceholders:
 
     def test_persistent_placeholder_is_redacted_in_db(self, db_path):
         cid = _seed_one_contact()
-        client = _mk_client([
-            f"Saw your {PLACEHOLDER_NOTE}.",  # CONN gen 1
-            f"Still mentioning {PLACEHOLDER_NOTE}.",  # CONN regen — still dirty
-            "Clean follow-up message.",  # POST gen 1
-        ])
-        results = draft_for_contacts([cid], anthropic_client=client)
-        conn_draft = next(
-            d for d in results[cid] if d.channel == "LINKEDIN_CONNECTION"
+        client = _mk_client(
+            [
+                f"Saw your {PLACEHOLDER_NOTE}.",  # CONN gen 1
+                f"Still mentioning {PLACEHOLDER_NOTE}.",  # CONN regen — still dirty
+                "Clean follow-up message.",  # POST gen 1
+            ]
         )
+        results = draft_for_contacts([cid], anthropic_client=client)
+        conn_draft = next(d for d in results[cid] if d.channel == "LINKEDIN_CONNECTION")
         assert conn_draft.quality_code == "HARD_FAIL"
         assert find_placeholder(conn_draft.body) is None
         assert "placeholder removed" in conn_draft.body
@@ -135,8 +138,7 @@ class TestNeverSerializePlaceholders:
         conn = get_connection()
         try:
             row = conn.execute(
-                "SELECT body FROM drafts WHERE contact_id = ? AND "
-                "channel = 'LINKEDIN_CONNECTION'",
+                "SELECT body FROM drafts WHERE contact_id = ? AND channel = 'LINKEDIN_CONNECTION'",
                 (cid,),
             ).fetchone()
         finally:
@@ -156,14 +158,14 @@ class TestHardFailReasonPersisted:
     def test_hard_fail_trace_has_reason(self, db_path):
         cid = _seed_one_contact()
         over_length = "x" * 250  # over the 200-char LinkedIn cap
-        client = _mk_client([
-            over_length,  # CONN gen 1 (no soft faults → no regen)
-            "Clean follow-up message.",  # POST gen 1
-        ])
-        results = draft_for_contacts([cid], anthropic_client=client)
-        conn_draft = next(
-            d for d in results[cid] if d.channel == "LINKEDIN_CONNECTION"
+        client = _mk_client(
+            [
+                over_length,  # CONN gen 1 (no soft faults → no regen)
+                "Clean follow-up message.",  # POST gen 1
+            ]
         )
+        results = draft_for_contacts([cid], anthropic_client=client)
+        conn_draft = next(d for d in results[cid] if d.channel == "LINKEDIN_CONNECTION")
         assert conn_draft.quality_code == "HARD_FAIL"
         assert conn_draft.critic_trace is not None
         trace = json.loads(conn_draft.critic_trace)
@@ -179,9 +181,7 @@ class TestHeldReasonRendering:
         from src.agents.artifact_writer import _format_critic_trace
         from src.agents.critic import hard_fail_trace
 
-        out = _format_critic_trace(
-            hard_fail_trace("LinkedIn note is 250 chars (limit 200)")
-        )
+        out = _format_critic_trace(hard_fail_trace("LinkedIn note is 250 chars (limit 200)"))
         assert out is not None
         assert "Held because:" in out
         assert "250 chars" in out

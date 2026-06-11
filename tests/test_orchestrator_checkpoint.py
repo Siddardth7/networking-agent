@@ -8,16 +8,17 @@ from __future__ import annotations
 
 import pytest
 
+from src.core.db import init_db, with_writer
 from src.orchestrator import (
     _batch_quality_checkpoint,
     _batch_quality_report,
 )
-from src.core.db import init_db, with_writer
 
 
 @pytest.fixture(autouse=True)
 def tmp_db(tmp_path, monkeypatch):
     from pathlib import Path
+
     monkeypatch.setattr("src.core.db._DB_PATH", Path(tmp_path / "x.db"))
     init_db()
 
@@ -28,13 +29,10 @@ def _seed_drafts(quality_codes: list[str]) -> int:
     Returns the company id.
     """
     with with_writer() as conn:
-        c = conn.execute(
-            "INSERT INTO companies (slug, name, state) VALUES ('a', 'A', 'DRAFTED')"
-        )
+        c = conn.execute("INSERT INTO companies (slug, name, state) VALUES ('a', 'A', 'DRAFTED')")
         company_id = c.lastrowid
         c = conn.execute(
-            "INSERT INTO contacts (company_id, full_name, state) "
-            "VALUES (?, 'X', 'DRAFTED')",
+            "INSERT INTO contacts (company_id, full_name, state) VALUES (?, 'X', 'DRAFTED')",
             (company_id,),
         )
         contact_id = c.lastrowid
@@ -51,6 +49,7 @@ def _seed_drafts(quality_codes: list[str]) -> int:
 # _batch_quality_report
 # ---------------------------------------------------------------------------
 
+
 class TestBatchReport:
     def test_counts_hard_fails(self):
         company_id = _seed_drafts(["OK", "HARD_FAIL", "OK", "HARD_FAIL"])
@@ -60,9 +59,7 @@ class TestBatchReport:
 
     def test_empty_company_returns_zero(self):
         with with_writer() as conn:
-            c = conn.execute(
-                "INSERT INTO companies (slug, name, state) VALUES ('e', 'E', 'NEW')"
-            )
+            c = conn.execute("INSERT INTO companies (slug, name, state) VALUES ('e', 'E', 'NEW')")
             cid = c.lastrowid
         hard, total = _batch_quality_report(cid)
         assert (hard, total) == (0, 0)
@@ -75,15 +72,13 @@ class TestBatchReport:
             )
             company_id = c.lastrowid
             c = conn.execute(
-                "INSERT INTO contacts (company_id, full_name, state) "
-                "VALUES (?, 'X', 'DRAFTED')",
+                "INSERT INTO contacts (company_id, full_name, state) VALUES (?, 'X', 'DRAFTED')",
                 (company_id,),
             )
             contact_id = c.lastrowid
             # Insert without specifying quality_code (uses 'OK' default).
             conn.execute(
-                "INSERT INTO drafts (contact_id, channel, body, version) "
-                "VALUES (?, 'L', 'b', 1)",
+                "INSERT INTO drafts (contact_id, channel, body, version) VALUES (?, 'L', 'b', 1)",
                 (contact_id,),
             )
         hard, total = _batch_quality_report(company_id)
@@ -94,6 +89,7 @@ class TestBatchReport:
 # ---------------------------------------------------------------------------
 # _batch_quality_checkpoint — warn-and-continue, never abort
 # ---------------------------------------------------------------------------
+
 
 class TestCheckpointWarning:
     def test_warns_above_threshold(self, capsys):
@@ -112,9 +108,7 @@ class TestCheckpointWarning:
 
     def test_empty_company_silent(self, capsys):
         with with_writer() as conn:
-            c = conn.execute(
-                "INSERT INTO companies (slug, name, state) VALUES ('e', 'E', 'NEW')"
-            )
+            c = conn.execute("INSERT INTO companies (slug, name, state) VALUES ('e', 'E', 'NEW')")
             cid = c.lastrowid
         _batch_quality_checkpoint(cid)
         assert capsys.readouterr().out == ""

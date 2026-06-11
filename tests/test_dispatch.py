@@ -9,7 +9,7 @@ Mandatory 3 tests for src/agents/dispatch.py per PLAN.md Step 7.2 exit gate:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import pytest
 
@@ -17,10 +17,10 @@ from src.agents.dispatch import dispatch_revision
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import Channel, DraftDispatchRequest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def tmp_db(tmp_path, monkeypatch):
@@ -31,6 +31,7 @@ def tmp_db(tmp_path, monkeypatch):
     # status mapping, and DB persistence. Critic-on dispatch coverage
     # lives in tests/test_dispatch_grounding.py.
     from src.core.config import Config, load_config
+
     real = load_config
 
     def _no_critic_cfg():
@@ -92,6 +93,7 @@ def _make_client(response_text: str):
 # Test 1: Clean revision → status=OK + version=2 inserted
 # ---------------------------------------------------------------------------
 
+
 class TestCleanRevision:
     def test_ok_status_and_version_incremented(self):
         contact_id, draft_id = _seed_contact_with_draft()
@@ -150,6 +152,7 @@ class TestCleanRevision:
 # Test 2: Double guardrail → GUARDRAIL_FLAGGED + quality_flag=True
 # ---------------------------------------------------------------------------
 
+
 class TestDoubleGuardrail:
     def test_guardrail_flagged_when_both_attempts_fail(self):
         contact_id, draft_id = _seed_contact_with_draft()
@@ -187,6 +190,7 @@ class TestDoubleGuardrail:
         contact_id, draft_id = _seed_contact_with_draft()
 
         call_count = 0
+
         def fake_create(**kwargs):
             nonlocal call_count
             call_count += 1
@@ -216,6 +220,7 @@ class TestDoubleGuardrail:
 # ---------------------------------------------------------------------------
 # Test 3: 91s LLM hang → status=ERROR
 # ---------------------------------------------------------------------------
+
 
 class TestTimeoutReturnsError:
     def test_timeout_returns_error_status(self):

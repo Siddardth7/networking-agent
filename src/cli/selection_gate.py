@@ -6,7 +6,7 @@ Numbered contact list, accepts "1,3,4" / "all" / "none", invalid input reprompts
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from src.core.db import get_connection, with_writer
 
@@ -39,7 +39,7 @@ def _print_contact_list(contacts: list[dict]) -> None:
         print(f"{i}. {name} — {title} (LinkedIn: {url}) [hook: {hook}]")
 
 
-def _parse_selection(raw: str, max_index: int) -> Optional[list[int]]:
+def _parse_selection(raw: str, max_index: int) -> list[int] | None:
     """Parse a selection string into a list of 1-based indices.
 
     Returns an empty list for "none", the full range for "all",
@@ -64,7 +64,7 @@ def _parse_selection(raw: str, max_index: int) -> Optional[list[int]]:
 
 def run_selection_gate(
     company_id: int,
-    _input_fn: Optional[Callable[[str], str]] = None,
+    _input_fn: Callable[[str], str] | None = None,
 ) -> list[int]:
     """Present the contact list for *company_id* and collect user selection.
 

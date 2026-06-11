@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Optional
 
 __all__ = ["run_dry_run"]
 
@@ -56,7 +55,7 @@ def run_dry_run(
     int
         0 on success, 1 on error (e.g. missing ``company`` argument).
     """
-    company: Optional[str] = getattr(args, "company", None)
+    company: str | None = getattr(args, "company", None)
     if not company:
         print("Error: --company is required", file=sys.stderr)
         return 1

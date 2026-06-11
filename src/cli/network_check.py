@@ -15,7 +15,6 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Optional
 
 from src.core.config import HAIKU_MODEL
 from src.providers.hunter import scrubbed_hunter_call
@@ -40,6 +39,7 @@ def set_http_client(client) -> None:  # noqa: ANN001
 # Output helpers
 # ---------------------------------------------------------------------------
 
+
 def _ok(msg: str) -> str:
     return f"  ✓ {msg}"
 
@@ -56,6 +56,7 @@ def _warn(msg: str) -> str:
 # Individual checks
 # ---------------------------------------------------------------------------
 
+
 def _check_sqlite_version() -> tuple[str, bool]:
     """Check 1: SQLite version >= 3.39.0"""
     info = sqlite3.sqlite_version_info
@@ -69,7 +70,7 @@ def _check_sqlite_version() -> tuple[str, bool]:
 def _check_db_integrity() -> tuple[str, bool]:
     """Check 2: DB integrity check + WAL mode."""
     try:
-        from src.core.db import _DB_PATH, init_db, get_connection  # noqa: PLC0415
+        from src.core.db import _DB_PATH, get_connection, init_db  # noqa: PLC0415
 
         db_path = _DB_PATH
         if not db_path.exists():
@@ -125,7 +126,8 @@ def _check_config_permissions() -> tuple[str, bool]:
     config_path = Path.home() / ".networking-agent" / "config.yaml"
     if not config_path.exists():
         return _err(
-            "config.yaml not found — run: networking-agent setup to create ~/.networking-agent/config.yaml"
+            "config.yaml not found — run: networking-agent setup to create "
+            "~/.networking-agent/config.yaml"
         ), True
 
     mode = os.stat(config_path).st_mode & 0o777
@@ -142,6 +144,7 @@ def _get_http_client():
     if _http_client is not None:
         return _http_client, False  # (client, should_close)
     import httpx  # noqa: PLC0415
+
     return httpx.Client(timeout=10), True
 
 
@@ -153,7 +156,10 @@ def _check_anthropic() -> tuple[str, bool]:
         cfg = load_config()
         key = cfg.anthropic_api_key
         if not key:
-            return _err("Anthropic API key: not configured — set ANTHROPIC_API_KEY env var or update config.yaml"), True
+            return _err(
+                "Anthropic API key: not configured — set ANTHROPIC_API_KEY "
+                "env var or update config.yaml"
+            ), True
 
         client, should_close = _get_http_client()
         try:
@@ -178,7 +184,8 @@ def _check_anthropic() -> tuple[str, bool]:
             return _ok("Anthropic API key: valid (live ping 200)"), False
         elif resp.status_code in (401, 403):
             return _err(
-                f"Anthropic API key: invalid (HTTP {resp.status_code}) — set ANTHROPIC_API_KEY env var or update config.yaml"
+                f"Anthropic API key: invalid (HTTP {resp.status_code}) — "
+                f"set ANTHROPIC_API_KEY env var or update config.yaml"
             ), True
         else:
             return _err(f"Anthropic API key: ping failed (HTTP {resp.status_code})"), True
@@ -195,7 +202,9 @@ def _check_serper() -> tuple[str, bool]:
         cfg = load_config()
         key = cfg.serper_api_key
         if not key:
-            return _err("Serper API key: not configured — set SERPER_API_KEY env var or update config.yaml"), True
+            return _err(
+                "Serper API key: not configured — set SERPER_API_KEY env var or update config.yaml"
+            ), True
 
         client, should_close = _get_http_client()
         try:
@@ -215,10 +224,13 @@ def _check_serper() -> tuple[str, bool]:
             if limit == 0:
                 limit = 100
                 remaining = 100
-            return _ok(f"Serper API key: valid ({remaining} / {limit} free queries remaining this month)"), False
+            return _ok(
+                f"Serper API key: valid ({remaining} / {limit} free queries remaining this month)"
+            ), False
         elif resp.status_code in (401, 403):
             return _err(
-                f"Serper API key: invalid (HTTP {resp.status_code}) — set SERPER_API_KEY env var or update config.yaml"
+                f"Serper API key: invalid (HTTP {resp.status_code}) — "
+                f"set SERPER_API_KEY env var or update config.yaml"
             ), True
         else:
             return _err(f"Serper API key: ping failed (HTTP {resp.status_code})"), True
@@ -237,9 +249,12 @@ def _check_hunter() -> tuple[list[str], bool]:
         cfg = load_config()
         key = cfg.hunter_api_key
         if not key:
-            lines.append(_err(
-                "Hunter API key: not configured — set HUNTER_API_KEY env var or update config.yaml"
-            ))
+            lines.append(
+                _err(
+                    "Hunter API key: not configured — set HUNTER_API_KEY "
+                    "env var or update config.yaml"
+                )
+            )
             return lines, True
 
         client, should_close = _get_http_client()
@@ -263,17 +278,28 @@ def _check_hunter() -> tuple[list[str], bool]:
                 limit = 25
                 remaining = 25
 
-            lines.append(_ok(f"Hunter API key: valid ({remaining} / {limit} free searches remaining this month)"))
+            lines.append(
+                _ok(
+                    f"Hunter API key: valid ({remaining} / {limit} free "
+                    f"searches remaining this month)"
+                )
+            )
 
             if remaining < 5:
                 companies = remaining / 5
-                lines.append(_warn(
-                    f"Hunter free tier nearly exhausted: {remaining} / {limit} searches remaining (≈{companies:.1f} companies)"
-                ))
+                lines.append(
+                    _warn(
+                        f"Hunter free tier nearly exhausted: {remaining} / "
+                        f"{limit} searches remaining (≈{companies:.1f} companies)"
+                    )
+                )
         elif resp.status_code in (401, 403):
-            lines.append(_err(
-                f"Hunter API key: invalid (HTTP {resp.status_code}) — set HUNTER_API_KEY env var or update config.yaml"
-            ))
+            lines.append(
+                _err(
+                    f"Hunter API key: invalid (HTTP {resp.status_code}) — "
+                    f"set HUNTER_API_KEY env var or update config.yaml"
+                )
+            )
             is_error = True
         else:
             lines.append(_err(f"Hunter API key: ping failed (HTTP {resp.status_code})"))
@@ -298,7 +324,11 @@ def _check_voice_doc() -> tuple[str, bool, bool]:
         # Try reading to confirm it's readable
         voice_path.read_text(encoding="utf-8")
         kb = size / 1024
-        return _ok(f"Voice doc: ~/.networking-agent/voice.md ({kb:.1f} KB, parsed OK)"), False, False
+        return (
+            _ok(f"Voice doc: ~/.networking-agent/voice.md ({kb:.1f} KB, parsed OK)"),
+            False,
+            False,
+        )
     except Exception as exc:
         return _warn(f"Voice doc: unreadable ({exc})"), False, True
 
@@ -306,6 +336,7 @@ def _check_voice_doc() -> tuple[str, bool, bool]:
 # ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
+
 
 def run_checks() -> int:
     """Run all preflight checks. Returns 0 (all green) or 1 (any error)."""

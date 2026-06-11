@@ -7,19 +7,20 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.marketer import parse_verb, run_approval_loop, ApprovalResult
-from src.core.db import get_connection, with_writer, init_db
+from src.agents.marketer import parse_verb, run_approval_loop
+from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import DraftDispatchResponse
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def tmp_db(tmp_path, monkeypatch):
     """Redirect DB to an isolated temp file for each test."""
     from pathlib import Path
+
     db_path = tmp_path / "test.db"
     monkeypatch.setattr("src.core.db._DB_PATH", Path(db_path))
     init_db()
@@ -40,8 +41,15 @@ def _seed_company_and_contacts(company_slug="acme"):
             c = conn.execute(
                 "INSERT INTO contacts (company_id, full_name, title, persona, focus_area, "
                 "linkedin_url, email, email_verified, hook, state) "
-                "VALUES (?, ?, ?, 'PEER_ENGINEER', 'COMPOSITE_DESIGN', ?, ?, 1, 'Shared UIUC', 'DRAFTED')",
-                (company_id, name, f"Engineer {i}", f"https://linkedin.com/{name.lower().replace(' ', '')}", f"{name.lower().replace(' ', '')}@acme.com"),
+                "VALUES (?, ?, ?, 'PEER_ENGINEER', 'COMPOSITE_DESIGN', "
+                "?, ?, 1, 'Shared UIUC', 'DRAFTED')",
+                (
+                    company_id,
+                    name,
+                    f"Engineer {i}",
+                    f"https://linkedin.com/{name.lower().replace(' ', '')}",
+                    f"{name.lower().replace(' ', '')}@acme.com",
+                ),
             )
             contact_id = c.lastrowid
             contact_ids.append(contact_id)
@@ -50,9 +58,16 @@ def _seed_company_and_contacts(company_slug="acme"):
             for channel in ("LINKEDIN_CONNECTION", "LINKEDIN_POST_CONNECTION", "COLD_EMAIL"):
                 qflag = 1 if (channel == "COLD_EMAIL" and i == 1) else 0
                 conn.execute(
-                    "INSERT INTO drafts (contact_id, channel, body, subject, version, quality_flag) "
+                    "INSERT INTO drafts (contact_id, channel, body, "
+                    "subject, version, quality_flag) "
                     "VALUES (?, ?, ?, ?, 1, ?)",
-                    (contact_id, channel, f"Draft body for {channel}", "Subject" if channel == "COLD_EMAIL" else None, qflag),
+                    (
+                        contact_id,
+                        channel,
+                        f"Draft body for {channel}",
+                        "Subject" if channel == "COLD_EMAIL" else None,
+                        qflag,
+                    ),
                 )
 
     return company_id, contact_ids
@@ -61,6 +76,7 @@ def _seed_company_and_contacts(company_slug="acme"):
 # ---------------------------------------------------------------------------
 # parse_verb tests
 # ---------------------------------------------------------------------------
+
 
 class TestParseVerb:
     def test_approve_all(self):
@@ -110,6 +126,7 @@ class TestParseVerb:
 # ---------------------------------------------------------------------------
 # APPROVE writes outreach_log rows
 # ---------------------------------------------------------------------------
+
 
 class TestApproveWritesOutreachLog:
     def test_approve_all_writes_log_rows(self):
@@ -163,6 +180,7 @@ class TestApproveWritesOutreachLog:
 # Quality flag surfaced in rendering
 # ---------------------------------------------------------------------------
 
+
 class TestQualityFlagRendering:
     def test_quality_flag_in_render_output(self, capsys):
         company_id, contact_ids = _seed_company_and_contacts()
@@ -180,6 +198,7 @@ class TestQualityFlagRendering:
 # Company state transition
 # ---------------------------------------------------------------------------
 
+
 class TestCompanyStateTransition:
     def test_company_state_becomes_approved(self):
         company_id, _ = _seed_company_and_contacts()
@@ -188,9 +207,7 @@ class TestCompanyStateTransition:
         run_approval_loop(company_id, _input_fn=lambda _: next(inputs))
 
         conn = get_connection()
-        row = conn.execute(
-            "SELECT state FROM companies WHERE id = ?", (company_id,)
-        ).fetchone()
+        row = conn.execute("SELECT state FROM companies WHERE id = ?", (company_id,)).fetchone()
         conn.close()
         assert row["state"] == "APPROVED"
 
@@ -198,6 +215,7 @@ class TestCompanyStateTransition:
 # ---------------------------------------------------------------------------
 # REVISE verb dispatches
 # ---------------------------------------------------------------------------
+
 
 class TestReviseDispatch:
     def test_revise_calls_dispatch_fn(self):
@@ -232,6 +250,7 @@ class TestReviseDispatch:
 # ---------------------------------------------------------------------------
 # QUIT exits early
 # ---------------------------------------------------------------------------
+
 
 class TestQuit:
     def test_quit_exits_early(self):

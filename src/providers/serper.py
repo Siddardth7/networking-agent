@@ -6,14 +6,12 @@ Traceability: DESIGN.md §4 (Provider Layer)
 
 from __future__ import annotations
 
-from typing import Optional
-
 import httpx
 
 from src.core.schemas import ContactCandidate
 from src.providers.base import SearchProvider, register_provider
 from src.providers.quota_manager import QuotaManager
-from src.providers.retry import QuotaExhausted, with_retry
+from src.providers.retry import with_retry
 
 __all__ = ["SerperProvider"]
 
@@ -52,8 +50,8 @@ class SerperProvider(SearchProvider):
     def __init__(
         self,
         api_key: str,
-        quota_manager: Optional[QuotaManager] = None,
-        http_client: Optional[httpx.Client] = None,
+        quota_manager: QuotaManager | None = None,
+        http_client: httpx.Client | None = None,
     ) -> None:
         self._api_key = api_key
         self._quota_manager = quota_manager
@@ -110,7 +108,7 @@ class SerperProvider(SearchProvider):
         """
         # Serper free tier caps num at 10. For larger limits, batch into
         # multiple queries with page offsets and deduplicate by LinkedIn URL.
-        _SERPER_MAX_NUM = 10
+        serper_max_num = 10
 
         # Compute the company slug once (used for all ContactCandidate objects)
         company_slug = company.lower().replace(" ", "-")
@@ -128,7 +126,7 @@ class SerperProvider(SearchProvider):
         page = 1
 
         while len(candidates) < limit:
-            batch_size = min(_SERPER_MAX_NUM, limit - len(candidates))
+            batch_size = min(serper_max_num, limit - len(candidates))
 
             # Increment quota BEFORE each network call
             if self._quota_manager is not None:
@@ -171,7 +169,7 @@ class SerperProvider(SearchProvider):
 
         return candidates
 
-    def search_general(self, query: str) -> Optional[str]:
+    def search_general(self, query: str) -> str | None:
         """Run a single, general-purpose Serper query and return the top
         snippet — or ``None`` on quota exhaustion, no results, or error.
 
@@ -201,7 +199,9 @@ class SerperProvider(SearchProvider):
 
         def _do_request() -> httpx.Response:
             return self._http_client.post(
-                _SERPER_ENDPOINT, headers=headers, json=body,
+                _SERPER_ENDPOINT,
+                headers=headers,
+                json=body,
             )
 
         try:
@@ -219,9 +219,7 @@ class SerperProvider(SearchProvider):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _parse_organic_result(
-        self, item: dict, company_slug: str
-    ) -> Optional[ContactCandidate]:
+    def _parse_organic_result(self, item: dict, company_slug: str) -> ContactCandidate | None:
         """Parse a single organic search result dict into a ContactCandidate.
 
         Parameters
@@ -239,9 +237,9 @@ class SerperProvider(SearchProvider):
             ``None`` if the result is missing required fields or the parsed
             name is empty.
         """
-        raw_title: Optional[str] = item.get("title")
-        link: Optional[str] = item.get("link")
-        snippet: Optional[str] = item.get("snippet")
+        raw_title: str | None = item.get("title")
+        link: str | None = item.get("link")
+        snippet: str | None = item.get("snippet")
 
         if not raw_title or not link:
             return None
@@ -254,7 +252,7 @@ class SerperProvider(SearchProvider):
             return None
 
         # Extract job title: second segment after " - ", strip company/site suffix
-        job_title: Optional[str] = None
+        job_title: str | None = None
         if len(parts) >= 2:
             raw_job = parts[1]
             # Strip everything from " at " or " | " (whichever comes first)

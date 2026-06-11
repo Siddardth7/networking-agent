@@ -13,7 +13,6 @@ import sqlite3
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from src.agents.achievement_matcher import load_resume_library, match_achievements
 from src.agents.critic import critique_draft, hard_fail_trace
@@ -32,7 +31,7 @@ from src.agents.shared import (
 )
 from src.core.config import HAIKU_MODEL, load_config, voice_doc_path
 from src.core.db import get_connection, with_writer
-from src.core.schemas import Channel, FocusArea, Persona, ProjectType
+from src.core.schemas import Channel, FocusArea, Persona
 
 __all__ = [
     "Draft",
@@ -63,7 +62,7 @@ _VOICE_DOC_MAX_CHARS = 16 * 1024
 _CHANNEL_CONSTRAINTS = CHANNEL_CONSTRAINTS
 
 
-class DrafterPartialFailure(RuntimeError):
+class DrafterPartialFailure(RuntimeError):  # noqa: N818 — public name since v0.1.1; renaming breaks callers
     """Raised when one or more contact drafting workers failed.
 
     Carries the partial successes so callers can see which contacts were
@@ -81,8 +80,8 @@ class DrafterPartialFailure(RuntimeError):
 
     def __init__(
         self,
-        partial_results: "dict[int, list[Draft]]",
-        errors: "list[tuple[int, Exception]]",
+        partial_results: dict[int, list[Draft]],
+        errors: list[tuple[int, Exception]],
     ) -> None:
         self.partial_results = partial_results
         self.errors = errors
@@ -102,7 +101,7 @@ class Draft:
     contact_id: int
     channel: str
     body: str
-    subject: Optional[str]
+    subject: str | None
     version: int
     quality_flag: bool
     # Canonical quality status. Bool quality_flag is retained for back-compat
@@ -114,7 +113,7 @@ class Draft:
     # Surfaced in the marketer + artifact so reviewers can see WHY a
     # CRITIC_HOLD verdict was issued — the calibration knob depends on
     # this being durable, not just present in the model response.
-    critic_trace: Optional[str] = None
+    critic_trace: str | None = None
 
 
 def _load_persona_template(persona: Persona) -> str:
@@ -153,17 +152,19 @@ def _load_voice_doc() -> str:
     if len(text) > _VOICE_DOC_MAX_CHARS:
         logger.warning(
             "voice.md is %d chars; truncating to %d",
-            len(text), _VOICE_DOC_MAX_CHARS,
+            len(text),
+            _VOICE_DOC_MAX_CHARS,
         )
         text = text[:_VOICE_DOC_MAX_CHARS]
     return text
 
 
-def _load_contact(contact_id: int) -> Optional[dict]:
+def _load_contact(contact_id: int) -> dict | None:
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT id, company_id, full_name, title, persona, focus_area, linkedin_url, email, hook "
+            "SELECT id, company_id, full_name, title, persona, focus_area, "
+            "linkedin_url, email, hook "
             "FROM contacts WHERE id = ?",
             (contact_id,),
         ).fetchone()
@@ -307,7 +308,10 @@ def _render_approved_facts(bullets: list) -> str:
     tag is what the FACT DISCIPLINE block uses to forbid re-attribution.
     """
     if not bullets:
-        return "(no achievements matched — keep the message brief and grounded in the identity block only; do NOT invent specifics)"
+        return (
+            "(no achievements matched — keep the message brief and grounded "
+            "in the identity block only; do NOT invent specifics)"
+        )
     lines: list[str] = []
     for b in bullets:
         # Tolerate both ProvenancedBullet and legacy Bullet for now.
@@ -328,8 +332,8 @@ def _build_prompt(
     bullets: list,
     persona_template: str,
     voice_doc: str,
-    anti_phrases: Optional[list[str]] = None,
-    extra_instructions: Optional[list[str]] = None,
+    anti_phrases: list[str] | None = None,
+    extra_instructions: list[str] | None = None,
 ) -> str:
     """Compose the full grounded generation prompt for one (contact, channel).
 
@@ -364,10 +368,10 @@ def _build_prompt(
     return f"""{persona_template}{voice_section}
 
 ## Contact Information
-- Name: {contact['full_name']}
-- Title: {contact.get('title') or 'Unknown'}
-- LinkedIn: {contact.get('linkedin_url') or 'N/A'}
-- Email: {contact.get('email') or 'N/A'}
+- Name: {contact["full_name"]}
+- Title: {contact.get("title") or "Unknown"}
+- LinkedIn: {contact.get("linkedin_url") or "N/A"}
+- Email: {contact.get("email") or "N/A"}
 - Hook (why you're reaching out): {hook}
 
 ## APPROVED FACTS — the only achievements you may state
@@ -379,7 +383,8 @@ def _build_prompt(
 {_CHANNEL_CONSTRAINTS[channel]}
 {anti_phrase_section}{extra_section}
 
-Now write the message. Output ONLY the message text (and subject line if applicable) — no preamble, no explanation."""
+Now write the message. Output ONLY the message text (and subject line if \
+applicable) — no preamble, no explanation."""
 
 
 # _parse_email_body_subject and _call_claude moved to src/agents/shared.py.
@@ -401,8 +406,8 @@ def _draft_one_channel(
     linkedin_char_limit: int = 200,
     email_word_limit: int = 150,
     enable_critic: bool = True,
-    opener_registry: Optional[OpenerRegistry] = None,
-) -> tuple[str, Optional[str], bool, str, Optional[str]]:
+    opener_registry: OpenerRegistry | None = None,
+) -> tuple[str, str | None, bool, str, str | None]:
     """Generate one draft for (contact, channel).
 
     Returns ``(body, subject, quality_flag, quality_code, critic_trace)``.
@@ -411,7 +416,9 @@ def _draft_one_channel(
     ``critic_trace`` is the serialized CriticResult JSON, or None when
     the critic was not run (HARD_FAIL short-circuit / enable_critic=False).
     """
-    prompt = _build_prompt(contact, channel, Persona(contact["persona"]), bullets, persona_template, voice_doc)
+    prompt = _build_prompt(
+        contact, channel, Persona(contact["persona"]), bullets, persona_template, voice_doc
+    )
     text = _call_claude(prompt, anthropic_client)
 
     # Generation-fault pass: collect every detectable fault in the first
@@ -420,11 +427,7 @@ def _draft_one_channel(
     # self-intro (AUDIT-A8), and opener variety (AUDIT-A6) all live here —
     # upstream of hard_check — so the generator gets one chance to fix
     # itself before any gate fires.
-    check_body = (
-        parse_email_body_subject(text)[0]
-        if channel == Channel.COLD_EMAIL
-        else text
-    )
+    check_body = parse_email_body_subject(text)[0] if channel == Channel.COLD_EMAIL else text
 
     anti_phrases: list[str] = []
     extra_notes: list[str] = []
@@ -454,8 +457,12 @@ def _draft_one_channel(
     regenerated = bool(anti_phrases or extra_notes)
     if regenerated:
         prompt2 = _build_prompt(
-            contact, channel, Persona(contact["persona"]), bullets,
-            persona_template, voice_doc,
+            contact,
+            channel,
+            Persona(contact["persona"]),
+            bullets,
+            persona_template,
+            voice_doc,
             anti_phrases=anti_phrases or None,
             extra_instructions=extra_notes or None,
         )
@@ -463,17 +470,13 @@ def _draft_one_channel(
 
     # Parse body/subject before length-checking so we measure what's sent.
     body, subject = (
-        _parse_email_body_subject(text)
-        if channel == Channel.COLD_EMAIL
-        else (text, None)
+        _parse_email_body_subject(text) if channel == Channel.COLD_EMAIL else (text, None)
     )
 
     # A fault that survives its corrective regen stays visible to the
     # reviewer as SOFT_FLAG (placeholders escalate to HARD_FAIL below).
     soft_failed = regenerated and (
-        check_draft(text) is not None
-        or detect_multi_ask(body)
-        or detect_redundant_intro(body)
+        check_draft(text) is not None or detect_multi_ask(body) or detect_redundant_intro(body)
     )
 
     # Register the final opener; a draft that still repeats an overused
@@ -509,8 +512,8 @@ def _draft_one_channel(
     # and the user hasn't disabled it via config. Critic verdict can
     # downgrade OK → CRITIC_HOLD, but never overrides a SOFT_FLAG into OK
     # (soft signals are kept visible for the reviewer).
-    critic_code: Optional[str] = None
-    critic_trace: Optional[str] = None
+    critic_code: str | None = None
+    critic_trace: str | None = None
     if enable_critic:
         try:
             critic_result = critique_draft(
@@ -547,11 +550,11 @@ def _insert_draft(
     contact_id: int,
     channel: Channel,
     body: str,
-    subject: Optional[str],
+    subject: str | None,
     quality_flag: bool,
     conn: sqlite3.Connection,
     quality_code: str = "OK",
-    critic_trace: Optional[str] = None,
+    critic_trace: str | None = None,
 ) -> int:
     """Insert a draft row and return its id.
 
@@ -564,8 +567,7 @@ def _insert_draft(
         "INSERT INTO drafts (contact_id, channel, body, subject, version, "
         "quality_flag, quality_code, critic_trace) "
         "VALUES (?, ?, ?, ?, 1, ?, ?, ?)",
-        (contact_id, channel.value, body, subject, int(quality_flag),
-         quality_code, critic_trace),
+        (contact_id, channel.value, body, subject, int(quality_flag), quality_code, critic_trace),
     )
     return cursor.lastrowid
 
@@ -587,8 +589,8 @@ def _mark_contact_drafted(contact_id: int, conn: sqlite3.Connection) -> None:
 def _draft_all_channels_for_contact(
     contact_id: int,
     anthropic_client,
-    library_path: Optional[str],
-    opener_registry: Optional[OpenerRegistry] = None,
+    library_path: str | None,
+    opener_registry: OpenerRegistry | None = None,
 ) -> list[Draft]:
     contact = _load_contact(contact_id)
     if contact is None:
@@ -620,7 +622,7 @@ def _draft_all_channels_for_contact(
     # Generate all drafts via the LLM BEFORE acquiring the writer lock.
     # Anthropic calls are slow (network) and would needlessly serialize
     # parallel workers if held inside with_writer().
-    generated: list[tuple[Channel, str, Optional[str], bool, str, Optional[str]]] = []
+    generated: list[tuple[Channel, str, str | None, bool, str, str | None]] = []
     has_email = bool(contact.get("email"))
     for channel in Channel:
         # Don't burn tokens drafting a cold email when we have no address to
@@ -628,7 +630,12 @@ def _draft_all_channels_for_contact(
         if channel == Channel.COLD_EMAIL and not has_email:
             continue
         body, subject, quality_flag, quality_code, critic_trace = _draft_one_channel(
-            contact, channel, anthropic_client, persona_template, voice_doc, bullets,
+            contact,
+            channel,
+            anthropic_client,
+            persona_template,
+            voice_doc,
+            bullets,
             linkedin_char_limit=cfg.linkedin_char_limit,
             email_word_limit=cfg.email_word_limit,
             enable_critic=cfg.enable_critic,
@@ -658,20 +665,28 @@ def _draft_all_channels_for_contact(
 
         for channel, body, subject, quality_flag, quality_code, critic_trace in generated:
             draft_id = _insert_draft(
-                contact_id, channel, body, subject, quality_flag,
-                conn=conn, quality_code=quality_code, critic_trace=critic_trace,
-            )
-            drafts.append(Draft(
-                draft_id=draft_id,
-                contact_id=contact_id,
-                channel=channel.value,
-                body=body,
-                subject=subject,
-                version=1,
-                quality_flag=quality_flag,
+                contact_id,
+                channel,
+                body,
+                subject,
+                quality_flag,
+                conn=conn,
                 quality_code=quality_code,
                 critic_trace=critic_trace,
-            ))
+            )
+            drafts.append(
+                Draft(
+                    draft_id=draft_id,
+                    contact_id=contact_id,
+                    channel=channel.value,
+                    body=body,
+                    subject=subject,
+                    version=1,
+                    quality_flag=quality_flag,
+                    quality_code=quality_code,
+                    critic_trace=critic_trace,
+                )
+            )
 
         _mark_contact_drafted(contact_id, conn=conn)
 
@@ -681,7 +696,7 @@ def _draft_all_channels_for_contact(
 def draft_for_contacts(
     contact_ids: list[int],
     anthropic_client=None,
-    library_path: Optional[str] = None,
+    library_path: str | None = None,
 ) -> dict[int, list[Draft]]:
     """Generate drafts for all selected contacts using parallel fan-out.
 
@@ -704,6 +719,7 @@ def draft_for_contacts(
     """
     if anthropic_client is None:
         from src.core.config import get_anthropic_client
+
         anthropic_client = get_anthropic_client()
 
     # One registry per run — the only shared state between contact

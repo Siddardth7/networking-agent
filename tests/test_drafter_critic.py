@@ -16,10 +16,10 @@ from src.agents.drafter import draft_for_contacts
 from src.agents.marketer import _contact_has_hard_fail, run_approval_loop
 from src.core.db import get_connection, init_db, with_writer
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def db_path(tmp_path, monkeypatch):
@@ -83,6 +83,7 @@ class _DraftAndCriticClient:
 # Critic verdict reaches quality_code
 # ---------------------------------------------------------------------------
 
+
 class TestCriticVerdictPersisted:
     def test_critic_pass_yields_quality_code_ok(self, db_path):
         _, ids = _seed(with_email=False)  # 2 channels for speed
@@ -126,6 +127,7 @@ class TestCriticVerdictPersisted:
 # HARD_FAIL short-circuits — critic never runs
 # ---------------------------------------------------------------------------
 
+
 class TestHardFailShortCircuit:
     def test_research_needed_stays_hard_fail_not_critic_hold(self, db_path):
         _, ids = _seed(with_email=False)
@@ -133,9 +135,9 @@ class TestHardFailShortCircuit:
         # Draft #2 is clean → critic call passes.
         client = _DraftAndCriticClient(
             draft_texts=[
-                "Hey [RESEARCH_NEEDED] saw your work.",   # gen 1 — placeholder
+                "Hey [RESEARCH_NEEDED] saw your work.",  # gen 1 — placeholder
                 "Hey [RESEARCH_NEEDED] regen still bad.",  # AUDIT-A1 regen
-                "Clean follow-up.",                        # OK
+                "Clean follow-up.",  # OK
             ],
             critic_scores={dim: 5 for dim in RUBRIC_DIMENSIONS},
         )
@@ -153,12 +155,20 @@ class TestHardFailShortCircuit:
 # Marketer gate blocks CRITIC_HOLD just like HARD_FAIL
 # ---------------------------------------------------------------------------
 
+
 class TestMarketerBlocksCriticHold:
     def test_contact_has_hard_fail_detects_critic_hold(self):
         # Despite the legacy name, helper now covers CRITIC_HOLD too.
-        assert _contact_has_hard_fail({"drafts": [
-            {"quality_code": "CRITIC_HOLD"},
-        ]}) is True
+        assert (
+            _contact_has_hard_fail(
+                {
+                    "drafts": [
+                        {"quality_code": "CRITIC_HOLD"},
+                    ]
+                }
+            )
+            is True
+        )
 
     def test_approve_all_skips_critic_hold(self, db_path, capsys):
         # Seed a DRAFTED contact directly with a CRITIC_HOLD draft.

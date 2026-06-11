@@ -9,21 +9,16 @@ from pathlib import Path
 
 import pytest
 
-import src.core.db as db_module
-from src.core.db import get_connection, init_db, with_writer
 from src.cli.network_status import run_status
-
+from src.core.db import get_connection, init_db, with_writer
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def make_args(
-    company=None, update=None, response=None, notes=None
-) -> argparse.Namespace:
-    return argparse.Namespace(
-        company=company, update=update, response=response, notes=notes
-    )
+
+def make_args(company=None, update=None, response=None, notes=None) -> argparse.Namespace:
+    return argparse.Namespace(company=company, update=update, response=response, notes=notes)
 
 
 def seed_db(tmp_path: Path) -> dict:
@@ -35,29 +30,41 @@ def seed_db(tmp_path: Path) -> dict:
         co_id = conn.execute("SELECT id FROM companies WHERE slug='acme-corp'").fetchone()["id"]
 
         conn.execute(
-            "INSERT INTO contacts (company_id, full_name, title, state) VALUES (?, 'Alice Smith', 'Engineer', 'SELECTED')",
+            "INSERT INTO contacts (company_id, full_name, title, state) "
+            "VALUES (?, 'Alice Smith', 'Engineer', 'SELECTED')",
             (co_id,),
         )
-        ct_id = conn.execute("SELECT id FROM contacts WHERE full_name='Alice Smith'").fetchone()["id"]
+        ct_id = conn.execute("SELECT id FROM contacts WHERE full_name='Alice Smith'").fetchone()[
+            "id"
+        ]
 
         conn.execute(
-            "INSERT INTO drafts (contact_id, channel, version, quality_flag, approved) VALUES (?, 'EMAIL', 1, 'GOOD', 0)",
+            "INSERT INTO drafts (contact_id, channel, version, quality_flag, "
+            "approved) VALUES (?, 'EMAIL', 1, 'GOOD', 0)",
             (ct_id,),
         )
-        draft_id = conn.execute("SELECT id FROM drafts WHERE contact_id=?", (ct_id,)).fetchone()["id"]
+        draft_id = conn.execute("SELECT id FROM drafts WHERE contact_id=?", (ct_id,)).fetchone()[
+            "id"
+        ]
 
         conn.execute(
-            "INSERT INTO outreach_log (contact_id, draft_id, channel, sent_at, response, notes) VALUES (?, ?, 'EMAIL', '2025-01-01', 'PENDING', NULL)",
+            "INSERT INTO outreach_log (contact_id, draft_id, channel, "
+            "sent_at, response, notes) "
+            "VALUES (?, ?, 'EMAIL', '2025-01-01', 'PENDING', NULL)",
             (ct_id, draft_id),
         )
-        log_id = conn.execute("SELECT id FROM outreach_log WHERE contact_id=?", (ct_id,)).fetchone()["id"]
+        log_id = conn.execute(
+            "SELECT id FROM outreach_log WHERE contact_id=?", (ct_id,)
+        ).fetchone()["id"]
 
         # Quota rows
         conn.execute(
-            "INSERT OR IGNORE INTO quota (provider, month_key, used, limit_val) VALUES ('serper', '2025-01', 10, 100)"
+            "INSERT OR IGNORE INTO quota (provider, month_key, used, "
+            "limit_val) VALUES ('serper', '2025-01', 10, 100)"
         )
         conn.execute(
-            "INSERT OR IGNORE INTO quota (provider, month_key, used, limit_val) VALUES ('hunter', '2025-01', 5, 25)"
+            "INSERT OR IGNORE INTO quota (provider, month_key, used, "
+            "limit_val) VALUES ('hunter', '2025-01', 5, 25)"
         )
 
     return {"co_id": co_id, "ct_id": ct_id, "draft_id": draft_id, "log_id": log_id}
@@ -66,6 +73,7 @@ def seed_db(tmp_path: Path) -> dict:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def tmp_db(tmp_path, monkeypatch):
@@ -78,6 +86,7 @@ def tmp_db(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # Test 1: No args — summary view with company slug, state, counts, quota
 # ---------------------------------------------------------------------------
+
 
 def test_summary_view_shows_company_and_quotas(tmp_path, capsys):
     seed_db(tmp_path)
@@ -116,6 +125,7 @@ def test_summary_view_empty_db(capsys):
 # Test 2: With company slug — detailed contact view
 # ---------------------------------------------------------------------------
 
+
 def test_company_view_shows_contacts(tmp_path, capsys):
     seed_db(tmp_path)
 
@@ -141,6 +151,7 @@ def test_company_view_shows_draft_and_log(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 # Test 3: --update mutates outreach_log row
 # ---------------------------------------------------------------------------
+
 
 def test_update_mutates_log_row(tmp_path, capsys):
     ids = seed_db(tmp_path)
@@ -176,6 +187,7 @@ def test_update_without_notes(tmp_path):
 # Test 4: Unknown company slug → prints message, returns 1
 # ---------------------------------------------------------------------------
 
+
 def test_unknown_company_slug_returns_1(capsys):
     rc = run_status(make_args(company="does-not-exist"))
 
@@ -187,6 +199,7 @@ def test_unknown_company_slug_returns_1(capsys):
 # ---------------------------------------------------------------------------
 # Test 5: --update with invalid response value → refuses with message
 # ---------------------------------------------------------------------------
+
 
 def test_invalid_response_value_returns_1(tmp_path, capsys):
     ids = seed_db(tmp_path)
@@ -215,6 +228,7 @@ def test_invalid_response_does_not_mutate_db(tmp_path):
 # ---------------------------------------------------------------------------
 # Test 6: --update missing --response
 # ---------------------------------------------------------------------------
+
 
 def test_update_without_response_returns_1(tmp_path, capsys):
     ids = seed_db(tmp_path)

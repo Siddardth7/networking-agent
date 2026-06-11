@@ -6,13 +6,12 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 import src.core.db as db_module
 from src.core.db import WRITE_LOCK, get_connection, with_writer
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -108,9 +107,7 @@ def test_concurrent_readers_and_writer(tmp_path: Path, monkeypatch: pytest.Monke
     # Assert no exceptions during concurrent access
     lock_errors = [e for e in errors if "locked" in str(e).lower()]
     assert not lock_errors, f"Got lock errors during concurrent access: {lock_errors}"
-    assert not [e for e in errors if "locked" not in str(e).lower()], (
-        f"Other errors: {errors}"
-    )
+    assert not [e for e in errors if "locked" not in str(e).lower()], f"Other errors: {errors}"
 
     # Verify all inserts completed
     inserts_done.wait(timeout=5)
@@ -127,10 +124,9 @@ def test_concurrent_readers_and_writer(tmp_path: Path, monkeypatch: pytest.Monke
 # ---------------------------------------------------------------------------
 
 
-def test_get_connection_retries_on_locked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """get_connection() must retry when sqlite3.connect raises OperationalError('database is locked')."""
+def test_get_connection_retries_on_locked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """get_connection() must retry when sqlite3.connect raises
+    OperationalError('database is locked')."""
     monkeypatch.setattr(db_module, "_DB_PATH", _patch_db_path(tmp_path))
 
     locked_error = sqlite3.OperationalError("database is locked")
@@ -216,17 +212,16 @@ def test_get_connection_does_not_retry_non_lock_errors(
 def test_with_writer_serializes_concurrent_writers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Two threads calling with_writer() concurrently must be serialized — only one holds the lock at a time."""
+    """Two threads calling with_writer() concurrently must be serialized —
+    only one holds the lock at a time."""
     monkeypatch.setattr(db_module, "_DB_PATH", _patch_db_path(tmp_path))
 
     # Bootstrap schema
     with with_writer() as conn:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS counter (val INTEGER);"
-        )
+        conn.execute("CREATE TABLE IF NOT EXISTS counter (val INTEGER);")
         conn.execute("INSERT INTO counter VALUES (0);")
 
-    overlap_detected = threading.Event()
+    threading.Event()
     inside_lock = threading.Event()
     errors: list[str] = []
 

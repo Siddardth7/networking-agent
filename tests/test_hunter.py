@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Callable
 
 import httpx
 import pytest
@@ -194,9 +193,7 @@ def test_quota_incremented_after_successful_call(qm: QuotaManager) -> None:
     provider.find_email("Jane Doe", "boeing.com")
 
     after = qm.remaining("hunter")
-    assert after == before - 1, (
-        f"Expected remaining to drop by 1 (was {before}, now {after})"
-    )
+    assert after == before - 1, f"Expected remaining to drop by 1 (was {before}, now {after})"
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +263,7 @@ def test_find_email_scrubs_key_on_http_error(monkeypatch) -> None:
     """After 5xx exhaustion, the raised HTTPStatusError must not contain the api_key."""
     # Speed up retry sleeps so the test runs fast
     import src.providers.retry as retry_mod
+
     monkeypatch.setattr(retry_mod.time, "sleep", lambda *_a, **_k: None)
 
     client = _make_5xx_client()
@@ -287,6 +285,7 @@ def test_find_email_scrubs_key_on_http_error(monkeypatch) -> None:
 def test_find_email_scrubs_key_on_timeout(monkeypatch) -> None:
     """After timeout-retry exhaustion, raised TimeoutException must not contain the api_key."""
     import src.providers.retry as retry_mod
+
     monkeypatch.setattr(retry_mod.time, "sleep", lambda *_a, **_k: None)
 
     client = _make_timeout_client()

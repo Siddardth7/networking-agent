@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 __all__ = [
     "check_draft",
@@ -22,11 +21,13 @@ __all__ = [
     "redact_placeholders",
 ]
 
+
 def _default_voice_path() -> Path:
     """Voice doc path next to config.yaml (honors NETWORKING_AGENT_CONFIG)."""
     from src.core.config import voice_doc_path
 
     return voice_doc_path()
+
 
 # Always-enforced seed phrases. Voice.md's "## Forbidden Phrases" section is
 # merged in at import time so there is a single source of truth.
@@ -38,7 +39,7 @@ _SEED_BLOCKLIST: list[str] = [
 ]
 
 
-def _load_voice_forbidden_phrases(voice_path: Optional[Path] = None) -> list[str]:
+def _load_voice_forbidden_phrases(voice_path: Path | None = None) -> list[str]:
     """Parse the ``## Forbidden Phrases`` section of voice.md.
 
     Returns the list of phrase strings (one per bullet under that heading),
@@ -73,7 +74,7 @@ def _load_voice_forbidden_phrases(voice_path: Optional[Path] = None) -> list[str
     return phrases
 
 
-def _build_blocklist(voice_path: Optional[Path] = None) -> list[str]:
+def _build_blocklist(voice_path: Path | None = None) -> list[str]:
     """Merge seed phrases with voice.md forbidden phrases (case-insensitive dedupe)."""
     seen: set[str] = set()
     result: list[str] = []
@@ -91,7 +92,7 @@ def _build_blocklist(voice_path: Optional[Path] = None) -> list[str]:
 BLOCKLIST: list[str] = _build_blocklist()
 
 
-def check_draft(text: str) -> Optional[str]:
+def check_draft(text: str) -> str | None:
     """Return the first BLOCKLIST phrase found in *text*, or ``None`` if clean.
 
     Case-insensitive. The original-cased phrase is returned so callers can
@@ -121,7 +122,7 @@ _METRIC_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*[%+]")
 _REDACTION_TEXT = "(placeholder removed)"
 
 
-def find_placeholder(text: str) -> Optional[str]:
+def find_placeholder(text: str) -> str | None:
     """Return the first bracketed placeholder token in *text*, or None.
 
     Inputs: any draft text. Output: the matched ``[ALL_CAPS]`` token or
@@ -182,10 +183,7 @@ def detect_multi_ask(text: str) -> bool:
     if text.count("?") >= 2:
         return True
     sentences = _ASK_SENTENCE_SPLIT_RE.split(text)
-    ask_sentences = [
-        s for s in sentences
-        if any(p.search(s) for p in _ASK_PHRASE_RES)
-    ]
+    ask_sentences = [s for s in sentences if any(p.search(s) for p in _ASK_PHRASE_RES)]
     if len(ask_sentences) >= 2:
         return True
     return any(_HEDGE_RE.search(s) for s in ask_sentences)
@@ -223,14 +221,14 @@ class HardCheckResult:
     """
 
     passed: bool
-    reason: Optional[str] = None
+    reason: str | None = None
     quality_code: str = "OK"
 
 
 def hard_check(
     text: str,
-    source_facts: Optional[str] = None,
-    channel: Optional[str] = None,
+    source_facts: str | None = None,
+    channel: str | None = None,
     linkedin_char_limit: int = 200,
     email_word_limit: int = 150,
 ) -> HardCheckResult:
@@ -273,9 +271,7 @@ def hard_check(
     if source_facts:
         for num_str in _METRIC_PATTERN.findall(text):
             # Look for the exact metric (number adjacent to % or +) in facts.
-            metric_in_facts = re.compile(
-                rf"\b{re.escape(num_str)}\s*[%+]"
-            )
+            metric_in_facts = re.compile(rf"\b{re.escape(num_str)}\s*[%+]")
             if not metric_in_facts.search(source_facts):
                 return HardCheckResult(
                     passed=False,

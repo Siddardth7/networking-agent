@@ -97,8 +97,10 @@ class TestLLMShapeGuards:
         client = Mock()
         client.messages.create.return_value = Mock(content=[tool])
         candidate = ContactCandidate(
-            full_name="X", title="Engineer",
-            linkedin_url="https://linkedin.com/in/x", company_slug="acme",
+            full_name="X",
+            title="Engineer",
+            linkedin_url="https://linkedin.com/in/x",
+            company_slug="acme",
         )
         persona, focus, signal = _classify_contact(candidate, "acme", client)
         assert persona == Persona.PEER_ENGINEER
@@ -128,9 +130,7 @@ class TestCompanyDomain:
         monkeypatch.setattr("src.core.db._DB_PATH", tmp_path / "d.db")
         init_db()
         with with_writer() as conn:
-            c = conn.execute(
-                "INSERT INTO companies (slug, name) VALUES ('acme-corp', 'Acme')"
-            )
+            c = conn.execute("INSERT INTO companies (slug, name) VALUES ('acme-corp', 'Acme')")
             company_id = c.lastrowid
         assert _company_domain(company_id, "acme-corp") == "acmecorp.com"
 

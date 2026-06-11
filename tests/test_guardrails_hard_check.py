@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from src.agents.guardrails import (
     HardCheckResult,
     _build_blocklist,
@@ -17,10 +15,10 @@ from src.agents.guardrails import (
     hard_check,
 )
 
-
 # ---------------------------------------------------------------------------
 # hard_check: bracket / placeholder detection
 # ---------------------------------------------------------------------------
+
 
 class TestBracketCheck:
     def test_research_needed_is_hard_fail(self):
@@ -49,6 +47,7 @@ class TestBracketCheck:
 # ---------------------------------------------------------------------------
 # hard_check: numeric provenance
 # ---------------------------------------------------------------------------
+
 
 class TestNumericProvenance:
     def test_unsourced_percent_metric_blocked(self):
@@ -102,6 +101,7 @@ class TestNumericProvenance:
 # hard_check: length
 # ---------------------------------------------------------------------------
 
+
 class TestLengthCheck:
     def test_linkedin_over_200_chars_hard_fail(self):
         text = "a" * 201
@@ -131,6 +131,7 @@ class TestLengthCheck:
 # Voice.md parsing and BLOCKLIST merging
 # ---------------------------------------------------------------------------
 
+
 class TestVoiceMdMerge:
     def test_load_forbidden_phrases_from_voice_md(self, tmp_path: Path):
         voice = tmp_path / "voice.md"
@@ -154,9 +155,7 @@ class TestVoiceMdMerge:
 
     def test_blocklist_merges_seed_and_voice(self, tmp_path: Path):
         voice = tmp_path / "voice.md"
-        voice.write_text(
-            "## Forbidden Phrases\n\n- custom-voice-phrase\n"
-        )
+        voice.write_text("## Forbidden Phrases\n\n- custom-voice-phrase\n")
         bl = _build_blocklist(voice)
         # Seed phrases always present.
         assert "I noticed" in bl
@@ -177,6 +176,7 @@ class TestVoiceMdMerge:
 # ---------------------------------------------------------------------------
 # HardCheckResult shape
 # ---------------------------------------------------------------------------
+
 
 class TestResultShape:
     def test_ok_result_fields(self):

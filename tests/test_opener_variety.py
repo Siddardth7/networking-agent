@@ -13,7 +13,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.agents.drafter import OpenerRegistry, draft_for_contacts, normalize_opener
-from src.core.db import get_connection, init_db, with_writer
+from src.core.db import init_db, with_writer
 
 REPEATED = "Saw your work in aerospace quality. MS AE at UIUC. Would value connecting."
 VARIED = "Your MRB background caught my eye — I work on composites at UIUC."
@@ -26,6 +26,7 @@ def db_path(tmp_path, monkeypatch):
     monkeypatch.setattr("src.providers.quota_manager._DB_PATH", path)
     monkeypatch.setattr("src.agents.drafter._MAX_WORKERS", 1)  # ordered queue
     from src.core.config import Config, load_config
+
     real = load_config
 
     def _no_critic_cfg():
@@ -113,13 +114,17 @@ class TestOpenerRegistry:
 class TestDrafterVariety:
     def test_third_contact_with_same_opener_regens(self, db_path):
         ids = _seed(3)
-        client = _mk_client([
-            REPEATED, "Follow-up A.",        # contact 1: CONN, POST
-            REPEATED, "Follow-up B.",        # contact 2: CONN repeats (allowed)
-            REPEATED,                         # contact 3: CONN gen 1 — overused
-            VARIED,                           # contact 3: CONN regen
-            "Follow-up C.",                   # contact 3: POST
-        ])
+        client = _mk_client(
+            [
+                REPEATED,
+                "Follow-up A.",  # contact 1: CONN, POST
+                REPEATED,
+                "Follow-up B.",  # contact 2: CONN repeats (allowed)
+                REPEATED,  # contact 3: CONN gen 1 — overused
+                VARIED,  # contact 3: CONN regen
+                "Follow-up C.",  # contact 3: POST
+            ]
+        )
         results = draft_for_contacts(ids, anthropic_client=client)
 
         conn3 = next(d for d in results[ids[2]] if d.channel == "LINKEDIN_CONNECTION")
@@ -131,24 +136,33 @@ class TestDrafterVariety:
 
     def test_persistent_repeat_soft_flagged(self, db_path):
         ids = _seed(3)
-        client = _mk_client([
-            REPEATED, "Follow-up A.",
-            REPEATED, "Follow-up B.",
-            REPEATED,            # contact 3 gen 1 — overused
-            REPEATED,            # contact 3 regen — still the same opener
-            "Follow-up C.",
-        ])
+        client = _mk_client(
+            [
+                REPEATED,
+                "Follow-up A.",
+                REPEATED,
+                "Follow-up B.",
+                REPEATED,  # contact 3 gen 1 — overused
+                REPEATED,  # contact 3 regen — still the same opener
+                "Follow-up C.",
+            ]
+        )
         results = draft_for_contacts(ids, anthropic_client=client)
         conn3 = next(d for d in results[ids[2]] if d.channel == "LINKEDIN_CONNECTION")
         assert conn3.quality_code == "SOFT_FLAG"
 
     def test_varied_openers_never_regen(self, db_path):
         ids = _seed(3)
-        client = _mk_client([
-            "Opener one here. X.", "Follow-up A.",
-            "Different opener two. Y.", "Follow-up B.",
-            "Yet another opener. Z.", "Follow-up C.",
-        ])
+        client = _mk_client(
+            [
+                "Opener one here. X.",
+                "Follow-up A.",
+                "Different opener two. Y.",
+                "Follow-up B.",
+                "Yet another opener. Z.",
+                "Follow-up C.",
+            ]
+        )
         draft_for_contacts(ids, anthropic_client=client)
         assert client.messages.create.call_count == 6
 
@@ -156,13 +170,16 @@ class TestDrafterVariety:
 class TestConfigKnob:
     def test_opener_max_repeats_default(self):
         from src.core.config import Config
+
         assert Config().opener_max_repeats == 2
 
     def test_opener_max_repeats_from_yaml(self, tmp_path, monkeypatch):
         import os
+
         cfg_file = tmp_path / "config.yaml"
         cfg_file.write_text("quality:\n  opener_max_repeats: 4\n")
         os.chmod(cfg_file, 0o600)
         monkeypatch.setenv("NETWORKING_AGENT_CONFIG", str(cfg_file))
         from src.core.config import load_config
+
         assert load_config().opener_max_repeats == 4

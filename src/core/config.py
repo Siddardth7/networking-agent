@@ -20,10 +20,8 @@ get_anthropic_client
 from __future__ import annotations
 
 import os
-import stat
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -91,9 +89,9 @@ class Config:
     """All configuration fields for the networking-agent."""
 
     # API keys — Optional because callers that need them should validate.
-    anthropic_api_key: Optional[str] = None
-    serper_api_key: Optional[str] = None
-    hunter_api_key: Optional[str] = None
+    anthropic_api_key: str | None = None
+    serper_api_key: str | None = None
+    hunter_api_key: str | None = None
 
     # Provider limits
     serper_monthly_limit: int = 100
@@ -105,8 +103,8 @@ class Config:
     # Quality / channel constraints (Layer 3+5). These are the hard limits
     # enforced in code by `guardrails.hard_check` — keep in sync with the
     # prompt text in `drafter._CHANNEL_CONSTRAINTS`.
-    linkedin_char_limit: int = 200      # free LinkedIn account cap
-    email_word_limit: int = 150         # cold-email body word cap
+    linkedin_char_limit: int = 200  # free LinkedIn account cap
+    email_word_limit: int = 150  # cold-email body word cap
 
     # Batch-quality checkpoint between Drafter and Marketer.
     # batch_hard_fail_threshold = max fraction of HARD_FAIL drafts tolerated
@@ -173,13 +171,12 @@ def _load_yaml(path: Path) -> dict:
         mode = os.fstat(fh.fileno()).st_mode & 0o777
         if mode != 0o600:
             raise ConfigSecurityError(
-                f"Refusing to read {path}: permissions are {oct(mode)}. "
-                f"Run: chmod 600 {path}"
+                f"Refusing to read {path}: permissions are {oct(mode)}. Run: chmod 600 {path}"
             )
         return yaml.safe_load(fh) or {}
 
 
-def _key_or_none(value: Optional[str]) -> Optional[str]:
+def _key_or_none(value: str | None) -> str | None:
     """Return None if value is missing or is the placeholder sentinel."""
     if not value or value == _SENTINEL:
         return None
@@ -241,7 +238,7 @@ def load_config() -> Config:
     )
 
 
-def get_anthropic_client(api_key: Optional[str] = None):
+def get_anthropic_client(api_key: str | None = None):
     """Return a fresh ``anthropic.Anthropic`` client.
 
     Centralizes the lazy-import + key-resolution pattern previously duplicated
@@ -257,4 +254,5 @@ def get_anthropic_client(api_key: Optional[str] = None):
         raise ValueError("ANTHROPIC_API_KEY not configured")
 
     from anthropic import Anthropic  # local import keeps module import-light
+
     return Anthropic(api_key=api_key)

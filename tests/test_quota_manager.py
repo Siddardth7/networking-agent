@@ -9,7 +9,6 @@ fixture.  Migrations are run before each test so the ``quota`` table exists.
 from __future__ import annotations
 
 import sqlite3
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -17,7 +16,6 @@ import pytest
 from src.core.migrations import run_migrations
 from src.providers.quota_manager import QuotaManager
 from src.providers.retry import QuotaExhausted
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -138,13 +136,11 @@ def test_can_query_creates_row_when_missing(qm: QuotaManager, tmp_db: Path) -> N
 
     # Row must now exist
     conn = sqlite3.connect(str(tmp_db))
-    row = conn.execute(
-        "SELECT used, limit_val FROM quota WHERE provider = 'serper'"
-    ).fetchone()
+    row = conn.execute("SELECT used, limit_val FROM quota WHERE provider = 'serper'").fetchone()
     conn.close()
     assert row is not None, "can_query should have seeded the quota row"
-    assert row[0] == 0       # used = 0
-    assert row[1] == 100     # limit_val = serper default
+    assert row[0] == 0  # used = 0
+    assert row[1] == 100  # limit_val = serper default
 
 
 # ---------------------------------------------------------------------------

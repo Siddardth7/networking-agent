@@ -5,8 +5,6 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-import pytest
-
 from src.core.migrations import run_migrations
 
 
@@ -35,7 +33,12 @@ def test_migration_creates_expected_tables(tmp_path: Path) -> None:
         ).fetchall()
         names = {r["name"] for r in rows}
         expected = {
-            "companies", "contacts", "drafts", "outreach_log", "quota", "followups",
+            "companies",
+            "contacts",
+            "drafts",
+            "outreach_log",
+            "quota",
+            "followups",
         }
         assert expected.issubset(names), f"Missing tables: {expected - names}"
     finally:
@@ -56,7 +59,9 @@ def test_migration_creates_expected_indexes(tmp_path: Path) -> None:
         ).fetchall()
         indexes = {r["name"] for r in rows}
         expected_indexes = {
-            "idx_companies_slug", "idx_contacts_company", "idx_drafts_contact",
+            "idx_companies_slug",
+            "idx_contacts_company",
+            "idx_drafts_contact",
         }
         assert expected_indexes.issubset(indexes), (
             f"Missing indexes: {expected_indexes - indexes}.  Found: {indexes}"
@@ -129,12 +134,8 @@ def test_migration_002_adds_quality_code_column(tmp_path: Path) -> None:
         col_names = {c["name"] for c in cols}
         assert "quality_code" in col_names
         # Default should be 'OK'
-        conn.execute(
-            "INSERT INTO companies (slug, name) VALUES ('x', 'X')"
-        )
-        conn.execute(
-            "INSERT INTO contacts (company_id, full_name) VALUES (1, 'A')"
-        )
+        conn.execute("INSERT INTO companies (slug, name) VALUES ('x', 'X')")
+        conn.execute("INSERT INTO contacts (company_id, full_name) VALUES (1, 'A')")
         conn.execute(
             "INSERT INTO drafts (contact_id, channel, body) VALUES (1, 'LINKEDIN_CONNECTION', 'hi')"
         )

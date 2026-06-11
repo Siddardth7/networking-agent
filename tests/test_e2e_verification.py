@@ -13,7 +13,6 @@ final step and is invoked separately.
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -26,10 +25,10 @@ from src.agents.marketer import run_approval_loop
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import ContactCandidate, EmailResult
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def tmp_db(tmp_path, monkeypatch):
@@ -110,12 +109,14 @@ class _StagedClient:
 # Test: full Finder run produces snippet + hook_signal + shared_signals
 # ---------------------------------------------------------------------------
 
+
 class TestFinderE2E:
     def test_finder_writes_hook_and_shared_signals(self):
         serper = Mock()
         serper.search_linkedin_profiles.return_value = [
             ContactCandidate(
-                full_name="Jane Doe", title="Senior MRB Engineer",
+                full_name="Jane Doe",
+                title="Senior MRB Engineer",
                 linkedin_url="https://linkedin.com/in/janedoe",
                 company_slug="acme-corp",
                 snippet="Senior MRB engineer; led bonded composite repair certification.",
@@ -125,26 +126,31 @@ class TestFinderE2E:
 
         hunter = Mock()
         hunter.find_email.return_value = EmailResult(
-            email="jane@acme.com", verified=True, confidence=90, source="hunter",
+            email="jane@acme.com",
+            verified=True,
+            confidence=90,
+            source="hunter",
         )
 
         client = _StagedClient()
         client.enqueue_classifier(
-            "SENIOR_MANAGER", "MANUFACTURING",
+            "SENIOR_MANAGER",
+            "MANUFACTURING",
             "led bonded composite repair certification",
         )
 
         find_contacts(
-            "acme-corp", limit=1,
-            serper_provider=serper, hunter_provider=hunter,
+            "acme-corp",
+            limit=1,
+            serper_provider=serper,
+            hunter_provider=hunter,
             anthropic_client=client,
         )
 
         conn = get_connection()
         try:
             row = conn.execute(
-                "SELECT persona, hook, shared_signals FROM contacts "
-                "WHERE full_name = 'Jane Doe'"
+                "SELECT persona, hook, shared_signals FROM contacts WHERE full_name = 'Jane Doe'"
             ).fetchone()
         finally:
             conn.close()
@@ -161,6 +167,7 @@ class TestFinderE2E:
 # ---------------------------------------------------------------------------
 # Test: HARD_FAIL + CRITIC_HOLD never reach APPROVED
 # ---------------------------------------------------------------------------
+
 
 class TestNoFlaggedDraftReachesApproval:
     def _seed_selected(self, n: int = 3) -> list[int]:
@@ -179,7 +186,8 @@ class TestNoFlaggedDraftReachesApproval:
                                'COMPOSITE_DESIGN', ?, ?, 'shared composites work',
                                'SELECTED')""",
                     (
-                        company_id, f"Person {i}",
+                        company_id,
+                        f"Person {i}",
                         f"https://linkedin.com/in/person{i}",
                         f"p{i}@acme.com",
                     ),
@@ -222,7 +230,8 @@ class TestNoFlaggedDraftReachesApproval:
         # Try to APPROVE all — both flagged contacts must be blocked.
         inputs = iter(["APPROVE all", "SKIP 1", "SKIP 2", "SKIP 3"])
         result = run_approval_loop(
-            company_id=1, _input_fn=lambda _: next(inputs),
+            company_id=1,
+            _input_fn=lambda _: next(inputs),
         )
 
         # Only contact 2 (fully clean) should reach approved.
@@ -237,9 +246,7 @@ class TestNoFlaggedDraftReachesApproval:
         # Outreach_log only carries the clean contact's drafts.
         conn = get_connection()
         try:
-            logs = conn.execute(
-                "SELECT DISTINCT contact_id FROM outreach_log"
-            ).fetchall()
+            logs = conn.execute("SELECT DISTINCT contact_id FROM outreach_log").fetchall()
         finally:
             conn.close()
         assert {r["contact_id"] for r in logs} == {ids[2]}
@@ -248,6 +255,7 @@ class TestNoFlaggedDraftReachesApproval:
 # ---------------------------------------------------------------------------
 # Test: artifact reflects the gate's verdict
 # ---------------------------------------------------------------------------
+
 
 class TestArtifactE2E:
     def test_artifact_surfaces_quality_code_and_persona(self, tmp_path):

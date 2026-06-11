@@ -18,9 +18,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Optional
 
-from src.core.db import get_connection, with_writer, init_db
+from src.core.db import get_connection, with_writer
 
 __all__ = ["run_status"]
 
@@ -35,6 +34,7 @@ VALID_RESPONSES = {"PENDING", "NO_RESPONSE", "POSITIVE", "NEGATIVE", "IRRELEVANT
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fmt_row(cols: list[str], widths: list[int]) -> str:
     """Format one table row with fixed column widths."""
     parts = [str(c).ljust(w) for c, w in zip(cols, widths)]
@@ -44,6 +44,7 @@ def _fmt_row(cols: list[str], widths: list[int]) -> str:
 # ---------------------------------------------------------------------------
 # Summary view (no args)
 # ---------------------------------------------------------------------------
+
 
 def _summary_view() -> int:
     """Print per-company table + quota lines. Returns exit code."""
@@ -89,7 +90,8 @@ def _summary_view() -> int:
         # Quota section
         print()
         quotas = conn.execute(
-            "SELECT provider, used, limit_val, month_key FROM quota ORDER BY provider, month_key DESC"
+            "SELECT provider, used, limit_val, month_key FROM quota "
+            "ORDER BY provider, month_key DESC"
         ).fetchall()
 
         seen: set[str] = set()
@@ -103,9 +105,7 @@ def _summary_view() -> int:
                 print("Provider quotas (current month):")
                 printed_header = True
             remaining = max(0, q["limit_val"] - q["used"])
-            print(
-                f"  {p:<12}  {remaining} / {q['limit_val']} remaining  ({q['month_key']})"
-            )
+            print(f"  {p:<12}  {remaining} / {q['limit_val']} remaining  ({q['month_key']})")
 
         if not printed_header:
             print("Provider quotas: no quota data recorded yet.")
@@ -119,6 +119,7 @@ def _summary_view() -> int:
 # ---------------------------------------------------------------------------
 # Detailed company view
 # ---------------------------------------------------------------------------
+
 
 def _company_view(slug: str) -> int:
     """Print detailed view for one company. Returns exit code."""
@@ -136,7 +137,8 @@ def _company_view(slug: str) -> int:
         print()
 
         contacts = conn.execute(
-            "SELECT id, full_name, title, state FROM contacts WHERE company_id = ? ORDER BY full_name",
+            "SELECT id, full_name, title, state FROM contacts "
+            "WHERE company_id = ? ORDER BY full_name",
             (row["id"],),
         ).fetchall()
 
@@ -146,20 +148,20 @@ def _company_view(slug: str) -> int:
 
         for ct in contacts:
             ct_id = ct["id"]
-            print(
-                f"  {ct['full_name']}  |  {ct['title'] or '—'}  |  state={ct['state']}"
-            )
+            print(f"  {ct['full_name']}  |  {ct['title'] or '—'}  |  state={ct['state']}")
 
             # Drafts per channel
             drafts = conn.execute(
-                "SELECT channel, version, quality_flag, approved FROM drafts WHERE contact_id = ? ORDER BY channel, version",
+                "SELECT channel, version, quality_flag, approved FROM drafts "
+                "WHERE contact_id = ? ORDER BY channel, version",
                 (ct_id,),
             ).fetchall()
             if drafts:
                 for d in drafts:
                     approved = "approved" if d["approved"] else "pending"
                     print(
-                        f"    draft  channel={d['channel']}  v{d['version']}  quality={d['quality_flag'] or '—'}  [{approved}]"
+                        f"    draft  channel={d['channel']}  v{d['version']}  "
+                        f"quality={d['quality_flag'] or '—'}  [{approved}]"
                     )
             else:
                 print("    (no drafts)")
@@ -194,7 +196,8 @@ def _company_view(slug: str) -> int:
 # Update outreach_log
 # ---------------------------------------------------------------------------
 
-def _update_log(log_id: int, response: str, notes: Optional[str]) -> int:
+
+def _update_log(log_id: int, response: str, notes: str | None) -> int:
     """Update outreach_log row. Returns exit code."""
     resp_upper = response.upper()
     if resp_upper not in VALID_RESPONSES:
@@ -203,9 +206,7 @@ def _update_log(log_id: int, response: str, notes: Optional[str]) -> int:
         return 1
 
     with with_writer() as conn:
-        row = conn.execute(
-            "SELECT id FROM outreach_log WHERE id = ?", (log_id,)
-        ).fetchone()
+        row = conn.execute("SELECT id FROM outreach_log WHERE id = ?", (log_id,)).fetchone()
         if row is None:
             print(f"Outreach log entry not found: id={log_id}")
             return 1
@@ -215,13 +216,17 @@ def _update_log(log_id: int, response: str, notes: Optional[str]) -> int:
             (resp_upper, notes, log_id),
         )
 
-    print(f"Updated outreach_log id={log_id}: response={resp_upper}" + (f", notes={notes!r}" if notes else ""))
+    print(
+        f"Updated outreach_log id={log_id}: response={resp_upper}"
+        + (f", notes={notes!r}" if notes else "")
+    )
     return 0
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def run_status(args: argparse.Namespace) -> int:
     """Main entry point.

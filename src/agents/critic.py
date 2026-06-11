@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Optional
 
 from src.core.config import SONNET_MODEL
 
@@ -36,12 +35,12 @@ __all__ = [
 
 # Rubric dimensions, each scored 0–5 by the critic.
 RUBRIC_DIMENSIONS: tuple[str, ...] = (
-    "specificity",      # references something real, not generic flattery
-    "one_ask",          # one clear CTA, no multi-ask, no hedge stacking
-    "tone",             # professional + conversational, no AI tells, no begging
-    "grounded_facts",   # every concrete claim traces to APPROVED FACTS or identity
-    "economy",          # appropriately concise for channel; no filler
-    "relevance",        # sender's background connects to recipient's role/context
+    "specificity",  # references something real, not generic flattery
+    "one_ask",  # one clear CTA, no multi-ask, no hedge stacking
+    "tone",  # professional + conversational, no AI tells, no begging
+    "grounded_facts",  # every concrete claim traces to APPROVED FACTS or identity
+    "economy",  # appropriately concise for channel; no filler
+    "relevance",  # sender's background connects to recipient's role/context
 )
 
 # Decision-rule constants (AUDIT-A3 recalibration).
@@ -59,8 +58,8 @@ RUBRIC_DIMENSIONS: tuple[str, ...] = (
 # solid draft. On the captured June-6 fixture set this lands the hold
 # rate at 33% — inside the 20-40% calibration band. See
 # tests/test_critic_calibration.py for the regression fixtures.
-MIN_SCORE = 3      # dimensions below this are "weak"
-SEVERE_SCORE = 1   # any dimension at or below this always holds
+MIN_SCORE = 3  # dimensions below this are "weak"
+SEVERE_SCORE = 1  # any dimension at or below this always holds
 MAX_WEAK_DIMS = 2  # hold when MORE than this many dimensions are weak
 
 
@@ -108,7 +107,7 @@ class CriticResult:
     quality_code: str = "OK"
     scores: dict[str, int] = field(default_factory=dict)
     issues: list[str] = field(default_factory=list)
-    reason: Optional[str] = None
+    reason: str | None = None
 
     def to_json(self) -> str:
         """Serialize for persistence in ``drafts.critic_trace``.
@@ -121,7 +120,7 @@ class CriticResult:
         return json.dumps(asdict(self), separators=(",", ":"))
 
 
-def hard_fail_trace(reason: Optional[str]) -> str:
+def hard_fail_trace(reason: str | None) -> str:
     """Serialize a deterministic hard-gate failure in the critic-trace shape.
 
     Inputs: the ``HardCheckResult.reason`` string from ``guardrails.hard_check``.
@@ -236,9 +235,9 @@ def critique_draft(
     body: str,
     contact: dict,
     channel: str,
-    source_facts: Optional[str],
+    source_facts: str | None,
     anthropic_client,
-    subject: Optional[str] = None,
+    subject: str | None = None,
 ) -> CriticResult:
     """Run the critic pass on a generated draft.
 
@@ -328,18 +327,18 @@ def _build_critique_prompt(
     body: str,
     contact: dict,
     channel: str,
-    source_facts: Optional[str],
-    subject: Optional[str],
+    source_facts: str | None,
+    subject: str | None,
 ) -> str:
     facts_block = source_facts or "(no APPROVED FACTS were available to the drafter)"
     subject_line = f"Subject: {subject}\n" if subject else ""
     return f"""You are reviewing one outbound message before it can be sent.
 
 ## Recipient
-- Name: {contact.get('full_name', 'Unknown')}
-- Title: {contact.get('title') or 'Unknown'}
-- Persona: {contact.get('persona') or 'Unknown'}
-- Hook the drafter used (why we are reaching out): {contact.get('hook') or 'GENERIC'}
+- Name: {contact.get("full_name", "Unknown")}
+- Title: {contact.get("title") or "Unknown"}
+- Persona: {contact.get("persona") or "Unknown"}
+- Hook the drafter used (why we are reaching out): {contact.get("hook") or "GENERIC"}
 
 ## Channel
 {channel}

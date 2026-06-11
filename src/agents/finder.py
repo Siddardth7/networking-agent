@@ -7,7 +7,6 @@ Traceability: DESIGN.md §4 (Finder phases), §6 (Hook generation), §8.12 (HUNT
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
@@ -48,7 +47,7 @@ def _classify_contact(
     candidate: ContactCandidate,
     company_slug: str,
     anthropic_client,
-) -> tuple[Persona, FocusArea, Optional[str]]:
+) -> tuple[Persona, FocusArea, str | None]:
     """Persona + focus_area + hook_signal via a single Claude haiku call.
 
     Returns ``(persona, focus_area, hook_signal)`` where ``hook_signal`` is
@@ -121,7 +120,7 @@ def _classify_contact(
     ]
 
     snippet_block = (
-        f"LinkedIn snippet:\n\"\"\"{candidate.snippet}\"\"\"\n\n"
+        f'LinkedIn snippet:\n"""{candidate.snippet}"""\n\n'
         if candidate.snippet
         else "LinkedIn snippet: (none available)\n\n"
     )
@@ -208,7 +207,7 @@ def looks_like_verbatim_news(text: str) -> bool:
     return False
 
 
-def is_acceptable_hook(hook: Optional[str]) -> bool:
+def is_acceptable_hook(hook: str | None) -> bool:
     """Whitelist gate for hook shapes (AUDIT-A5).
 
     Inputs: candidate hook string (may be None). Output: True only when
@@ -227,8 +226,8 @@ def is_acceptable_hook(hook: Optional[str]) -> bool:
 
 def _generate_hook(
     candidate: ContactCandidate,
-    hook_signal: Optional[str] = None,
-    company_news: Optional[str] = None,
+    hook_signal: str | None = None,
+    company_news: str | None = None,
 ) -> str:
     """Deterministic hook per DESIGN §6, augmented with Layer-1 signals.
 
@@ -273,9 +272,14 @@ def _generate_hook(
     # Tier 3: Title specialty
     if any(k in title_lower for k in ["composite", "carbon fiber", "fiber reinforced"]):
         return "your composites work"
-    if any(k in title_lower for k in ["structural", "structures", "stress", "loads", "fea", "airframe"]):
+    if any(
+        k in title_lower for k in ["structural", "structures", "stress", "loads", "fea", "airframe"]
+    ):
         return "your structures work"
-    if any(k in title_lower for k in ["quality", "mrb", "supplier", "manufacturing engineer", "production"]):
+    if any(
+        k in title_lower
+        for k in ["quality", "mrb", "supplier", "manufacturing engineer", "production"]
+    ):
         return "your manufacturing and quality background"
     if any(k in title_lower for k in ["materials", "metallurgy", "alloy", "coating"]):
         return "your materials science background"
@@ -299,7 +303,7 @@ def _generate_hook(
 def _fetch_company_news_signal(
     company_slug: str,
     serper_provider: SerperProvider,
-) -> Optional[str]:
+) -> str | None:
     """Run one Serper news-flavored search per pipeline run.
 
     Returns a short snippet of the top organic result, or None on quota
@@ -309,9 +313,7 @@ def _fetch_company_news_signal(
     """
     company_name = company_slug.replace("-", " ")
     try:
-        snippet = serper_provider.search_general(
-            f"{company_name} news 2026"
-        )
+        snippet = serper_provider.search_general(f"{company_name} news 2026")
     except Exception:
         return None
     # Defensive against mocks / unexpected return types: only proceed for
@@ -335,9 +337,7 @@ def _company_domain(company_id: int, company_slug: str) -> str:
     """
     conn = get_connection()
     try:
-        row = conn.execute(
-            "SELECT domain FROM companies WHERE id = ?", (company_id,)
-        ).fetchone()
+        row = conn.execute("SELECT domain FROM companies WHERE id = ?", (company_id,)).fetchone()
     finally:
         conn.close()
     domain = row["domain"] if row is not None else None
@@ -350,9 +350,7 @@ def _get_or_create_company(company_slug: str) -> int:
     """Return existing company id or insert a new NEW-state row."""
     conn = get_connection()
     try:
-        row = conn.execute(
-            "SELECT id FROM companies WHERE slug = ?", (company_slug,)
-        ).fetchone()
+        row = conn.execute("SELECT id FROM companies WHERE slug = ?", (company_slug,)).fetchone()
     finally:
         conn.close()
 
@@ -370,8 +368,8 @@ def _get_or_create_company(company_slug: str) -> int:
 def find_contacts(
     company_slug: str,
     limit: int = 5,
-    serper_provider: Optional[SerperProvider] = None,
-    hunter_provider: Optional[HunterProvider] = None,
+    serper_provider: SerperProvider | None = None,
+    hunter_provider: HunterProvider | None = None,
     anthropic_client=None,
 ) -> list[ContactCandidate]:
     """Run the 5-phase Finder pipeline for *company_slug*.
@@ -386,16 +384,12 @@ def find_contacts(
     if serper_provider is None:
         if not cfg.serper_api_key:
             raise ValueError("SERPER_API_KEY not configured")
-        serper_provider = SerperProvider(
-            api_key=cfg.serper_api_key, quota_manager=QuotaManager()
-        )
+        serper_provider = SerperProvider(api_key=cfg.serper_api_key, quota_manager=QuotaManager())
 
     if hunter_provider is None:
         if not cfg.hunter_api_key:
             raise ValueError("HUNTER_API_KEY not configured")
-        hunter_provider = HunterProvider(
-            api_key=cfg.hunter_api_key, quota_manager=QuotaManager()
-        )
+        hunter_provider = HunterProvider(api_key=cfg.hunter_api_key, quota_manager=QuotaManager())
 
     if anthropic_client is None:
         anthropic_client = get_anthropic_client(cfg.anthropic_api_key)
@@ -418,9 +412,7 @@ def find_contacts(
 
     if not candidates:
         with with_writer() as conn:
-            conn.execute(
-                "UPDATE companies SET state = 'FOUND' WHERE id = ?", (company_id,)
-            )
+            conn.execute("UPDATE companies SET state = 'FOUND' WHERE id = ?", (company_id,))
         return []
 
     # Phase 1.5: One company-news search per run, shared across all contacts
@@ -458,7 +450,9 @@ def find_contacts(
             candidate, company_slug, anthropic_client
         )
         hook = _generate_hook(
-            candidate, hook_signal=hook_signal, company_news=company_news,
+            candidate,
+            hook_signal=hook_signal,
+            company_news=company_news,
         )
 
         enriched_candidate = ContactCandidate(
@@ -510,8 +504,6 @@ def find_contacts(
 
     # Transition company NEW → FOUND
     with with_writer() as conn:
-        conn.execute(
-            "UPDATE companies SET state = 'FOUND' WHERE id = ?", (company_id,)
-        )
+        conn.execute("UPDATE companies SET state = 'FOUND' WHERE id = ?", (company_id,))
 
     return results

@@ -4,23 +4,20 @@ tests/test_network_check.py — Tests for src/cli/network_check.py
 
 from __future__ import annotations
 
-import io
 import sqlite3
 from pathlib import Path
-from unittest.mock import patch
 
 import httpx
 import pytest
 
 import src.core.db as db_module
-from src.core.db import init_db
-from src.core.migrations import run_migrations
 from src.cli import network_check
-
+from src.core.db import init_db
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_mock_handler(anthropic=200, serper=200, hunter=200):
     def handler(request):
@@ -32,6 +29,7 @@ def make_mock_handler(anthropic=200, serper=200, hunter=200):
         if "hunter.io" in url:
             return httpx.Response(hunter, json={"data": {}}, request=request)
         return httpx.Response(404, request=request)
+
     return handler
 
 
@@ -46,8 +44,12 @@ def setup_tmp_db(tmp_path: Path, monkeypatch) -> Path:
 
     # Patch the module-level _DB_PATH in db module and network_check module
     monkeypatch.setattr(db_module, "_DB_PATH", db_path)
-    monkeypatch.setattr(network_check, "_DB_PATH" if hasattr(network_check, "_DB_PATH") else "_DB_PATH",
-                        db_path, raising=False)
+    monkeypatch.setattr(
+        network_check,
+        "_DB_PATH" if hasattr(network_check, "_DB_PATH") else "_DB_PATH",
+        db_path,
+        raising=False,
+    )
 
     # Also patch the _db_path function result by patching the module attribute
     # init_db uses _db_path() which reads the module variable
@@ -58,6 +60,7 @@ def setup_tmp_db(tmp_path: Path, monkeypatch) -> Path:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def reset_http_client():
@@ -97,6 +100,7 @@ def no_voice_doc(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestAllGreen:
     def test_all_green(self, tmp_path, monkeypatch, env_keys, capsys):

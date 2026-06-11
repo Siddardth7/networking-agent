@@ -30,8 +30,10 @@ JUNE6_NEWS_HOOK = (
 
 def _candidate(title: str = "Project Lead") -> ContactCandidate:
     return ContactCandidate(
-        full_name="X", title=title,
-        linkedin_url="https://linkedin.com/in/x", company_slug="acme",
+        full_name="X",
+        title=title,
+        linkedin_url="https://linkedin.com/in/x",
+        company_slug="acme",
     )
 
 
@@ -46,9 +48,7 @@ class TestVerbatimNewsDetector:
         assert looks_like_verbatim_news("Acme expands · Acme hires CFO")
 
     def test_financial_results_phrase_detected(self):
-        assert looks_like_verbatim_news(
-            "Acme Reports First Quarter 2026 Financial Results"
-        )
+        assert looks_like_verbatim_news("Acme Reports First Quarter 2026 Financial Results")
 
     def test_funding_news_detected(self):
         assert looks_like_verbatim_news(

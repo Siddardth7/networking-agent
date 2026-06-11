@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from unittest.mock import Mock
 
-import pytest
-
 from src.agents.critic import (
     MIN_SCORE,
     RUBRIC_DIMENSIONS,
@@ -18,10 +16,10 @@ from src.agents.critic import (
     critique_draft,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_critic_response(scores: dict, issues: list[str] | None = None) -> Mock:
     tool = Mock()
@@ -56,11 +54,16 @@ def _contact() -> dict:
 # Rubric schema sanity
 # ---------------------------------------------------------------------------
 
+
 class TestRubricSchema:
     def test_six_dimensions_defined(self):
         assert set(RUBRIC_DIMENSIONS) == {
-            "specificity", "one_ask", "tone",
-            "grounded_facts", "economy", "relevance",
+            "specificity",
+            "one_ask",
+            "tone",
+            "grounded_facts",
+            "economy",
+            "relevance",
         }
 
     def test_tool_schema_requires_every_dimension(self):
@@ -83,6 +86,7 @@ class TestRubricSchema:
 # Verdict translation
 # ---------------------------------------------------------------------------
 
+
 class TestVerdict:
     def test_all_high_scores_pass(self):
         client = Mock()
@@ -90,8 +94,10 @@ class TestVerdict:
             {dim: 5 for dim in RUBRIC_DIMENSIONS},
         )
         result = critique_draft(
-            body="A genuine, specific note.", contact=_contact(),
-            channel="LINKEDIN_CONNECTION", source_facts="Did X.",
+            body="A genuine, specific note.",
+            contact=_contact(),
+            channel="LINKEDIN_CONNECTION",
+            source_facts="Did X.",
             anthropic_client=client,
         )
         assert isinstance(result, CriticResult)
@@ -105,11 +111,14 @@ class TestVerdict:
         bad = {dim: 5 for dim in RUBRIC_DIMENSIONS}
         bad["specificity"] = SEVERE_SCORE
         client.messages.create.return_value = _make_critic_response(
-            bad, issues=["specificity: generic eVTOL line, no real signal"],
+            bad,
+            issues=["specificity: generic eVTOL line, no real signal"],
         )
         result = critique_draft(
-            body="Generic.", contact=_contact(),
-            channel="COLD_EMAIL", source_facts="Did X.",
+            body="Generic.",
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts="Did X.",
             anthropic_client=client,
         )
         assert result.passed is False
@@ -124,8 +133,10 @@ class TestVerdict:
             {dim: MIN_SCORE for dim in RUBRIC_DIMENSIONS},
         )
         result = critique_draft(
-            body="OK note.", contact=_contact(),
-            channel="LINKEDIN_CONNECTION", source_facts=None,
+            body="OK note.",
+            contact=_contact(),
+            channel="LINKEDIN_CONNECTION",
+            source_facts=None,
             anthropic_client=client,
         )
         assert result.passed is True
@@ -135,8 +146,10 @@ class TestVerdict:
         client = Mock()
         client.messages.create.return_value = _no_tool_response()
         result = critique_draft(
-            body="x", contact=_contact(),
-            channel="COLD_EMAIL", source_facts=None,
+            body="x",
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts=None,
             anthropic_client=client,
         )
         assert result.passed is False
@@ -148,8 +161,10 @@ class TestVerdict:
         bad["tone"] = "not an int"
         client.messages.create.return_value = _make_critic_response(bad)
         result = critique_draft(
-            body="x", contact=_contact(),
-            channel="COLD_EMAIL", source_facts=None,
+            body="x",
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts=None,
             anthropic_client=client,
         )
         # Unparseable becomes 0 — below MIN_SCORE → HOLD.
@@ -162,8 +177,10 @@ class TestVerdict:
             {dim: 5 for dim in RUBRIC_DIMENSIONS} | {"specificity": 99},
         )
         result = critique_draft(
-            body="x", contact=_contact(),
-            channel="COLD_EMAIL", source_facts=None,
+            body="x",
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts=None,
             anthropic_client=client,
         )
         assert result.scores["specificity"] == 5
@@ -173,6 +190,7 @@ class TestVerdict:
 # Prompt content sanity (the critic actually sees what it needs)
 # ---------------------------------------------------------------------------
 
+
 class TestPromptContent:
     def test_prompt_includes_recipient_and_channel(self):
         client = Mock()
@@ -180,9 +198,12 @@ class TestPromptContent:
             {dim: 5 for dim in RUBRIC_DIMENSIONS},
         )
         critique_draft(
-            body="hello", contact=_contact(),
-            channel="COLD_EMAIL", source_facts="Facts here.",
-            anthropic_client=client, subject="My subject",
+            body="hello",
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts="Facts here.",
+            anthropic_client=client,
+            subject="My subject",
         )
         kwargs = client.messages.create.call_args.kwargs
         msg = kwargs["messages"][0]["content"]
@@ -194,13 +215,16 @@ class TestPromptContent:
 
     def test_uses_sonnet_model(self):
         from src.core.config import SONNET_MODEL
+
         client = Mock()
         client.messages.create.return_value = _make_critic_response(
             {dim: 5 for dim in RUBRIC_DIMENSIONS},
         )
         critique_draft(
-            body="x", contact=_contact(),
-            channel="COLD_EMAIL", source_facts=None,
+            body="x",
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts=None,
             anthropic_client=client,
         )
         kwargs = client.messages.create.call_args.kwargs

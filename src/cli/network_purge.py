@@ -17,10 +17,10 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from src.core.db import get_connection, init_db, with_writer
+from src.core.db import init_db, with_writer
 
 # ---------------------------------------------------------------------------
 # Default paths — overridable in tests via _db_path / _log_path / _drafts_dir
@@ -33,9 +33,10 @@ _DEFAULT_DRAFTS_DIR: Path = Path.home() / ".networking-agent" / "drafts"
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _iso_now() -> str:
     """Return the current UTC time as an ISO 8601 string."""
-    return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(tz=UTC).isoformat(timespec="seconds")
 
 
 def _append_audit(log_path: Path, line: str) -> None:
@@ -78,15 +79,9 @@ def _purge_contact(contact_id: int) -> None:
     """Hard-delete one contact and all dependent rows."""
     with with_writer() as conn:
         # Delete dependents first (outreach_log, drafts), then the contact.
-        conn.execute(
-            "DELETE FROM outreach_log WHERE contact_id = ?", (contact_id,)
-        )
-        conn.execute(
-            "DELETE FROM drafts WHERE contact_id = ?", (contact_id,)
-        )
-        conn.execute(
-            "DELETE FROM contacts WHERE id = ?", (contact_id,)
-        )
+        conn.execute("DELETE FROM outreach_log WHERE contact_id = ?", (contact_id,))
+        conn.execute("DELETE FROM drafts WHERE contact_id = ?", (contact_id,))
+        conn.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
 
 
 def _purge_company(slug: str, drafts_dir: Path) -> tuple[bool, bool]:
@@ -104,9 +99,7 @@ def _purge_company(slug: str, drafts_dir: Path) -> tuple[bool, bool]:
         audit-log entry.
     """
     with with_writer() as conn:
-        row = conn.execute(
-            "SELECT id FROM companies WHERE slug = ?", (slug,)
-        ).fetchone()
+        row = conn.execute("SELECT id FROM companies WHERE slug = ?", (slug,)).fetchone()
         if row is None:
             # Nothing to delete — not an error.
             return False, False
@@ -119,19 +112,11 @@ def _purge_company(slug: str, drafts_dir: Path) -> tuple[bool, bool]:
         contact_ids: list[int] = [r["id"] for r in contact_rows]
 
         for cid in contact_ids:
-            conn.execute(
-                "DELETE FROM outreach_log WHERE contact_id = ?", (cid,)
-            )
-            conn.execute(
-                "DELETE FROM drafts WHERE contact_id = ?", (cid,)
-            )
+            conn.execute("DELETE FROM outreach_log WHERE contact_id = ?", (cid,))
+            conn.execute("DELETE FROM drafts WHERE contact_id = ?", (cid,))
 
-        conn.execute(
-            "DELETE FROM contacts WHERE company_id = ?", (company_id,)
-        )
-        conn.execute(
-            "DELETE FROM companies WHERE id = ?", (company_id,)
-        )
+        conn.execute("DELETE FROM contacts WHERE company_id = ?", (company_id,))
+        conn.execute("DELETE FROM companies WHERE id = ?", (company_id,))
 
     # Remove draft artifacts directory (outside the DB transaction).
     slug_dir = drafts_dir / slug
@@ -158,6 +143,7 @@ def _purge_all(drafts_dir: Path) -> bool:
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+
 
 def run_purge(
     args: argparse.Namespace,
@@ -201,17 +187,16 @@ def run_purge(
     confirm: bool = getattr(args, "confirm", False)
 
     # --- Guard: exactly one target must be supplied ---
-    targets_given = sum([
-        contact_id is not None,
-        company_slug is not None,
-        purge_all,
-    ])
+    targets_given = sum(
+        [
+            contact_id is not None,
+            company_slug is not None,
+            purge_all,
+        ]
+    )
 
     if targets_given == 0:
-        print(
-            "Error: specify a target — "
-            "--contact <id>, --company <slug>, or --all --confirm."
-        )
+        print("Error: specify a target — --contact <id>, --company <slug>, or --all --confirm.")
         return 1
 
     # --- Guard: --all requires --confirm ---
@@ -223,9 +208,7 @@ def run_purge(
     try:
         if contact_id is not None:
             _purge_contact(contact_id)
-            audit_line = (
-                f"{_iso_now()} | purged contact={contact_id} reason=user-request"
-            )
+            audit_line = f"{_iso_now()} | purged contact={contact_id} reason=user-request"
             _append_audit(log_path, audit_line)
             print(f"Purged contact {contact_id}.")
 
@@ -233,8 +216,7 @@ def run_purge(
             db_purged, fs_purged = _purge_company(company_slug, drafts_dir)
             fs_note = "fs=ok" if fs_purged else "fs=symlink-skipped"
             audit_line = (
-                f"{_iso_now()} | purged company={company_slug} "
-                f"reason=user-request {fs_note}"
+                f"{_iso_now()} | purged company={company_slug} reason=user-request {fs_note}"
             )
             _append_audit(log_path, audit_line)
             if db_purged and not fs_purged and (drafts_dir / company_slug).is_symlink():
@@ -249,9 +231,7 @@ def run_purge(
         else:  # purge_all
             fs_purged = _purge_all(drafts_dir)
             fs_note = "fs=ok" if fs_purged else "fs=symlink-skipped"
-            audit_line = (
-                f"{_iso_now()} | purged all reason=user-request {fs_note}"
-            )
+            audit_line = f"{_iso_now()} | purged all reason=user-request {fs_note}"
             _append_audit(log_path, audit_line)
             if not fs_purged and drafts_dir.is_symlink():
                 print(
@@ -272,6 +252,7 @@ def run_purge(
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(

@@ -6,17 +6,17 @@ Tests for src/orchestrator.py — state-machine resume paths.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from src.core.db import get_connection, init_db, with_writer
 from src.orchestrator import run_pipeline
 
-
 # ---------------------------------------------------------------------------
 # DB isolation fixture
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def tmp_db(tmp_path, monkeypatch):
@@ -30,6 +30,7 @@ def tmp_db(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # Seed helpers
 # ---------------------------------------------------------------------------
+
 
 def _seed_company(slug: str, state: str) -> int:
     """Insert a company row and return its id."""
@@ -72,10 +73,11 @@ def _make_stubs(**overrides):
 # Test 1: NEW state → full pipeline runs in order
 # ---------------------------------------------------------------------------
 
+
 def test_new_state_full_pipeline_called_in_order(capsys):
     """NEW company triggers preflight → find → select → draft → approve → artifact."""
     slug = "acme-corp"
-    company_id = _seed_company(slug, "NEW")
+    _seed_company(slug, "NEW")
     selected_ids = [1, 2]
 
     call_order = []
@@ -120,6 +122,7 @@ def test_new_state_full_pipeline_called_in_order(capsys):
 # Test 2: DRAFTED state → approve + artifact, resume message printed
 # ---------------------------------------------------------------------------
 
+
 def test_drafted_state_resumes_from_approval(capsys):
     """DRAFTED company prints resume message and runs approve → artifact only."""
     slug = "beta-inc"
@@ -145,6 +148,7 @@ def test_drafted_state_resumes_from_approval(capsys):
 # Test 3: APPROVED state → "Nothing to do", no pipeline steps called
 # ---------------------------------------------------------------------------
 
+
 def test_approved_state_no_op(capsys):
     """APPROVED company prints 'Nothing to do' and exits without calling any step."""
     slug = "gamma-llc"
@@ -163,6 +167,7 @@ def test_approved_state_no_op(capsys):
 # ---------------------------------------------------------------------------
 # Test 4: FOUND state → selection_gate called, checks + find skipped
 # ---------------------------------------------------------------------------
+
 
 def test_found_state_skips_preflight_and_finder(capsys):
     """FOUND company resumes at selection gate; checks and find are skipped."""
@@ -184,6 +189,7 @@ def test_found_state_skips_preflight_and_finder(capsys):
 # ---------------------------------------------------------------------------
 # Test 5: Mid-drafter kill — only SELECTED contacts re-drafted on resume
 # ---------------------------------------------------------------------------
+
 
 def test_selected_state_only_drafts_missing_contacts():
     """
@@ -219,6 +225,7 @@ def test_selected_state_only_drafts_missing_contacts():
 # ---------------------------------------------------------------------------
 # Test 6: NEW slug not in DB → company row created with state=NEW, full pipeline
 # ---------------------------------------------------------------------------
+
 
 def test_new_company_created_in_db():
     """run_pipeline with an unseen slug inserts a NEW company row and runs all steps."""
@@ -258,6 +265,7 @@ def test_new_company_created_in_db():
 # Test 7: NEW state, preflight failure → pipeline halts after _run_checks
 # ---------------------------------------------------------------------------
 
+
 def test_new_state_preflight_failure_halts_pipeline(capsys):
     """When _run_checks returns 1, subsequent pipeline steps must NOT be called."""
     slug = "eta-systems"
@@ -280,10 +288,11 @@ def test_new_state_preflight_failure_halts_pipeline(capsys):
 # Test 8: NEW state, selection returns [] → draft skipped, approve+artifact run
 # ---------------------------------------------------------------------------
 
+
 def test_new_state_no_selection_skips_draft():
     """When _run_selection_gate returns [], _draft_for_contacts must NOT be called."""
     slug = "theta-dynamics"
-    company_id = _seed_company(slug, "NEW")
+    _seed_company(slug, "NEW")
 
     stubs = _make_stubs(
         _run_checks=MagicMock(return_value=0),
@@ -299,6 +308,7 @@ def test_new_state_no_selection_skips_draft():
 # ---------------------------------------------------------------------------
 # Test 9: FOUND state with contacts selected → draft IS called
 # ---------------------------------------------------------------------------
+
 
 def test_found_state_with_selection_calls_draft():
     """FOUND company + non-empty selection → _draft_for_contacts must be called."""

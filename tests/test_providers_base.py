@@ -11,11 +11,9 @@ from src.core.schemas import ContactCandidate, EmailResult
 from src.providers.base import (
     EmailProvider,
     SearchProvider,
-    _PROVIDER_REGISTRY,
     get_registry,
     register_provider,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers — minimal concrete implementations
@@ -136,9 +134,7 @@ class TestRegisterProviderDecorator:
         @register_provider(name="test_email_v1", kind="email")
         class _RegEmail(EmailProvider):
             def find_email(self, full_name, company_domain):
-                return EmailResult(
-                    email=None, verified=False, confidence=0, source="test"
-                )
+                return EmailResult(email=None, verified=False, confidence=0, source="test")
 
         registry = get_registry()
         assert registry["test_email_v1"]["cls"] is _RegEmail

@@ -7,7 +7,7 @@ Traceability: DESIGN.md §4 (Provider Layer), §8.12 (Hard-stop quota enforcemen
 from __future__ import annotations
 
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import httpx
 
@@ -37,7 +37,7 @@ class ClientError(Exception):
         super().__init__(f"HTTP {status_code}: {body}")
 
 
-class QuotaExhausted(Exception):
+class QuotaExhausted(Exception):  # noqa: N818 — public name since v0.1.0
     """Raised when a provider's monthly quota would be exceeded.
 
     Attributes:
@@ -57,8 +57,7 @@ class QuotaExhausted(Exception):
         self.used = used
         self.limit_val = limit_val
         super().__init__(
-            f"Quota exhausted for provider '{provider}': "
-            f"used={used}, limit={limit_val}."
+            f"Quota exhausted for provider '{provider}': used={used}, limit={limit_val}."
         )
 
 
@@ -87,7 +86,7 @@ _TIMEOUT_RETRY_DELAY: float = 5.0
 def with_retry(
     fn: Callable[[], httpx.Response],
     *,
-    on_rate_limit_message: Optional[Callable[[float], None]] = None,
+    on_rate_limit_message: Callable[[float], None] | None = None,
 ) -> httpx.Response:
     """Execute *fn* with retry/backoff logic for HTTP provider calls.
 
@@ -120,11 +119,11 @@ def with_retry(
         httpx.TimeoutException: After exhausting the single timeout retry.
     """
     timeout_retries_remaining: int = 1
-    fivexx_attempt: int = 0   # number of 5xx sleeps already done
+    fivexx_attempt: int = 0  # number of 5xx sleeps already done
     ratelimit_attempt: int = 0  # number of 429 sleeps already done
 
-    last_5xx_exc: Optional[httpx.HTTPStatusError] = None
-    last_429_exc: Optional[httpx.HTTPStatusError] = None
+    last_5xx_exc: httpx.HTTPStatusError | None = None
+    last_429_exc: httpx.HTTPStatusError | None = None
 
     while True:
         # --- Invoke the callable ---
@@ -183,7 +182,7 @@ def with_retry(
 # ---------------------------------------------------------------------------
 
 
-def _parse_retry_after(header_value: Optional[str], *, default: float) -> float:
+def _parse_retry_after(header_value: str | None, *, default: float) -> float:
     """Parse the ``Retry-After`` header value into seconds.
 
     Args:

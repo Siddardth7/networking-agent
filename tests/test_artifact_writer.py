@@ -20,7 +20,6 @@ from src.agents.artifact_writer import write_artifact
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import Channel
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -76,12 +75,11 @@ def _seed_company_with_contacts(
         if add_drafts:
             for cid in contact_ids:
                 for channel in Channel:
-                    subject = (
-                        "Test subject" if channel == Channel.COLD_EMAIL else None
-                    )
+                    subject = "Test subject" if channel == Channel.COLD_EMAIL else None
                     body = f"Draft body for {channel.value} — contact {cid}"
                     conn.execute(
-                        "INSERT INTO drafts (contact_id, channel, body, subject, version, quality_flag) "
+                        "INSERT INTO drafts (contact_id, channel, body, "
+                        "subject, version, quality_flag) "
                         "VALUES (?, ?, ?, ?, 1, 0)",
                         (cid, channel.value, body, subject),
                     )
@@ -156,9 +154,7 @@ class TestArtifactContent:
         assert "LinkedIn Post-Connection Message" in content
         assert "Cold Email" in content
 
-    def test_all_three_channels_per_contact_with_two_contacts(
-        self, tmp_path: Path
-    ) -> None:
+    def test_all_three_channels_per_contact_with_two_contacts(self, tmp_path: Path) -> None:
         """With 2 contacts, each contact's 3 channel drafts must be present."""
         company_id, contact_ids = _seed_company_with_contacts(num_contacts=2)
         output_dir = tmp_path / "drafts"
@@ -265,7 +261,8 @@ class TestArtifactContent:
         """A company with no contacts must still produce a valid file."""
         with with_writer() as conn:
             cur = conn.execute(
-                "INSERT INTO companies (slug, name, state) VALUES ('empty-co', 'Empty Co', 'DRAFTED')"
+                "INSERT INTO companies (slug, name, state) "
+                "VALUES ('empty-co', 'Empty Co', 'DRAFTED')"
             )
             company_id = cur.lastrowid
 
@@ -304,17 +301,13 @@ class TestCompanyStateTransition:
 
         conn = get_connection()
         try:
-            row = conn.execute(
-                "SELECT state FROM companies WHERE id = ?", (company_id,)
-            ).fetchone()
+            row = conn.execute("SELECT state FROM companies WHERE id = ?", (company_id,)).fetchone()
         finally:
             conn.close()
 
         assert row["state"] == "APPROVED"
 
-    def test_company_state_approved_even_if_already_approved(
-        self, tmp_path: Path
-    ) -> None:
+    def test_company_state_approved_even_if_already_approved(self, tmp_path: Path) -> None:
         """write_artifact is idempotent — calling twice keeps state APPROVED."""
         company_id, _ = _seed_company_with_contacts(company_state="DRAFTED")
         output_dir = tmp_path / "drafts"
@@ -324,9 +317,7 @@ class TestCompanyStateTransition:
 
         conn = get_connection()
         try:
-            row = conn.execute(
-                "SELECT state FROM companies WHERE id = ?", (company_id,)
-            ).fetchone()
+            row = conn.execute("SELECT state FROM companies WHERE id = ?", (company_id,)).fetchone()
         finally:
             conn.close()
 
@@ -338,7 +329,8 @@ class TestCompanyStateTransition:
         # Insert a second company
         with with_writer() as conn:
             conn.execute(
-                "INSERT INTO companies (slug, name, state) VALUES ('other-co', 'Other Co', 'DRAFTED')"
+                "INSERT INTO companies (slug, name, state) "
+                "VALUES ('other-co', 'Other Co', 'DRAFTED')"
             )
 
         output_dir = tmp_path / "drafts"

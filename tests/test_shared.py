@@ -19,10 +19,10 @@ from src.agents.shared import (
 )
 from src.core.schemas import Channel
 
-
 # ---------------------------------------------------------------------------
 # CHANNEL_CONSTRAINTS
 # ---------------------------------------------------------------------------
+
 
 class TestChannelConstraints:
     def test_covers_every_channel(self):
@@ -41,6 +41,7 @@ class TestChannelConstraints:
     def test_drafter_and_dispatch_share_same_constants(self):
         # Whatever they expose must literally BE this dict (no shadow copy).
         from src.agents import dispatch, drafter
+
         assert drafter._CHANNEL_CONSTRAINTS is CHANNEL_CONSTRAINTS
         assert dispatch._CHANNEL_CONSTRAINTS is CHANNEL_CONSTRAINTS
 
@@ -48,6 +49,7 @@ class TestChannelConstraints:
 # ---------------------------------------------------------------------------
 # parse_email_body_subject
 # ---------------------------------------------------------------------------
+
 
 class TestParseEmail:
     def test_subject_and_body_split(self):
@@ -71,6 +73,7 @@ class TestParseEmail:
 # call_claude / call_claude_with_timeout
 # ---------------------------------------------------------------------------
 
+
 class TestCallClaude:
     def test_call_claude_returns_first_block_text(self):
         client = Mock()
@@ -93,6 +96,7 @@ class TestCallClaude:
 
         def hang(**kwargs):
             import time
+
             time.sleep(2)
             return Mock(content=[Mock(text="late")])
 

@@ -6,8 +6,7 @@ Traceability: DESIGN.md §8.3, §2
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
@@ -33,14 +32,14 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 
-class Persona(str, Enum):
+class Persona(StrEnum):
     RECRUITER = "RECRUITER"
     SENIOR_MANAGER = "SENIOR_MANAGER"
     PEER_ENGINEER = "PEER_ENGINEER"
     ALUMNI = "ALUMNI"
 
 
-class FocusArea(str, Enum):
+class FocusArea(StrEnum):
     COMPOSITE_DESIGN = "COMPOSITE_DESIGN"
     STRUCTURAL_ANALYSIS = "STRUCTURAL_ANALYSIS"
     MANUFACTURING = "MANUFACTURING"
@@ -50,13 +49,13 @@ class FocusArea(str, Enum):
     ALUMNI_ACADEMIC = "ALUMNI_ACADEMIC"
 
 
-class Channel(str, Enum):
+class Channel(StrEnum):
     LINKEDIN_CONNECTION = "LINKEDIN_CONNECTION"
     LINKEDIN_POST_CONNECTION = "LINKEDIN_POST_CONNECTION"
     COLD_EMAIL = "COLD_EMAIL"
 
 
-class PipelineState(str, Enum):
+class PipelineState(StrEnum):
     NEW = "NEW"
     FOUND = "FOUND"
     SELECTED = "SELECTED"
@@ -66,7 +65,7 @@ class PipelineState(str, Enum):
     ARCHIVED = "ARCHIVED"
 
 
-class ContactState(str, Enum):
+class ContactState(StrEnum):
     NEW = "NEW"
     SELECTED = "SELECTED"
     DRAFTED = "DRAFTED"
@@ -74,7 +73,7 @@ class ContactState(str, Enum):
     SENT = "SENT"
 
 
-class ProjectType(str, Enum):
+class ProjectType(StrEnum):
     """Origin of a resume project. Provenance for fact-attribution rules.
 
     The drafter must NEVER re-attribute work from a COMPETITION or COURSEWORK
@@ -83,11 +82,11 @@ class ProjectType(str, Enum):
     items may be referenced as professional experience.
     """
 
-    COMPETITION = "COMPETITION"   # student design competition (SAMPE, etc.)
-    COURSEWORK = "COURSEWORK"     # class projects, MS coursework
-    RESEARCH = "RESEARCH"         # academic research, thesis work
-    INTERNSHIP = "INTERNSHIP"     # paid/unpaid internship at a company
-    INDUSTRY = "INDUSTRY"         # full-time professional work
+    COMPETITION = "COMPETITION"  # student design competition (SAMPE, etc.)
+    COURSEWORK = "COURSEWORK"  # class projects, MS coursework
+    RESEARCH = "RESEARCH"  # academic research, thesis work
+    INTERNSHIP = "INTERNSHIP"  # paid/unpaid internship at a company
+    INDUSTRY = "INDUSTRY"  # full-time professional work
 
 
 # ---------------------------------------------------------------------------
@@ -99,25 +98,25 @@ class ContactCandidate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     full_name: str
-    title: Optional[str] = None
-    linkedin_url: Optional[str] = None
+    title: str | None = None
+    linkedin_url: str | None = None
     company_slug: str
-    persona: Optional[Persona] = None
-    focus_area: Optional[FocusArea] = None
-    email: Optional[str] = None
+    persona: Persona | None = None
+    focus_area: FocusArea | None = None
+    email: str | None = None
     # Raw Serper search snippet (LinkedIn About / recent activity excerpt).
     # Used by the finder classifier to ground persona + extract a specific
     # hook_signal. May be None when not provided by the search API.
-    snippet: Optional[str] = None
+    snippet: str | None = None
 
 
 class EmailResult(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    email: Optional[str]
+    email: str | None
     verified: bool
     confidence: int  # 0-100
-    source: str      # e.g. "hunter", "HUNTER_EXHAUSTED"
+    source: str  # e.g. "hunter", "HUNTER_EXHAUSTED"
 
 
 class RetryDecision(BaseModel):
@@ -133,9 +132,9 @@ class DraftDispatchRequest(BaseModel):
 
     contact_id: int
     channel: Channel
-    prior_draft_id: Optional[int] = None
-    feedback: Optional[str] = None
-    voice_doc_path: Optional[str] = None
+    prior_draft_id: int | None = None
+    feedback: str | None = None
+    voice_doc_path: str | None = None
     max_attempts: int = 2
 
 
@@ -143,9 +142,9 @@ class DraftDispatchResponse(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     status: str  # "OK" | "GUARDRAIL_FLAGGED" | "ERROR"
-    new_draft_id: Optional[int] = None
-    new_version: Optional[int] = None
-    body: Optional[str] = None
-    subject: Optional[str] = None
+    new_draft_id: int | None = None
+    new_version: int | None = None
+    body: str | None = None
+    subject: str | None = None
     quality_flag: bool = False
-    error_message: Optional[str] = None
+    error_message: str | None = None

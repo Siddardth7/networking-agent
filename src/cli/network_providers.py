@@ -17,7 +17,6 @@ Entry point
 from __future__ import annotations
 
 import argparse
-from typing import Optional
 
 __all__ = ["run_providers"]
 
@@ -50,11 +49,9 @@ def run_providers(
         Always 0 (no error conditions in v0.1.0).
     """
     # --add stub — no DB access, no API calls.
-    add_name: Optional[str] = getattr(args, "add", None)
+    add_name: str | None = getattr(args, "add", None)
     if add_name is not None:
-        print(
-            "--add lands in v0.1.1; configure providers via env vars or config.yaml for now."
-        )
+        print("--add lands in v0.1.1; configure providers via env vars or config.yaml for now.")
         return 0
 
     # Lazy import so the module loads even when the DB is absent during import.
@@ -76,7 +73,7 @@ def run_providers(
             remaining = limit
 
         lines.append(f"Provider: {provider}")
-        lines.append(f"  Status: active")
+        lines.append("  Status: active")
         lines.append(f"  Quota remaining: {remaining} / {limit}")
         lines.append("")  # blank separator between providers
 

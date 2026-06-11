@@ -52,11 +52,13 @@ def _read(company_id: int, tmp_path: Path) -> str:
 
 class TestArtifactRendering:
     def test_persona_and_focus_area_visible(self, tmp_path):
-        company_id, _ = _seed({
-            "LINKEDIN_CONNECTION": "OK",
-            "LINKEDIN_POST_CONNECTION": "OK",
-            "COLD_EMAIL": "OK",
-        })
+        company_id, _ = _seed(
+            {
+                "LINKEDIN_CONNECTION": "OK",
+                "LINKEDIN_POST_CONNECTION": "OK",
+                "COLD_EMAIL": "OK",
+            }
+        )
         out = _read(company_id, tmp_path)
         assert "**Persona:** PEER_ENGINEER" in out
         assert "**Focus area:** COMPOSITE_DESIGN" in out
@@ -68,39 +70,47 @@ class TestArtifactRendering:
         assert "led wing repair certification" in out
 
     def test_ok_drafts_have_no_badge(self, tmp_path):
-        company_id, _ = _seed({
-            "LINKEDIN_CONNECTION": "OK",
-            "LINKEDIN_POST_CONNECTION": "OK",
-            "COLD_EMAIL": "OK",
-        })
+        company_id, _ = _seed(
+            {
+                "LINKEDIN_CONNECTION": "OK",
+                "LINKEDIN_POST_CONNECTION": "OK",
+                "COLD_EMAIL": "OK",
+            }
+        )
         out = _read(company_id, tmp_path)
         assert "HARD_FAIL" not in out
         assert "CRITIC_HOLD" not in out
         assert "SOFT_FLAG" not in out
 
     def test_hard_fail_badge_loud(self, tmp_path):
-        company_id, _ = _seed({
-            "LINKEDIN_CONNECTION": "HARD_FAIL",
-            "LINKEDIN_POST_CONNECTION": "OK",
-            "COLD_EMAIL": "OK",
-        })
+        company_id, _ = _seed(
+            {
+                "LINKEDIN_CONNECTION": "HARD_FAIL",
+                "LINKEDIN_POST_CONNECTION": "OK",
+                "COLD_EMAIL": "OK",
+            }
+        )
         out = _read(company_id, tmp_path)
         assert "HARD_FAIL" in out
 
     def test_critic_hold_badge_loud(self, tmp_path):
-        company_id, _ = _seed({
-            "LINKEDIN_CONNECTION": "OK",
-            "LINKEDIN_POST_CONNECTION": "CRITIC_HOLD",
-            "COLD_EMAIL": "OK",
-        })
+        company_id, _ = _seed(
+            {
+                "LINKEDIN_CONNECTION": "OK",
+                "LINKEDIN_POST_CONNECTION": "CRITIC_HOLD",
+                "COLD_EMAIL": "OK",
+            }
+        )
         out = _read(company_id, tmp_path)
         assert "CRITIC_HOLD" in out
 
     def test_soft_flag_badge_warns_but_not_blocked(self, tmp_path):
-        company_id, _ = _seed({
-            "LINKEDIN_CONNECTION": "SOFT_FLAG",
-            "LINKEDIN_POST_CONNECTION": "OK",
-            "COLD_EMAIL": "OK",
-        })
+        company_id, _ = _seed(
+            {
+                "LINKEDIN_CONNECTION": "SOFT_FLAG",
+                "LINKEDIN_POST_CONNECTION": "OK",
+                "COLD_EMAIL": "OK",
+            }
+        )
         out = _read(company_id, tmp_path)
         assert "SOFT_FLAG" in out
