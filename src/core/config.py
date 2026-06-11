@@ -22,8 +22,12 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
+
+if TYPE_CHECKING:
+    from anthropic import Anthropic
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -238,7 +242,7 @@ def load_config() -> Config:
     )
 
 
-def get_anthropic_client(api_key: str | None = None):
+def get_anthropic_client(api_key: str | None = None) -> Anthropic:
     """Return a fresh ``anthropic.Anthropic`` client.
 
     Centralizes the lazy-import + key-resolution pattern previously duplicated

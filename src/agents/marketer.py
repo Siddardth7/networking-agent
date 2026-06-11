@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from src.core.db import get_connection, with_writer
@@ -320,8 +321,8 @@ def parse_verb(line: str) -> tuple | None:
 
 def run_approval_loop(
     company_id: int,
-    _input_fn=None,
-    _dispatch_fn=None,
+    _input_fn: Callable[[str], str] | None = None,
+    _dispatch_fn: Callable[..., object] | None = None,
 ) -> ApprovalResult:
     """Interactive approval loop for reviewing and approving drafted contacts.
 
