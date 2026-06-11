@@ -151,6 +151,10 @@ def _classify_contact(
         return Persona.PEER_ENGINEER, FocusArea.PEER, None
 
     data = tool_block.input
+    # Malformed tool output (non-dict input) falls back to safe defaults
+    # instead of raising AttributeError mid-pipeline (AUDIT-A20).
+    if not isinstance(data, dict):
+        return Persona.PEER_ENGINEER, FocusArea.PEER, None
     try:
         persona = Persona(data.get("persona", "PEER_ENGINEER"))
     except ValueError:
@@ -320,6 +324,28 @@ def _fetch_company_news_signal(
     return snippet
 
 
+def _company_domain(company_id: int, company_slug: str) -> str:
+    """Return the email domain to query Hunter with.
+
+    Inputs: company row id and slug. Output: the stored
+    ``companies.domain`` when present, else the slug-derived inference
+    (``acme-corp`` → ``acmecorp.com``). Reads the DB; no writes. The
+    stored column wins because inference fails silently for companies
+    whose web domain differs from their name (AUDIT-A21).
+    """
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT domain FROM companies WHERE id = ?", (company_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    domain = row["domain"] if row is not None else None
+    if domain:
+        return str(domain)
+    return f"{company_slug.replace('-', '')}.com"
+
+
 def _get_or_create_company(company_slug: str) -> int:
     """Return existing company id or insert a new NEW-state row."""
     conn = get_connection()
@@ -403,7 +429,7 @@ def find_contacts(
     company_news = _fetch_company_news_signal(company_slug, serper_provider)
 
     # Phase 2: Enrich — on Hunter QuotaExhausted mark remaining contacts HUNTER_EXHAUSTED
-    company_domain = f"{company_slug.replace('-', '')}.com"
+    company_domain = _company_domain(company_id, company_slug)
     hunter_exhausted = False
     enriched: list[tuple[ContactCandidate, EmailResult]] = []
 

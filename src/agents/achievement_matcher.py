@@ -24,7 +24,8 @@ __all__ = [
     "match_achievements",
 ]
 
-_DEFAULT_LIBRARY_PATH = Path.home() / ".networking-agent" / "resume_library.yaml"
+# Default resolved lazily via config.resume_library_path() so the
+# NETWORKING_AGENT_CONFIG relocation moves the library too (AUDIT-A26).
 
 
 class Bullet(BaseModel):
@@ -64,14 +65,20 @@ class ProvenancedBullet(BaseModel):
 
 
 def load_resume_library(path: Optional[str] = None) -> ResumeLibrary:
-    """Load resume library YAML from *path* (defaults to ~/.networking-agent/resume_library.yaml).
+    """Load the resume library YAML.
 
-    Returns an empty library if the file does not exist.
+    Inputs: optional explicit *path*; defaults to resume_library.yaml in
+    the config directory (honors NETWORKING_AGENT_CONFIG, AUDIT-A26).
+    Output: a validated ResumeLibrary; empty when the file is absent.
+    Reads the filesystem; no other side effects. Raises pydantic
+    ValidationError on malformed entries.
     """
-    p = Path(path) if path is not None else _DEFAULT_LIBRARY_PATH
+    from src.core.config import resume_library_path
+
+    p = Path(path) if path is not None else resume_library_path()
     if not p.exists():
         return ResumeLibrary(projects=[])
-    with p.open() as f:
+    with p.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return ResumeLibrary.model_validate(data or {"projects": []})
 

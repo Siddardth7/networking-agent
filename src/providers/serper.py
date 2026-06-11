@@ -59,6 +59,14 @@ class SerperProvider(SearchProvider):
         self._quota_manager = quota_manager
         self._http_client = http_client or httpx.Client(timeout=30.0)
 
+    def close(self) -> None:
+        """Release the underlying httpx.Client (AUDIT-A25).
+
+        Safe to call multiple times. Long-lived hosts (e.g. test
+        sessions) should call this instead of relying on process exit.
+        """
+        self._http_client.close()
+
     # ------------------------------------------------------------------
     # SearchProvider implementation
     # ------------------------------------------------------------------

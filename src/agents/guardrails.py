@@ -22,7 +22,11 @@ __all__ = [
     "redact_placeholders",
 ]
 
-_VOICE_DOC_PATH = Path.home() / ".networking-agent" / "voice.md"
+def _default_voice_path() -> Path:
+    """Voice doc path next to config.yaml (honors NETWORKING_AGENT_CONFIG)."""
+    from src.core.config import voice_doc_path
+
+    return voice_doc_path()
 
 # Always-enforced seed phrases. Voice.md's "## Forbidden Phrases" section is
 # merged in at import time so there is a single source of truth.
@@ -40,7 +44,7 @@ def _load_voice_forbidden_phrases(voice_path: Optional[Path] = None) -> list[str
     Returns the list of phrase strings (one per bullet under that heading),
     or an empty list if the file or section is missing.
     """
-    path = voice_path or _VOICE_DOC_PATH
+    path = voice_path or _default_voice_path()
     if not path.exists():
         return []
 

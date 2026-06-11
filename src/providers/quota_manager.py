@@ -195,6 +195,12 @@ class QuotaManager:
         mk = self.month_key()
 
         def _do_increment(conn: sqlite3.Connection) -> None:
+            # BEGIN IMMEDIATE takes the SQLite write lock BEFORE the SELECT
+            # so the check-then-update pair is atomic across processes too —
+            # two concurrent CLI invocations can no longer both read the same
+            # `used` value and overshoot the limit (AUDIT-A19). In-process
+            # races were already excluded by WRITE_LOCK.
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT used, limit_val FROM quota WHERE provider = ? AND month_key = ?",
                 (provider, mk),

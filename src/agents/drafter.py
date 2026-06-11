@@ -7,6 +7,7 @@ Traceability: DESIGN.md §4 (Drafter phases), §6 (Drafting subsystem)
 from __future__ import annotations
 
 import concurrent.futures
+import logging
 import re
 import sqlite3
 import threading
@@ -29,7 +30,7 @@ from src.agents.shared import (
     call_claude,
     parse_email_body_subject,
 )
-from src.core.config import HAIKU_MODEL, load_config
+from src.core.config import HAIKU_MODEL, load_config, voice_doc_path
 from src.core.db import get_connection, with_writer
 from src.core.schemas import Channel, FocusArea, Persona, ProjectType
 
@@ -41,6 +42,8 @@ __all__ = [
     "normalize_opener",
 ]
 
+logger = logging.getLogger(__name__)
+
 # Cap workers to avoid hitting Anthropic Tier 1 rate limits (50 RPM)
 _MAX_WORKERS = 6
 
@@ -49,8 +52,10 @@ _MODEL = HAIKU_MODEL
 # Template directory relative to this file: src/agents/ → src/templates/personas/
 _PERSONA_TEMPLATE_DIR = Path(__file__).parent.parent / "templates" / "personas"
 
-_VOICE_DOC_PATH = Path.home() / ".networking-agent" / "voice.md"
-_LIBRARY_PATH = Path.home() / ".networking-agent" / "resume_library.yaml"
+# Size cap for the user-controlled voice doc (AUDIT-A17). An oversized
+# file would balloon every prompt (token blow-up / prompt-injection
+# amplification); content past the cap is truncated with a warning.
+_VOICE_DOC_MAX_CHARS = 16 * 1024
 
 # CHANNEL_CONSTRAINTS now lives in src/agents/shared.py — imported above.
 # Kept as a module-level alias so anything still referencing the private
@@ -113,6 +118,12 @@ class Draft:
 
 
 def _load_persona_template(persona: Persona) -> str:
+    """Return the persona template text for *persona*.
+
+    Inputs: a Persona enum value. Output: the template file content from
+    ``src/templates/personas/`` (utf-8), or a minimal identity line when
+    the file is missing. Reads the filesystem; no other side effects.
+    """
     template_map = {
         Persona.RECRUITER: "recruiter.md",
         Persona.SENIOR_MANAGER: "senior_manager.md",
@@ -122,14 +133,30 @@ def _load_persona_template(persona: Persona) -> str:
     filename = template_map.get(persona, "peer_engineer.md")
     path = _PERSONA_TEMPLATE_DIR / filename
     if path.exists():
-        return path.read_text()
-    return f"Write outreach messages as Siddardth Pathipaka, MS Aerospace UIUC (Dec 2025)."
+        return path.read_text(encoding="utf-8")
+    return "Write outreach messages as Siddardth Pathipaka, MS Aerospace UIUC (Dec 2025)."
 
 
 def _load_voice_doc() -> str:
-    if _VOICE_DOC_PATH.exists():
-        return _VOICE_DOC_PATH.read_text()
-    return ""
+    """Return the user's voice doc content, size-capped.
+
+    Inputs: none (resolves the path next to config.yaml, honoring the
+    NETWORKING_AGENT_CONFIG override, AUDIT-A26). Output: file content
+    (utf-8), truncated to ``_VOICE_DOC_MAX_CHARS`` with a logged warning
+    when oversized (AUDIT-A17); empty string when the file is absent.
+    Reads the filesystem; no other side effects.
+    """
+    path = voice_doc_path()
+    if not path.exists():
+        return ""
+    text = path.read_text(encoding="utf-8")
+    if len(text) > _VOICE_DOC_MAX_CHARS:
+        logger.warning(
+            "voice.md is %d chars; truncating to %d",
+            len(text), _VOICE_DOC_MAX_CHARS,
+        )
+        text = text[:_VOICE_DOC_MAX_CHARS]
+    return text
 
 
 def _load_contact(contact_id: int) -> Optional[dict]:

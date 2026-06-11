@@ -18,6 +18,7 @@ import concurrent.futures
 from typing import Optional
 
 from src.core.config import HAIKU_MODEL
+from src.core.errors import EmptyLLMResponseError
 from src.core.schemas import Channel
 
 __all__ = [
@@ -73,13 +74,25 @@ def parse_email_body_subject(text: str) -> tuple[str, Optional[str]]:
 
 def call_claude(prompt: str, anthropic_client, model: str = HAIKU_MODEL,
                 max_tokens: int = 600) -> str:
-    """Single Anthropic call. Returns stripped first-content-block text."""
+    """Single Anthropic call. Returns stripped first-content-block text.
+
+    Inputs: prompt text, an Anthropic client (or test double), model id,
+    token cap. Output: the first content block's text, stripped. Side
+    effects: one network call. Raises ``EmptyLLMResponseError`` when the
+    response has no content blocks or the first block carries no text
+    (AUDIT-A20) instead of an opaque IndexError/AttributeError.
+    """
     response = anthropic_client.messages.create(
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
     )
-    return response.content[0].text.strip()
+    if not response.content:
+        raise EmptyLLMResponseError("LLM response contained no content blocks")
+    text = getattr(response.content[0], "text", None)
+    if not isinstance(text, str):
+        raise EmptyLLMResponseError("LLM response first block has no text")
+    return text.strip()
 
 
 def call_claude_with_timeout(

@@ -19,7 +19,7 @@ from typing import Optional
 
 from src.agents.achievement_matcher import load_resume_library, match_achievements
 from src.agents.critic import critique_draft, hard_fail_trace
-from src.agents.drafter import _build_prompt, _load_persona_template
+from src.agents.drafter import _build_prompt, _load_persona_template, _load_voice_doc
 from src.agents.guardrails import (
     check_draft,
     find_placeholder,
@@ -235,8 +235,9 @@ def dispatch_revision(
     )
     persona_template = _load_persona_template(persona)
 
-    voice_path = Path.home() / ".networking-agent" / "voice.md"
-    voice_doc = voice_path.read_text() if voice_path.exists() else ""
+    # Same loader as the first-draft path: utf-8, size-capped, env-aware
+    # (AUDIT-A17, AUDIT-A23, AUDIT-A26).
+    voice_doc = _load_voice_doc()
 
     feedback = req.feedback or ""
 

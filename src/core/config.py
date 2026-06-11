@@ -60,6 +60,28 @@ def _resolve_config_path() -> Path:
     return _config_path
 
 
+def config_dir() -> Path:
+    """Return the directory holding the agent's user files.
+
+    Inputs: none (reads the resolved config path). Output: the parent
+    directory of config.yaml — by default ``~/.networking-agent/``, or
+    wherever ``NETWORKING_AGENT_CONFIG`` points. Sibling files
+    (voice.md, resume_library.yaml) are resolved relative to this so an
+    env-relocated config relocates them too (AUDIT-A26).
+    """
+    return _resolve_config_path().parent
+
+
+def voice_doc_path() -> Path:
+    """Return the path of the user's voice/style document."""
+    return config_dir() / "voice.md"
+
+
+def resume_library_path() -> Path:
+    """Return the path of the user's resume achievement library."""
+    return config_dir() / "resume_library.yaml"
+
+
 class ConfigSecurityError(Exception):
     """Raised when config.yaml has unsafe file permissions."""
 
@@ -140,9 +162,20 @@ def write_default_config(path: Path) -> None:
 
 
 def _load_yaml(path: Path) -> dict:
-    """Read and parse *path* after verifying its permissions."""
-    _check_permissions(path)
+    """Read and parse *path*, verifying permissions on the OPEN descriptor.
+
+    fstat-after-open closes the TOCTOU window between a stat-based check
+    and the read (AUDIT-A18): the mode is checked on the exact file the
+    process is about to parse, so a swap between check and open cannot
+    smuggle in a world-readable file.
+    """
     with path.open("r", encoding="utf-8") as fh:
+        mode = os.fstat(fh.fileno()).st_mode & 0o777
+        if mode != 0o600:
+            raise ConfigSecurityError(
+                f"Refusing to read {path}: permissions are {oct(mode)}. "
+                f"Run: chmod 600 {path}"
+            )
         return yaml.safe_load(fh) or {}
 
 
