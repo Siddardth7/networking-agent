@@ -377,6 +377,13 @@ def find_contacts(
     Returns the list of enriched ContactCandidate objects written to DB.
     Raises QuotaExhausted (from Serper) when the search quota is exhausted.
     On Hunter quota exhaustion, marks remaining contacts HUNTER_EXHAUSTED and continues.
+
+    Email enrichment is opt-in (v0.2.1): when
+    ``pipeline.enable_email_enrichment`` is false (the default) and no
+    *hunter_provider* is injected, the Hunter phase is skipped entirely —
+    no key required, zero Hunter quota spent — and contacts are stored
+    with ``source_provider='EMAIL_DISABLED'``. An explicitly injected
+    *hunter_provider* always wins over the toggle.
     """
     init_db()
     cfg = load_config()
@@ -384,9 +391,13 @@ def find_contacts(
     if serper_provider is None:
         if not cfg.serper_api_key:
             raise ValueError("SERPER_API_KEY not configured")
-        serper_provider = SerperProvider(api_key=cfg.serper_api_key, quota_manager=QuotaManager())
+        serper_provider = SerperProvider(
+            api_key=cfg.serper_api_key,
+            quota_manager=QuotaManager(),
+            cache_ttl_days=cfg.search_cache_ttl_days,
+        )
 
-    if hunter_provider is None:
+    if hunter_provider is None and cfg.enable_email_enrichment:
         if not cfg.hunter_api_key:
             raise ValueError("HUNTER_API_KEY not configured")
         hunter_provider = HunterProvider(api_key=cfg.hunter_api_key, quota_manager=QuotaManager())
@@ -426,7 +437,12 @@ def find_contacts(
     enriched: list[tuple[ContactCandidate, EmailResult]] = []
 
     for candidate in candidates:
-        if hunter_exhausted:
+        if hunter_provider is None:
+            # Enrichment disabled (v0.2.1 default) — no key, no quota spend.
+            email_result = EmailResult(
+                email=None, verified=False, confidence=0, source="EMAIL_DISABLED"
+            )
+        elif hunter_exhausted:
             email_result = EmailResult(
                 email=None, verified=False, confidence=0, source="HUNTER_EXHAUSTED"
             )

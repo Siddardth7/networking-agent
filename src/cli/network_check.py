@@ -22,7 +22,7 @@ from src.providers.hunter import scrubbed_hunter_call
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-LATEST_MIGRATION = 3
+LATEST_MIGRATION = 4  # 004_search_cache (v0.2.1)
 
 # ---------------------------------------------------------------------------
 # Test injection hook — set before calling run_checks()
@@ -247,6 +247,17 @@ def _check_hunter() -> tuple[list[str], bool]:
         from src.providers.quota_manager import QuotaManager  # noqa: PLC0415
 
         cfg = load_config()
+        if not cfg.enable_email_enrichment:
+            # v0.2.1: email enrichment is opt-in; a missing Hunter key must
+            # not fail preflight when the pipeline will never call Hunter.
+            lines.append(
+                _ok(
+                    "Hunter: skipped — email enrichment disabled "
+                    "(pipeline.enable_email_enrichment: false)"
+                )
+            )
+            return lines, False
+
         key = cfg.hunter_api_key
         if not key:
             lines.append(

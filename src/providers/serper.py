@@ -9,9 +9,10 @@ from __future__ import annotations
 import httpx
 
 from src.core.schemas import ContactCandidate
+from src.core.search_cache import cache_get, cache_put
 from src.providers.base import SearchProvider, register_provider
 from src.providers.quota_manager import QuotaManager
-from src.providers.retry import with_retry
+from src.providers.retry import QuotaExhausted, with_retry
 
 __all__ = ["SerperProvider"]
 
@@ -52,10 +53,51 @@ class SerperProvider(SearchProvider):
         api_key: str,
         quota_manager: QuotaManager | None = None,
         http_client: httpx.Client | None = None,
+        cache_ttl_days: int = 0,
     ) -> None:
         self._api_key = api_key
         self._quota_manager = quota_manager
         self._http_client = http_client or httpx.Client(timeout=30.0)
+        # Response cache TTL in days (v0.2.1 free-quota work). 0 = disabled
+        # — the default, so unit callers get pure pass-through behavior.
+        # The finder wires this from config.search_cache_ttl_days; cache
+        # hits skip both the HTTP call and the quota increment.
+        self._cache_ttl_days = cache_ttl_days
+
+    def _fetch_json(self, body: dict) -> dict:
+        """POST *body* to Serper, with read-through response caching.
+
+        Inputs: the JSON request body. Output: the parsed response dict.
+        Side effects: on cache miss — one quota increment and one HTTP
+        call, then the response is stored; on hit — none. Raises
+        QuotaExhausted / AuthError / httpx errors exactly like the
+        uncached path (cache errors never mask provider errors because
+        hits return before any network activity).
+        """
+        cached = cache_get("serper", body, self._cache_ttl_days)
+        if cached is not None:
+            return cached
+
+        if self._quota_manager is not None:
+            self._quota_manager.increment("serper", 1)
+
+        headers = {
+            "X-API-KEY": self._api_key,
+            "Content-Type": "application/json",
+        }
+
+        def _do_request() -> httpx.Response:
+            return self._http_client.post(
+                _SERPER_ENDPOINT,
+                headers=headers,
+                json=body,
+            )
+
+        response = with_retry(_do_request)
+        data = response.json()
+        if self._cache_ttl_days > 0 and isinstance(data, dict):
+            cache_put("serper", body, data)
+        return data
 
     def close(self) -> None:
         """Release the underlying httpx.Client (AUDIT-A25).
@@ -116,11 +158,6 @@ class SerperProvider(SearchProvider):
         keywords_str = " OR ".join(role_keywords)
         query = f'site:linkedin.com/in "{company}" ({keywords_str})'
 
-        headers = {
-            "X-API-KEY": self._api_key,
-            "Content-Type": "application/json",
-        }
-
         candidates: list[ContactCandidate] = []
         seen_urls: set[str] = set()
         page = 1
@@ -128,23 +165,12 @@ class SerperProvider(SearchProvider):
         while len(candidates) < limit:
             batch_size = min(serper_max_num, limit - len(candidates))
 
-            # Increment quota BEFORE each network call
-            if self._quota_manager is not None:
-                self._quota_manager.increment("serper", 1)
-
             body: dict = {"q": query, "num": batch_size}
             if page > 1:
                 body["page"] = page
 
-            def _do_request(b=body) -> httpx.Response:
-                return self._http_client.post(
-                    _SERPER_ENDPOINT,
-                    headers=headers,
-                    json=b,
-                )
-
-            response = with_retry(_do_request)
-            data = response.json()
+            # Read-through cache: a hit skips both quota and HTTP (v0.2.1).
+            data = self._fetch_json(body)
             organic = data.get("organic", [])
 
             if not organic:
@@ -188,27 +214,13 @@ class SerperProvider(SearchProvider):
         Optional[str]
             The ``snippet`` field of the first organic result, or ``None``.
         """
-        if self._quota_manager is not None:
-            self._quota_manager.increment("serper", 1)
-
-        headers = {
-            "X-API-KEY": self._api_key,
-            "Content-Type": "application/json",
-        }
         body = {"q": query, "num": 3}
-
-        def _do_request() -> httpx.Response:
-            return self._http_client.post(
-                _SERPER_ENDPOINT,
-                headers=headers,
-                json=body,
-            )
-
         try:
-            response = with_retry(_do_request)
+            data = self._fetch_json(body)
+        except QuotaExhausted:
+            raise  # documented contract: quota exhaustion propagates
         except Exception:
             return None
-        data = response.json()
         for item in data.get("organic", []):
             snippet = (item.get("snippet") or "").strip()
             if snippet:

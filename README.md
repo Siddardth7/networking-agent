@@ -10,7 +10,9 @@ A Claude Code plugin that automates professional networking outreach for aerospa
 
 - Python 3.11+
 - Claude Code with plugin support (`claude plugin validate` available)
-- API keys for Anthropic, Serper, and Hunter (free tiers sufficient for personal use)
+- API keys for Anthropic and Serper (free tiers sufficient for personal use).
+  Hunter is **optional** — email enrichment is opt-in (see below); without it
+  the pipeline drafts LinkedIn connection + post-connection messages only.
 
 ---
 
@@ -135,7 +137,8 @@ but approvable. Tune the gate in `config.yaml` under `quality:`
 
 ## Cost Estimate
 
-All AI calls use `claude-haiku-4-5-20251001`. Per-run cost is approximately **$0.10–0.30 per company**.
+All AI calls use `claude-haiku-4-5-20251001` (Sonnet for the critic pass).
+Per-run cost is approximately **$0.10–0.30 per company**.
 
 | Companies/month | Contacts/company | Est. Claude cost | Serper cost | Hunter cost | Total |
 |---|---|---|---|---|---|
@@ -144,6 +147,25 @@ All AI calls use `claude-haiku-4-5-20251001`. Per-run cost is approximately **$0
 | 50 | 5 | ~$0.50 | ~$0.20 | ~$0.50 | ~$1.20 |
 
 See [docs/COSTS.md](docs/COSTS.md) for a detailed per-stage cost breakdown and tips for keeping costs low.
+
+### Staying within free tiers
+
+The default configuration keeps a personal workload free or near-free:
+
+- **Hunter email enrichment is opt-in** (`pipeline.enable_email_enrichment`,
+  default `false`). The free tier is only 25 lookups/month (~1.5 runs), and
+  LinkedIn referrals convert far better than cold email — so the default run
+  spends **zero Hunter quota** and needs no Hunter key. Contacts without an
+  email are stored as `EMAIL_DISABLED` and the drafter skips the cold-email
+  channel. Set it to `true` (and add a Hunter key) only when you specifically
+  want cold-email drafts.
+- **Search responses are cached** (`providers.search_cache_ttl_days`, default
+  14 days). A repeated, resumed, or re-tried run on the same company within
+  the window is served from the local SQLite cache and spends **zero Serper
+  credits**. Set to `0` to disable caching and always hit the live API.
+
+With both defaults, the only unavoidable cost is the Claude API
+(~$0.15–0.30/run), and re-running the same company is essentially free.
 
 ---
 

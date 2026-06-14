@@ -16,7 +16,7 @@ def _open_conn(db_path: Path) -> sqlite3.Connection:
 
 # Latest applied migration number. Update when adding a new
 # src/core/migrations/NNN_*.sql file.
-LATEST_VERSION = 3
+LATEST_VERSION = 4  # 004_search_cache (v0.2.1)
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,33 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-06-11
+
+Free-quota release: default runs now spend zero Hunter credits and never
+pay twice for the same search.
+
+### Added
+- Search-response cache (`search_cache` table, migration 004): Serper
+  responses are cached in SQLite keyed by request payload with a
+  configurable TTL (`providers.search_cache_ttl_days`, default 14 days;
+  0 disables). Cache hits skip both the HTTP call and the quota
+  increment, so re-runs, resumed runs, and trial iterations are free.
+
+### Changed
+- **Hunter email enrichment is now OPT-IN** (`pipeline.enable_email_enrichment`,
+  default `false`). Rationale: the free tier is 25 lookups/month (~1.5 runs)
+  while LinkedIn channels convert far better and need no email. With
+  enrichment off, the finder requires no Hunter key, spends zero Hunter
+  quota, marks contacts `EMAIL_DISABLED`, and the drafter skips cold email
+  (existing tested path). An explicitly injected provider always wins over
+  the toggle. **Migration note:** users who relied on cold-email drafting
+  must set `pipeline.enable_email_enrichment: true` in config.yaml.
+- `/network-check` no longer fails preflight on a missing Hunter key when
+  enrichment is disabled (reports an informational skip instead).
+
+### Tests
+- 485 -> 505 passing; coverage 90.2%.
+
 ## [0.2.0] - 2026-06-10
 
 Quality release: closes every open item from DRAFTER_AUDIT_2026-06-06 and the

@@ -101,8 +101,18 @@ class Config:
     serper_monthly_limit: int = 100
     hunter_monthly_limit: int = 25
 
+    # Search-response cache TTL in days (v0.2.1). Repeat queries within the
+    # window are served from SQLite and spend zero search credits. 0 disables.
+    search_cache_ttl_days: int = 14
+
     # Pipeline settings
     finder_limit: int = 5
+
+    # Hunter email enrichment is OPT-IN (v0.2.1). The free tier is 25
+    # lookups/month (~1.5 runs) and LinkedIn channels convert far better, so
+    # the default run spends zero Hunter quota; cold email is skipped for
+    # contacts without an address (existing tested path).
+    enable_email_enrichment: bool = False
 
     # Quality / channel constraints (Layer 3+5). These are the hard limits
     # enforced in code by `guardrails.hard_check` — keep in sync with the
@@ -219,7 +229,9 @@ def load_config() -> Config:
     # --- Numeric settings (YAML only; no env override needed per spec) ---
     serper_monthly_limit = int(yaml_providers.get("serper_monthly_limit", 100))
     hunter_monthly_limit = int(yaml_providers.get("hunter_monthly_limit", 25))
+    search_cache_ttl_days = int(yaml_providers.get("search_cache_ttl_days", 14))
     finder_limit = int(yaml_pipeline.get("finder_limit", 5))
+    enable_email_enrichment = bool(yaml_pipeline.get("enable_email_enrichment", False))
 
     linkedin_char_limit = int(yaml_quality.get("linkedin_char_limit", 200))
     email_word_limit = int(yaml_quality.get("email_word_limit", 150))
@@ -233,7 +245,9 @@ def load_config() -> Config:
         hunter_api_key=hunter_api_key,
         serper_monthly_limit=serper_monthly_limit,
         hunter_monthly_limit=hunter_monthly_limit,
+        search_cache_ttl_days=search_cache_ttl_days,
         finder_limit=finder_limit,
+        enable_email_enrichment=enable_email_enrichment,
         linkedin_char_limit=linkedin_char_limit,
         email_word_limit=email_word_limit,
         batch_hard_fail_threshold=batch_hard_fail_threshold,

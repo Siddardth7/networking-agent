@@ -177,6 +177,17 @@ class TestBadHunter:
 
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
 
+        import src.core.config as config_module
+
+        real_load = config_module.load_config
+
+        def _enrichment_on():
+            cfg = real_load()
+            cfg.enable_email_enrichment = True  # v0.2.1: opt back in
+            return cfg
+
+        monkeypatch.setattr(config_module, "load_config", _enrichment_on)
+
         client = make_client(anthropic=200, serper=200, hunter=401)
         network_check.set_http_client(client)
 
@@ -198,6 +209,17 @@ class TestHunterLowQuota:
         init_db()
 
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+
+        import src.core.config as config_module
+
+        real_load = config_module.load_config
+
+        def _enrichment_on():
+            cfg = real_load()
+            cfg.enable_email_enrichment = True  # v0.2.1: opt back in
+            return cfg
+
+        monkeypatch.setattr(config_module, "load_config", _enrichment_on)
 
         # Monkeypatch QuotaManager.remaining to return 3 for "hunter"
         original_remaining = QuotaManager.remaining

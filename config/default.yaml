@@ -10,9 +10,12 @@ keys:
 providers:
   serper_monthly_limit: 100   # free tier
   hunter_monthly_limit: 25    # free tier
+  search_cache_ttl_days: 14   # repeat searches served from SQLite; 0 disables
 
 pipeline:
   finder_limit: 5             # contacts discovered per company
+  enable_email_enrichment: false  # Hunter is OPT-IN (free tier = 25 lookups/mo);
+                                  # LinkedIn channels work without it
 
 quality:
   linkedin_char_limit: 200    # LinkedIn free-account connection-note cap
