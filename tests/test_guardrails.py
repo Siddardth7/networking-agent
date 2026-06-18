@@ -33,6 +33,10 @@ class TestCheckDraft:
         result = check_draft("Reaching out because of your impressive work at SpaceX.")
         assert result == "your impressive work"
 
+    def test_exactly_the_kind_of_detected(self):
+        result = check_draft("Your background is exactly the kind of expertise we value.")
+        assert result == "exactly the kind of"
+
     def test_case_insensitive(self):
         assert check_draft("i noticed your post.") == "I noticed"
         assert check_draft("YOUR IMPRESSIVE WORK is well known.") == "your impressive work"
@@ -47,7 +51,13 @@ class TestCheckDraft:
         assert result == "I noticed"
 
     def test_blocklist_covers_all_expected_phrases(self):
-        expected = {"I noticed", "I admire", "I came across your company", "your impressive work"}
+        expected = {
+            "I noticed",
+            "I admire",
+            "I came across your company",
+            "your impressive work",
+            "exactly the kind of",
+        }
         assert expected.issubset(set(BLOCKLIST))
 
     @pytest.mark.parametrize("phrase", BLOCKLIST)

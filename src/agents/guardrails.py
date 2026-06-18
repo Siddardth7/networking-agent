@@ -36,6 +36,7 @@ _SEED_BLOCKLIST: list[str] = [
     "I admire",
     "I came across your company",
     "your impressive work",
+    "exactly the kind of",
 ]
 
 

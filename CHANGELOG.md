@@ -6,6 +6,18 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-06-18
+
+Quality release: closes the one actionable defect surfaced by the
+AST SpaceMobile trial run (`docs/TRIAL_AST_SPACEMOBILE_2026-06-13.md`).
+
+### Added
+- Seed blocklist now flags the AI tell **"exactly the kind of"**, which
+  appeared in 4/30 trial drafts (including an otherwise-sendable one). The
+  phrase was already named in the humanizer's fix prompt but was not
+  enforced by the guardrail. Detection is unit-tested in
+  `tests/test_guardrails.py`.
+
 ## [0.2.1] - 2026-06-11
 
 Free-quota release: default runs now spend zero Hunter credits and never

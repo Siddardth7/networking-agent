@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "networking-agent"
-version = "0.2.1"
+version = "0.2.2"
 description = "Autonomous 3-agent outreach pipeline Claude Code plugin"
 requires-python = ">=3.11"
 authors = [{name = "Siddardth Pathipaka"}]
