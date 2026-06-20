@@ -157,10 +157,11 @@ class TestHardFailReasonPersisted:
 
     def test_hard_fail_trace_has_reason(self, db_path):
         cid = _seed_one_contact()
-        over_length = "x" * 250  # over the 200-char LinkedIn cap
+        over_length = "x" * 320  # over the 280-char cutoff
         client = _mk_client(
             [
-                over_length,  # CONN gen 1 (no soft faults → no regen)
+                over_length,  # CONN gen 1 (over-length → length-regen)
+                "y" * 320,  # CONN length-regen still over the cutoff → HARD_FAIL
                 "Clean follow-up message.",  # POST gen 1
             ]
         )
@@ -171,7 +172,7 @@ class TestHardFailReasonPersisted:
         trace = json.loads(conn_draft.critic_trace)
         assert trace["quality_code"] == "HARD_FAIL"
         assert trace["reason"]
-        assert "250 chars" in trace["reason"]
+        assert "320 chars" in trace["reason"]
 
 
 class TestHeldReasonRendering:
@@ -181,7 +182,7 @@ class TestHeldReasonRendering:
         from src.agents.artifact_writer import _format_critic_trace
         from src.agents.critic import hard_fail_trace
 
-        out = _format_critic_trace(hard_fail_trace("LinkedIn note is 250 chars (limit 200)"))
+        out = _format_critic_trace(hard_fail_trace("LinkedIn note is 250 chars (limit 280)"))
         assert out is not None
         assert "Held because:" in out
         assert "250 chars" in out

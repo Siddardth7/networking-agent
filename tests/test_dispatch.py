@@ -159,7 +159,7 @@ class TestDoubleGuardrail:
 
         # Both attempts return a blocked phrase
         client = Mock()
-        flagged_text = "I admire your work at Acme and noticed your profile."
+        flagged_text = "I noticed your impressive work at Acme."
         msg = Mock()
         msg.content = [Mock(text=flagged_text)]
         client.messages.create.return_value = msg

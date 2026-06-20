@@ -6,6 +6,46 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-19
+
+Voice overhaul: the Drafter now writes in the user's own outreach voice
+(a 4-part model, persona-tuned) instead of generic LLM phrasing. Validated
+on an AST SpaceMobile re-run (30 drafts): zero fabrication, zero placeholder
+leaks, zero over-length notes, full opener variety, and the "exactly the
+kind of" AI tell eliminated (was 4/30).
+
+### Added
+- **4-Part Message Model** (Intro → Source → Hook → Close) encoded in
+  `voice.md` and all four persona templates. Context-first openers ("how/why
+  I found you") are now first-class; each persona specializes the Source,
+  Hook, and Close (recruiters direct/role-specific; senior managers
+  admire-and-stay-connected with no hard ask; peers ask about their work;
+  alumni lead with the shared school and ask one rotating company question).
+- **Humanizer** (`src/agents/humanizer.py`): a deterministic, grammatically
+  safe post-generation pass that strips filler intensifiers the soft
+  blocklist can't shake (the "exactly the kind/type/sort of …" /
+  "exactly the direction" family). Wired into the Drafter after each
+  generation so the tell never reaches the gate or the wire.
+- **Length-regen** for LinkedIn connection notes: an over-cap note gets one
+  compression pass before HARD_FAIL (closes the "no auto-trim" gap).
+
+### Changed
+- **LinkedIn connection-note cap corrected: 200 → 280 characters.** The 200
+  value was a misread ("free-account hard limit"); LinkedIn's note cap is 300
+  on all plans (free accounts are limited on note *count*, not length). 280
+  is a safe margin (spaces count, emojis count double). Wired through config,
+  guardrail, prompt text, and all persona templates.
+- **Blocklist specificity-relaxed:** "I admire" and "I came across" are no
+  longer blunt hard-bans — specific admiration/sourcing is a valid hook, and
+  the critic's specificity dimension judges genericness. Unambiguous tells
+  ("your impressive work", "exactly the kind of") remain hard-blocked.
+- Anthropic client now uses `max_retries=8`: the parallel Drafter can burst
+  past lower-tier input-token rate limits; the larger retry budget lets a run
+  self-pace and complete instead of failing mid-batch.
+- Refreshed `config/voice.example.md` to the 4-part model (the prior installed
+  voice doc was stale: claimed a 300-char cap and instructed `[RESEARCH_NEEDED]`
+  placeholders, both since removed).
+
 ## [0.2.2] - 2026-06-18
 
 Quality release: closes the one actionable defect surfaced by the

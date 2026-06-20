@@ -16,6 +16,7 @@ from pathlib import Path
 
 from src.agents.achievement_matcher import load_resume_library, match_achievements
 from src.agents.critic import critique_draft, hard_fail_trace
+from src.agents.humanizer import humanize
 from src.agents.guardrails import (
     check_draft,
     detect_multi_ask,
@@ -203,6 +204,20 @@ _ONE_ASK_REGEN_NOTE = (
 _INTRO_REGEN_NOTE = (
     "It stated the sender's program/school more than once (body AND "
     "signature). State the identity exactly once."
+)
+
+# Regeneration note injected when a LinkedIn connection note exceeds the hard
+# character cap. There is no auto-trim, so the generator gets one chance to
+# compress before the hard_check HARD_FAILs it on length. The context-first
+# opener is good, but a connection note still has a cap (~280) — a generic
+# "exploring roles" preamble is the usual culprit when it overflows.
+_LENGTH_REGEN_NOTE = (
+    "The note was {n} characters but the hard limit is {limit}. Cut it to "
+    "under {target} characters. The biggest savings: drop any generic "
+    "'exploring roles' preamble AND trim self-identity to at most "
+    "'MS AE at UIUC, composites' (or omit it — the profile carries it). "
+    "Spend the budget on the one specific detail about this person plus a "
+    "short close like 'Would value connecting.'"
 )
 
 # Cross-contact opener bookkeeping (AUDIT-A6). Openers are normalized to a
@@ -403,7 +418,7 @@ def _draft_one_channel(
     persona_template: str,
     voice_doc: str,
     bullets: list,
-    linkedin_char_limit: int = 200,
+    linkedin_char_limit: int = 280,
     email_word_limit: int = 150,
     enable_critic: bool = True,
     opener_registry: OpenerRegistry | None = None,
@@ -419,7 +434,7 @@ def _draft_one_channel(
     prompt = _build_prompt(
         contact, channel, Persona(contact["persona"]), bullets, persona_template, voice_doc
     )
-    text = _call_claude(prompt, anthropic_client)
+    text = humanize(_call_claude(prompt, anthropic_client))
 
     # Generation-fault pass: collect every detectable fault in the first
     # generation, then regenerate ONCE with all corrective notes combined.
@@ -446,6 +461,18 @@ def _draft_one_channel(
     if detect_redundant_intro(check_body):
         extra_notes.append(_INTRO_REGEN_NOTE)
 
+    # Length pre-check (LinkedIn connection note only): if the note busts the
+    # hard char cap, give the generator one chance to compress before the
+    # hard_check HARD_FAILs it. There is no auto-trim retry otherwise.
+    if channel == Channel.LINKEDIN_CONNECTION and len(check_body) > linkedin_char_limit:
+        extra_notes.append(
+            _LENGTH_REGEN_NOTE.format(
+                n=len(check_body),
+                limit=linkedin_char_limit,
+                target=max(0, linkedin_char_limit - 25),
+            )
+        )
+
     # Cross-contact opener variety (AUDIT-A6): if this opener already hit
     # the per-run repeat cap, ask for a structurally different opening.
     if opener_registry is not None and opener_registry.is_overused(
@@ -466,7 +493,7 @@ def _draft_one_channel(
             anti_phrases=anti_phrases or None,
             extra_instructions=extra_notes or None,
         )
-        text = _call_claude(prompt2, anthropic_client)
+        text = humanize(_call_claude(prompt2, anthropic_client))
 
     # Parse body/subject before length-checking so we measure what's sent.
     body, subject = (

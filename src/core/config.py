@@ -117,7 +117,7 @@ class Config:
     # Quality / channel constraints (Layer 3+5). These are the hard limits
     # enforced in code by `guardrails.hard_check` — keep in sync with the
     # prompt text in `drafter._CHANNEL_CONSTRAINTS`.
-    linkedin_char_limit: int = 200  # free LinkedIn account cap
+    linkedin_char_limit: int = 280  # safe cutoff under LinkedIn's 300-char note cap (margin for spaces/emoji; the cap is 300 on all plans — free accounts are limited on note *count*, not length)
     email_word_limit: int = 150  # cold-email body word cap
 
     # Batch-quality checkpoint between Drafter and Marketer.
@@ -233,7 +233,7 @@ def load_config() -> Config:
     finder_limit = int(yaml_pipeline.get("finder_limit", 5))
     enable_email_enrichment = bool(yaml_pipeline.get("enable_email_enrichment", False))
 
-    linkedin_char_limit = int(yaml_quality.get("linkedin_char_limit", 200))
+    linkedin_char_limit = int(yaml_quality.get("linkedin_char_limit", 280))
     email_word_limit = int(yaml_quality.get("email_word_limit", 150))
     batch_hard_fail_threshold = float(yaml_quality.get("batch_hard_fail_threshold", 0.0))
     enable_critic = bool(yaml_quality.get("enable_critic", True))
@@ -273,4 +273,8 @@ def get_anthropic_client(api_key: str | None = None) -> Anthropic:
 
     from anthropic import Anthropic  # local import keeps module import-light
 
-    return Anthropic(api_key=api_key)
+    # Generous retry budget: the parallel Drafter can burst past lower-tier
+    # input-token-per-minute rate limits. The SDK retries 429s with backoff
+    # (honoring Retry-After), so a larger budget lets a run self-pace and
+    # complete instead of failing mid-batch. SDK default is 2.
+    return Anthropic(api_key=api_key, max_retries=8)

@@ -144,10 +144,13 @@ class TestQualityCodePersisted:
 
     def test_overlong_linkedin_note_marked_hard_fail(self, db_path):
         _, ids = _seed(1)
-        long_note = "x" * 250  # > 200-char LinkedIn cap
+        long_note = "x" * 320  # > 280-char cutoff
+        # Both the first draft AND its length-regen are over-length, so the
+        # note cannot be compressed under the cap and must HARD_FAIL.
         client = _mk_client(
             [
                 long_note,
+                "y" * 320,  # length-regen still over the cutoff
                 "Conversational follow-up.",
                 "Subject: hi\n\nBody.",
             ]
@@ -155,6 +158,23 @@ class TestQualityCodePersisted:
         result = draft_for_contacts(ids, anthropic_client=client)
         conn_draft = next(d for d in result[ids[0]] if d.channel == "LINKEDIN_CONNECTION")
         assert conn_draft.quality_code == "HARD_FAIL"
+
+    def test_overlong_note_compressed_by_length_regen(self, db_path):
+        """An over-length first draft whose regen fits the cap passes — the
+        length-regen gives the generator one chance to compress."""
+        _, ids = _seed(1)
+        client = _mk_client(
+            [
+                "x" * 320,  # CONN gen 1: over the cutoff → length-regen
+                "Short, specific connection note.",  # CONN regen: fits → OK
+                "Conversational follow-up.",  # POST
+                "Subject: hi\n\nBody.",  # EMAIL
+            ]
+        )
+        result = draft_for_contacts(ids, anthropic_client=client)
+        conn_draft = next(d for d in result[ids[0]] if d.channel == "LINKEDIN_CONNECTION")
+        assert conn_draft.quality_code != "HARD_FAIL"
+        assert len(conn_draft.body) <= 280
 
 
 # ---------------------------------------------------------------------------

@@ -39,7 +39,8 @@ DEFAULT_TIMEOUT_SECONDS: float = 90.0
 CHANNEL_CONSTRAINTS: dict[Channel, str] = {
     Channel.LINKEDIN_CONNECTION: (
         "Write ONLY the LinkedIn connection request note. "
-        "Hard limit: 200 characters total (including spaces) — LinkedIn free-account cap. "
+        "Hard limit: 280 characters total (including spaces) — a safe margin under "
+        "LinkedIn's 300-char note cap. Aim for 220-270 characters. "
         "Do NOT include a subject line."
     ),
     Channel.LINKEDIN_POST_CONNECTION: (

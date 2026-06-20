@@ -28,11 +28,12 @@ class TestChannelConstraints:
     def test_covers_every_channel(self):
         assert set(CHANNEL_CONSTRAINTS.keys()) == set(Channel)
 
-    def test_linkedin_uses_200_char_cap(self):
+    def test_linkedin_uses_280_char_cutoff(self):
         text = CHANNEL_CONSTRAINTS[Channel.LINKEDIN_CONNECTION]
-        # The free-account cap; the legacy 300-char value must be gone.
-        assert "200" in text
-        assert "300" not in text
+        # 280-char safe cutoff (under LinkedIn's real 300-char note cap, which
+        # the text may reference); the legacy 200 value must be gone.
+        assert "280" in text
+        assert "200" not in text
 
     def test_email_uses_150_word_cap(self):
         text = CHANNEL_CONSTRAINTS[Channel.COLD_EMAIL]

@@ -184,7 +184,7 @@ class TestDraftForContacts:
         _, contact_ids = _seed_contacts(1)
         responses = [
             "I noticed your profile.",  # LINKEDIN_CONNECTION: BAD
-            "I admire your composites work greatly.",  # regen: ALSO BAD → quality_flag
+            "Your impressive work in composites stood out.",  # regen: ALSO BAD → quality_flag
             "Clean post-connection message.",  # LINKEDIN_POST_CONNECTION
             "Subject: Role inquiry\n\nHello.",  # COLD_EMAIL
         ]

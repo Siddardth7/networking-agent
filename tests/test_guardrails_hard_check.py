@@ -159,7 +159,7 @@ class TestVoiceMdMerge:
         bl = _build_blocklist(voice)
         # Seed phrases always present.
         assert "I noticed" in bl
-        assert "I admire" in bl
+        assert "exactly the kind of" in bl
         # Voice-supplied phrase joined in.
         assert "custom-voice-phrase" in bl
 

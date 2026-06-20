@@ -31,9 +31,14 @@ def _default_voice_path() -> Path:
 
 # Always-enforced seed phrases. Voice.md's "## Forbidden Phrases" section is
 # merged in at import time so there is a single source of truth.
+# NOTE: "I admire" is deliberately NOT here. Per the 4-Part Message Model,
+# specific admiration tied to a named project ("I admire your work on X") is a
+# valid hook; only GENERIC admiration is a defect. The blunt substring ban
+# blocked the good form too, so specificity is now judged by the critic
+# (specificity dimension), while generic tells like "your impressive work"
+# remain hard-blocked here.
 _SEED_BLOCKLIST: list[str] = [
     "I noticed",
-    "I admire",
     "I came across your company",
     "your impressive work",
     "exactly the kind of",
@@ -230,7 +235,7 @@ def hard_check(
     text: str,
     source_facts: str | None = None,
     channel: str | None = None,
-    linkedin_char_limit: int = 200,
+    linkedin_char_limit: int = 280,
     email_word_limit: int = 150,
 ) -> HardCheckResult:
     """Apply the hard-fail safety gate to a generated draft.

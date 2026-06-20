@@ -21,9 +21,10 @@ class TestCheckDraft:
         result = check_draft("I noticed your profile and wanted to connect.")
         assert result == "I noticed"
 
-    def test_i_admire_detected(self):
-        result = check_draft("I admire the work your team has done on composites.")
-        assert result == "I admire"
+    def test_specific_admiration_not_hard_blocked(self):
+        # "I admire" is no longer a blunt hard-ban — specific admiration is a
+        # valid hook (the critic judges specificity). Generic tells still fail.
+        assert check_draft("I admire your work on the 787 empennage program.") is None
 
     def test_came_across_detected(self):
         result = check_draft("I came across your company and was impressed.")
@@ -43,17 +44,15 @@ class TestCheckDraft:
 
     def test_returns_first_match(self):
         # Multiple phrases — should return whichever appears first in BLOCKLIST
-        text = "I admire your impressive work and I noticed your profile."
+        text = "your impressive work and I noticed your profile."
         result = check_draft(text)
-        # "I noticed" comes before "I admire" in BLOCKLIST... actually no,
-        # BLOCKLIST order is: "I noticed", "I admire", ...
-        # "I noticed" appears in the text, so that should be returned first
+        # BLOCKLIST order is "I noticed" before "your impressive work", so the
+        # iteration returns "I noticed" first even though it appears later.
         assert result == "I noticed"
 
     def test_blocklist_covers_all_expected_phrases(self):
         expected = {
             "I noticed",
-            "I admire",
             "I came across your company",
             "your impressive work",
             "exactly the kind of",
