@@ -133,6 +133,13 @@ class Config:
     # normalized opener per channel before the drafter forces a rewrite.
     opener_max_repeats: int = 2
 
+    # Phase 3 (ask-rotation): when several contacts at the SAME company share a
+    # rotation-eligible persona (alumni / peer), vary the one ask across them so
+    # the group of short conversations paints a fuller picture instead of
+    # sending the same script N times. Disable to fall back to the model
+    # picking the single most useful angle per contact independently.
+    enable_ask_rotation: bool = True
+
 
 def _check_permissions(path: Path) -> None:
     """Raise ConfigSecurityError if path mode is not 0o600."""
@@ -238,6 +245,7 @@ def load_config() -> Config:
     batch_hard_fail_threshold = float(yaml_quality.get("batch_hard_fail_threshold", 0.0))
     enable_critic = bool(yaml_quality.get("enable_critic", True))
     opener_max_repeats = int(yaml_quality.get("opener_max_repeats", 2))
+    enable_ask_rotation = bool(yaml_quality.get("enable_ask_rotation", True))
 
     return Config(
         anthropic_api_key=anthropic_api_key,
@@ -253,6 +261,7 @@ def load_config() -> Config:
         batch_hard_fail_threshold=batch_hard_fail_threshold,
         enable_critic=enable_critic,
         opener_max_repeats=opener_max_repeats,
+        enable_ask_rotation=enable_ask_rotation,
     )
 
 

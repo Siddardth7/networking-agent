@@ -6,6 +6,45 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-20
+
+Phase 3 — ask-rotation: same-company alumni/peers now get *different* questions
+instead of the same script. The validation run also caught and fixed a serious
+pre-existing bug where the Drafter fabricated the contact's employer.
+
+### Added
+- **Ask-rotation across same-company contacts (Phase 3).** When several
+  contacts at the *same* company share a rotation-eligible persona — alumni or
+  peer engineer — each is assigned a *distinct* ask angle before drafting, and
+  that angle is injected into its generation prompt. Five alumni at one company
+  now get five different questions (hiring climate / sponsorship / culture /
+  transition / who-to-talk-to) instead of the same script. Peers rotate over a
+  parallel set (day-to-day work / a specific project / culture / how they broke
+  in / advice for someone finishing an MS). Assignment is deterministic and
+  computed once up front (no extra LLM calls, race-free) via
+  `drafter.assign_ask_angles`; recruiters (role-specific ask) and senior
+  managers (no hard ask) are not rotated, and a lone contact gets no
+  assignment — the model still picks the single best angle for them, exactly as
+  before. New `enable_ask_rotation` config knob (default on). The alumni and
+  peer persona templates' Close sections enumerate the rotatable angles to keep
+  the prose in sync with the injected instruction.
+
+### Fixed
+- **Drafter no longer fabricates the contact's employer.** The generation
+  prompt never received the company name — only `company_id` — so when a
+  persona template referenced "a fellow alum at {Company}" the model invented a
+  plausible-but-wrong employer (Boeing, Lockheed, Skydweller) or leaked a
+  literal `[Company]`. `_load_contact` now LEFT JOINs `companies` and the prompt
+  carries a `Company:` line, plus a FACT DISCIPLINE rule pinning the model to
+  that exact name (and to "your team" when it's Unknown). Surfaced by the Phase
+  3 multi-alumni validation run; re-validated to zero fabrication.
+- **Placeholder detector now catches mixed-case brackets.** The bracket gate was
+  all-caps-only (`[COMPANY]`), so a title-case `[Company]` slipped through as
+  OK. Widened to catch `[Company]` / `[Team Name]` / `[your team]` while still
+  ignoring lowercase citation markers like `[smith2023]`.
+- Corrected `config/default.yaml`'s `linkedin_char_limit` from a stale `200` to
+  `280` (a v0.3.0 200→280 correction had missed this template file).
+
 ## [0.3.0] - 2026-06-19
 
 Voice overhaul: the Drafter now writes in the user's own outreach voice

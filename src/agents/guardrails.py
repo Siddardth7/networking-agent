@@ -114,9 +114,15 @@ def check_draft(text: str) -> str | None:
 # Hard-fail gate
 # ---------------------------------------------------------------------------
 
-# Any bracketed all-caps token (``[RESEARCH_NEEDED]``, ``[COMPANY]``, etc.) —
-# placeholders that must never reach the wire.
-_BRACKET_PATTERN = re.compile(r"\[[A-Z][A-Z0-9_]+\]")
+# Any bracketed placeholder token (``[RESEARCH_NEEDED]``, ``[COMPANY]``,
+# ``[Company]``, ``[Team Name]``, ``[your team]``) — must never reach the wire.
+# Heuristic that separates placeholders from lowercase citation markers like
+# ``[smith2023]``: the token must start with a letter AND contain either an
+# uppercase letter or an internal space (the lookahead). That catches
+# ``[Company]`` (uppercase) and ``[your team]`` (space) but leaves ``[smith2023]``
+# alone. The old all-caps-only form missed mixed-case leaks such as
+# ``[Company]`` (validation, 2026-06-20).
+_BRACKET_PATTERN = re.compile(r"\[(?=[A-Za-z0-9_ ]*[A-Z ])[A-Za-z][A-Za-z0-9_ ]*\]")
 
 # Technical metric: a number adjacent to ``%`` or ``+``.  Picks up
 # ``12%`` / ``15+`` while ignoring time references like ``in 15 minutes``.
@@ -131,7 +137,7 @@ _REDACTION_TEXT = "(placeholder removed)"
 def find_placeholder(text: str) -> str | None:
     """Return the first bracketed placeholder token in *text*, or None.
 
-    Inputs: any draft text. Output: the matched ``[ALL_CAPS]`` token or
+    Inputs: any draft text. Output: the matched ``[Placeholder]`` token or
     ``None``. No side effects. Used by the drafter to trigger an
     anti-placeholder regeneration (AUDIT-A1) before the hard gate ever
     sees the draft.
@@ -144,7 +150,7 @@ def redact_placeholders(text: str) -> str:
     """Replace every bracketed placeholder token with a redaction marker.
 
     Inputs: draft text that failed the placeholder hard check. Output:
-    the same text with each ``[ALL_CAPS]`` token replaced by
+    the same text with each ``[Placeholder]`` token replaced by
     ``(placeholder removed)``. No side effects. Guarantees a placeholder
     token is never serialized to the DB or a Markdown artifact (AUDIT-A2).
     """

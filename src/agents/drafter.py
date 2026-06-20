@@ -38,6 +38,7 @@ __all__ = [
     "Draft",
     "DrafterPartialFailure",
     "OpenerRegistry",
+    "assign_ask_angles",
     "draft_for_contacts",
     "normalize_opener",
 ]
@@ -163,10 +164,15 @@ def _load_voice_doc() -> str:
 def _load_contact(contact_id: int) -> dict | None:
     conn = get_connection()
     try:
+        # LEFT JOIN companies so the drafter knows WHICH company this contact is
+        # at. Without it the model is told (by the persona template) to write to
+        # "a fellow alum at {Company}" but has no name, and fabricates one
+        # (wrong employer) or leaks a "[Company]" placeholder.
         row = conn.execute(
-            "SELECT id, company_id, full_name, title, persona, focus_area, "
-            "linkedin_url, email, hook "
-            "FROM contacts WHERE id = ?",
+            "SELECT c.id, c.company_id, c.full_name, c.title, c.persona, "
+            "c.focus_area, c.linkedin_url, c.email, c.hook, co.name AS company_name "
+            "FROM contacts c LEFT JOIN companies co ON co.id = c.company_id "
+            "WHERE c.id = ?",
             (contact_id,),
         ).fetchone()
         return dict(row) if row is not None else None
@@ -273,6 +279,102 @@ class OpenerRegistry:
             self._counts[key] = self._counts.get(key, 0) + 1
 
 
+# ---------------------------------------------------------------------------
+# Phase 3: ask-rotation across same-company contacts
+# ---------------------------------------------------------------------------
+# Every message is single-ask (FACT DISCIPLINE / MESSAGE STRUCTURE). Variety
+# happens ACROSS contacts, not within. The persona templates already tell the
+# model to ROTATE the one ask across same-company alumni/peers — but each draft
+# is generated in its own thread with no knowledge of what the others asked, so
+# left to itself the model converges on the same "safe" angle every time.
+#
+# Fix: deterministically ASSIGN a distinct angle to each contact in a
+# (company, persona) group up front, then inject it into the prompt. This is
+# free (no extra LLM calls), race-free (computed before fan-out), and — unlike
+# opener variety — can't be done reactively because the realized ask is
+# semantic, not a regex match. Singletons get no assignment: a lone contact
+# should still get the single most useful angle the model picks for them, which
+# is the already-validated v0.3.0 behavior.
+#
+# Pools are kept in sync with the Close section of the matching persona
+# template; the prose and the injected instruction must agree.
+_ALUMNI_ASK_ANGLES: tuple[str, str, str, str, str] = (
+    "the hiring climate on their team right now (are they growing, are reqs open)",
+    "whether the company sponsors or hires international students "
+    "(STEM OPT / H-1B) for technical roles",
+    "what the team and engineering culture are actually like day to day",
+    "how their own UIUC-to-industry transition went and what they'd do differently",
+    "who on the team would be the right person to talk to about the work",
+)
+
+_PEER_ASK_ANGLES: tuple[str, str, str, str, str] = (
+    "what the day-to-day engineering work on their team is actually like",
+    "how they approached a specific project or technical challenge in their work",
+    "what the team culture and trajectory feel like from the inside",
+    "how they broke into the field and what their path looked like",
+    "what they'd tell someone finishing an MS who's aiming at this kind of work",
+)
+
+# Personas whose one ask is worth rotating. Recruiters tie the ask to a
+# specific role (and are ~one per company); senior managers carry no hard ask
+# (low-obligation "stay connected"). Neither has anything to rotate.
+_ASK_ANGLE_POOLS: dict[Persona, tuple[str, ...]] = {
+    Persona.ALUMNI: _ALUMNI_ASK_ANGLES,
+    Persona.PEER_ENGINEER: _PEER_ASK_ANGLES,
+}
+
+
+def assign_ask_angles(contact_ids: list[int]) -> dict[int, str | None]:
+    """Assign a distinct ask-angle to each same-company, same-persona contact.
+
+    Inputs: the contact ids being drafted this run. Output: a mapping of
+    contact_id → angle string (the angle to anchor that contact's one ask on)
+    or None (no rotation — let the model pick the best angle). Reads the
+    contacts table; no writes.
+
+    Contacts are grouped by ``(company_id, persona)``. Within a group of a
+    rotation-eligible persona (alumni / peer) that has 2+ members, angles are
+    handed out round-robin in stable contact_id order, so N contacts get N
+    distinct angles (wrapping if the group is larger than the pool). Singletons,
+    non-eligible personas, and unknown personas map to None.
+    """
+    if not contact_ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in contact_ids)
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            f"SELECT id, company_id, persona FROM contacts WHERE id IN ({placeholders})",
+            tuple(contact_ids),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    # Group contact ids by (company_id, persona), preserving stable id order.
+    groups: dict[tuple, list[int]] = {}
+    persona_by_group: dict[tuple, Persona] = {}
+    for row in rows:
+        try:
+            persona = Persona(row["persona"])
+        except (ValueError, TypeError):
+            continue
+        if persona not in _ASK_ANGLE_POOLS:
+            continue
+        key = (row["company_id"], persona)
+        groups.setdefault(key, []).append(row["id"])
+        persona_by_group[key] = persona
+
+    assignments: dict[int, str | None] = {cid: None for cid in contact_ids}
+    for key, ids in groups.items():
+        if len(ids) < 2:
+            continue  # singleton → no rotation, model picks the best angle
+        pool = _ASK_ANGLE_POOLS[persona_by_group[key]]
+        for i, cid in enumerate(sorted(ids)):
+            assignments[cid] = pool[i % len(pool)]
+    return assignments
+
+
 _FACT_DISCIPLINE = """## FACT DISCIPLINE — non-negotiable
 
 You may only state facts that appear verbatim (or in trivially-paraphrased
@@ -305,6 +407,13 @@ or the Contact Information section. In particular:
    contact's own posts, statements, or personal work ("your recent
    posts", "saw your work on <company initiative>") unless the signal
    explicitly came from the person themselves.
+
+6. **One company, named exactly.** The contact's employer is given as
+   "Company" in the Contact Information section. When you name their company,
+   use that exact name and NO other — never substitute or invent a different
+   employer. If Company is "Unknown", do not name any company; refer to "your
+   team" / "your company" instead. Never emit a bracketed token like
+   "[Company]".
 
 ## MESSAGE STRUCTURE — non-negotiable
 
@@ -349,6 +458,7 @@ def _build_prompt(
     voice_doc: str,
     anti_phrases: list[str] | None = None,
     extra_instructions: list[str] | None = None,
+    ask_angle: str | None = None,
 ) -> str:
     """Compose the full grounded generation prompt for one (contact, channel).
 
@@ -356,12 +466,29 @@ def _build_prompt(
     persona template text, voice doc text, plus optional regeneration
     context: *anti_phrases* (blocklist hits to avoid) and
     *extra_instructions* (fault-specific notes such as the anti-placeholder
-    rule, AUDIT-A1). Output: the prompt string. No side effects.
+    rule, AUDIT-A1). *ask_angle* (Phase 3) is the rotation-assigned angle to
+    anchor this contact's single ask on, when several same-company contacts of
+    this persona are being reached. Output: the prompt string. No side effects.
     """
     hook = contact.get("hook") or "GENERIC"
     approved_facts = _render_approved_facts(bullets)
 
     voice_section = f"\n\n## Voice & Style Rules\n{voice_doc}" if voice_doc else ""
+
+    # Phase 3: when an angle was assigned, steer the (still single) ask toward
+    # it so same-company contacts don't all land on the same script. This rides
+    # on top of the "one ask only" rule — it changes WHICH ask, not how many.
+    ask_angle_section = ""
+    if ask_angle:
+        ask_angle_section = (
+            "\n\n## ASSIGNED ASK ANGLE — this is the ONE ask for this person\n"
+            "Several people at this company are being contacted, so the ask is "
+            "rotated to avoid sending the same script to everyone. Anchor your "
+            f"single ask on: {ask_angle}.\n"
+            "Make exactly ONE ask, and make it this one. Phrase it naturally in "
+            "your own voice — do not quote this instruction. Do not add a second "
+            "ask of any kind."
+        )
 
     anti_phrase_section = ""
     if anti_phrases:
@@ -384,6 +511,7 @@ def _build_prompt(
 
 ## Contact Information
 - Name: {contact["full_name"]}
+- Company: {contact.get("company_name") or "Unknown"}
 - Title: {contact.get("title") or "Unknown"}
 - LinkedIn: {contact.get("linkedin_url") or "N/A"}
 - Email: {contact.get("email") or "N/A"}
@@ -396,7 +524,7 @@ def _build_prompt(
 
 ## Channel Constraints
 {_CHANNEL_CONSTRAINTS[channel]}
-{anti_phrase_section}{extra_section}
+{ask_angle_section}{anti_phrase_section}{extra_section}
 
 Now write the message. Output ONLY the message text (and subject line if \
 applicable) — no preamble, no explanation."""
@@ -422,6 +550,7 @@ def _draft_one_channel(
     email_word_limit: int = 150,
     enable_critic: bool = True,
     opener_registry: OpenerRegistry | None = None,
+    ask_angle: str | None = None,
 ) -> tuple[str, str | None, bool, str, str | None]:
     """Generate one draft for (contact, channel).
 
@@ -430,9 +559,17 @@ def _draft_one_channel(
     backward-compatible boolean projection (True iff not ``"OK"``).
     ``critic_trace`` is the serialized CriticResult JSON, or None when
     the critic was not run (HARD_FAIL short-circuit / enable_critic=False).
+    ``ask_angle`` (Phase 3) is the rotation-assigned ask angle for this
+    contact, or None to let the model pick the single best angle.
     """
     prompt = _build_prompt(
-        contact, channel, Persona(contact["persona"]), bullets, persona_template, voice_doc
+        contact,
+        channel,
+        Persona(contact["persona"]),
+        bullets,
+        persona_template,
+        voice_doc,
+        ask_angle=ask_angle,
     )
     text = humanize(_call_claude(prompt, anthropic_client))
 
@@ -492,6 +629,7 @@ def _draft_one_channel(
             voice_doc,
             anti_phrases=anti_phrases or None,
             extra_instructions=extra_notes or None,
+            ask_angle=ask_angle,
         )
         text = humanize(_call_claude(prompt2, anthropic_client))
 
@@ -618,6 +756,7 @@ def _draft_all_channels_for_contact(
     anthropic_client,
     library_path: str | None,
     opener_registry: OpenerRegistry | None = None,
+    ask_angle: str | None = None,
 ) -> list[Draft]:
     contact = _load_contact(contact_id)
     if contact is None:
@@ -667,6 +806,7 @@ def _draft_all_channels_for_contact(
             email_word_limit=cfg.email_word_limit,
             enable_critic=cfg.enable_critic,
             opener_registry=opener_registry,
+            ask_angle=ask_angle,
         )
         generated.append((channel, body, subject, quality_flag, quality_code, critic_trace))
 
@@ -751,7 +891,14 @@ def draft_for_contacts(
 
     # One registry per run — the only shared state between contact
     # workers, used to enforce cross-contact opener variety (AUDIT-A6).
-    opener_registry = OpenerRegistry(max_repeats=load_config().opener_max_repeats)
+    cfg = load_config()
+    opener_registry = OpenerRegistry(max_repeats=cfg.opener_max_repeats)
+
+    # Phase 3: assign each contact a rotated ask angle BEFORE fan-out, so
+    # same-company alumni/peers ask different things. Computed once up front
+    # (deterministic, race-free); singletons / non-eligible personas map to
+    # None and behave exactly as before.
+    ask_angles = assign_ask_angles(contact_ids) if cfg.enable_ask_rotation else {}
 
     workers = min(_MAX_WORKERS, max(1, len(contact_ids)))
     results: dict[int, list[Draft]] = {}
@@ -771,6 +918,7 @@ def draft_for_contacts(
                 anthropic_client,
                 library_path,
                 opener_registry,
+                ask_angles.get(cid),
             ): cid
             for cid in contact_ids
         }

@@ -43,6 +43,17 @@ class TestBracketCheck:
         result = hard_check("See the paper [smith2023] for context.")
         assert result.passed is True
 
+    def test_mixed_case_placeholder_blocked(self):
+        # Title-case [Company] leaked past the old all-caps-only detector
+        # (Phase 3 validation, 2026-06-20).
+        result = hard_check("Saw you're a manufacturing engineer at [Company].")
+        assert result.passed is False
+        assert result.quality_code == "HARD_FAIL"
+
+    def test_spaced_placeholder_phrase_blocked(self):
+        result = hard_check("Reaching out to [your team] about roles.")
+        assert result.passed is False
+
 
 # ---------------------------------------------------------------------------
 # hard_check: numeric provenance

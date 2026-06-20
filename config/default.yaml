@@ -18,8 +18,9 @@ pipeline:
                                   # LinkedIn channels work without it
 
 quality:
-  linkedin_char_limit: 200    # LinkedIn free-account connection-note cap
+  linkedin_char_limit: 280    # safe cutoff under LinkedIn's 300-char note cap
   email_word_limit: 150       # cold-email body word cap
   batch_hard_fail_threshold: 0.0  # warn if HARD_FAIL fraction exceeds this
   enable_critic: true         # Layer 4 automated critic pass
   opener_max_repeats: 2       # max contacts per run sharing the same opener
+  enable_ask_rotation: true   # vary the ask across same-company alumni/peers
