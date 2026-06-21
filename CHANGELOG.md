@@ -6,6 +6,14 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed
+- **README rewritten** as a professional landing page (animated header, badges,
+  a mermaid pipeline diagram, market-thesis intro, collapsible sections). Fixes
+  stale content: `v0.2.0` status → current, the `<your-username>` install
+  placeholder → real repo URL, and the wrong `data.db` reference → `state.db`.
+  Adds `/network-import`, the v0.3–v0.4 features, and roadmap/docs links. Plus a
+  `docs/README.md` index so the docs folder is navigable.
+
 ### Added
 - **Source-agnostic contact input (flexible-input design).** Contacts no longer
   have to come from the Serper Finder. The Finder's second half was extracted

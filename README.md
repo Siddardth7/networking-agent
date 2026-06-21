@@ -1,240 +1,209 @@
-# Networking Agent
+<div align="center">
 
-A Claude Code plugin that automates professional networking outreach for aerospace and space-tech job seekers. It discovers relevant contacts at target companies, drafts personalized LinkedIn and cold-email messages using your resume and voice, and walks through an approval loop before writing a final outreach artifact — all from slash commands inside Claude Code.
+# 🤝 Networking Agent
 
-**Status:** v0.2.0 — pipeline complete with an automated quality gate (hard guardrails + Sonnet critic), production-ready for personal use.
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=3500&pause=800&center=true&vCenter=true&width=720&lines=Skip+the+ATS+black+hole.;Land+interviews+through+referrals%2C+not+spam.;Your+voice.+The+right+people.+One+company+a+day." alt="Typing tagline" />
+
+**An autonomous, 3-agent networking pipeline for job seekers — built as a Claude Code plugin.**
+It finds the right people at a target company, drafts outreach in *your* voice (not generic AI mush), runs it through a quality gate, and walks you through approval — all from slash commands.
+
+<br/>
+
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
+![Version](https://img.shields.io/badge/version-0.4.0-orange.svg)
+![Tests](https://img.shields.io/badge/tests-562%20passing-brightgreen.svg)
+![Coverage](https://img.shields.io/badge/coverage-~90%25-brightgreen.svg)
+![Built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-8A2BE2.svg)
+![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
+
+[Why it exists](#-why-it-exists) · [Features](#-features) · [How it works](#-how-it-works) · [Quick start](#-quick-start) · [Commands](#-commands) · [Roadmap](#-roadmap) · [Docs](#-documentation)
+
+</div>
 
 ---
 
-## Requirements
+## 💡 Why it exists
 
-- Python 3.11+
-- Claude Code with plugin support (`claude plugin validate` available)
-- API keys for Anthropic and Serper (free tiers sufficient for personal use).
-  Hunter is **optional** — email enrichment is opt-in (see below); without it
-  the pipeline drafts LinkedIn connection + post-connection messages only.
+The job funnel is flooded with AI-generated noise — applications surged **45.5%** while postings *dropped*, popular roles draw **200–400 applicants in 48 hours**, and recruiters now spot generic AI outreach in ~20 seconds and reject it. Mass-applying is a losing game.
+
+The one thing that still works: a **warm referral**. Referred candidates are hired at **~28.5% vs ~2.7%** for cold applicants — roughly **10×**. And a *personalized* connection note gets **72% more replies** than a generic one. The rule that wins is **"5 personalized messages to the right people beat 50 generic ones."**
+
+**Networking Agent automates the *right* way to do this** — deep personalization, the right contacts, one company at a time — instead of the spray-and-pray that's now actively penalized.
+
+> 🛰️ **Current focus:** tuned for aerospace / space-tech job seekers today. Full generalization (any field, guided onboarding) is on the [roadmap](#-roadmap) toward v1.0.
 
 ---
 
-## Install
+## ✨ Features
 
-```bash
-claude plugin install https://github.com/<your-username>/networking-agent
+| | |
+|---|---|
+| 🎯 **Finds the right people** | Discovers contacts at a target company and classifies them by persona (alumni · hiring manager · peer · recruiter) — alumni-first, because they reply 60–80% of the time. |
+| ✍️ **Your voice, not generic AI** | A validated **4-part message model** (Intro → Source → Hook → Close), specialized per persona, grounded in your résumé and `voice.md`. |
+| 🔄 **Ask-rotation** | Several contacts at the same company get **different** questions (sponsorship, who-to-talk-to, culture, transition…) so a batch reads as real outreach, not one copied script. |
+| 🧹 **Humanizer + quality gate** | A deterministic tell-stripper plus **hard guardrails + a Sonnet critic** catch fabrication, placeholders, over-length notes, and AI tics before anything reaches you. |
+| 📥 **Bring leads from anywhere** | Source-agnostic import — **Apollo, Apify, a Cowork + Chrome capture, or a hand-made CSV/JSON** all normalize into one pipeline. `/network-import leads.csv --draft`. |
+| 🔒 **Local-first & private** | Your keys, a local SQLite DB, `chmod 600` config enforcement, and one-command GDPR purge. Nothing leaves your machine beyond contact discovery. |
+| 💸 **Free-tier friendly** | Zero-cost defaults (no paid email lookups), search caching, and ~**$0.15–0.30 per company** in Claude usage. |
+
+---
+
+## 🛠 How it works
+
+```mermaid
+flowchart LR
+    subgraph IN [" Inputs "]
+      A[🔍 Serper search]
+      B[📄 Apollo / Apify / CSV]
+      C[🌐 Cowork + Chrome capture]
+    end
+    IN --> F[🧭 Finder<br/>classify · hook]
+    F --> D[✍️ Drafter<br/>4-part voice · ask-rotation · humanizer]
+    D --> Q{🛡️ Quality gate<br/>guardrails + critic}
+    Q --> M[✅ Marketer<br/>approval loop]
+    M --> O[(📨 Outreach artifact)]
 ```
 
-**Development / local install:**
+Three agents, one state machine (`NEW → FOUND → SELECTED → DRAFTED → APPROVED → SENT`).
+`/network-run` always resumes from the current state, so it's safe to re-run after an interruption.
+
+---
+
+## 🚀 Quick start
+
+> **Prerequisites:** Python 3.11+ · Claude Code with plugin support · an Anthropic API key (Serper is optional/free; Hunter is opt-in).
 
 ```bash
+# 1. Install the plugin
+claude plugin install https://github.com/Siddardth7/networking-agent
+
+#    …or run it locally from a clone:
 claude --plugin-dir ./networking-agent
-```
 
----
+# 2. Create your config
+mkdir -p ~/.networking-agent
+cp config/default.yaml   ~/.networking-agent/config.yaml
+cp config/voice.example.md ~/.networking-agent/voice.md   # describe your tone
+chmod 600 ~/.networking-agent/config.yaml                  # required
 
-## First Run
-
-```bash
-# 1. Verify setup
+# 3. Add your Anthropic key to ~/.networking-agent/config.yaml, then verify
 /network-check
 
-# 2. Run the full pipeline for a company
+# 4. Go
 /network-run spacex
 ```
 
-`/network-check` will tell you exactly what is missing before you spend any API credits.
+`/network-check` tells you exactly what's missing **before** you spend any API credits.
 
----
-
-## Configuration
-
-### 1. Create the config directory and file
-
-```bash
-mkdir -p ~/.networking-agent
-cp config/default.yaml ~/.networking-agent/config.yaml
-```
-
-### 2. Fill in your API keys
+<details>
+<summary><b>⚙️ Configuration details</b></summary>
 
 ```yaml
+# ~/.networking-agent/config.yaml
 keys:
   anthropic_api_key: "sk-ant-..."
-  serper_api_key: "..."
-  hunter_api_key: "..."
+  serper_api_key: "..."          # free tier is plenty
+  hunter_api_key: "..."          # optional — only for cold-email lookups
 
 providers:
-  serper_monthly_limit: 100   # free tier
-  hunter_monthly_limit: 25    # free tier
+  serper_monthly_limit: 100
+  search_cache_ttl_days: 14      # repeat runs on a company are free
 
 pipeline:
-  finder_limit: 5             # contacts discovered per company
+  finder_limit: 5
+  enable_email_enrichment: false # opt-in; off = zero Hunter spend
+
+quality:
+  linkedin_char_limit: 280
+  email_word_limit: 150
+  enable_critic: true
+  opener_max_repeats: 2
+  enable_ask_rotation: true
 ```
 
-### 3. Lock down permissions
+**Environment variables** (`ANTHROPIC_API_KEY`, `SERPER_API_KEY`, `HUNTER_API_KEY`) take precedence over the file if you prefer not to write keys to disk.
 
-```bash
-chmod 600 ~/.networking-agent/config.yaml
-```
+**🔐 Trust model:** the full text of `voice.md` and your `resume_library.yaml` bullets is embedded verbatim in every drafting prompt — treat them like code you wrote. Only use voice templates you've read and trust.
 
-**WARNING:** `config.yaml` contains live API keys. It must be `chmod 600` (owner read/write only). `/network-check` will fail if the file is world-readable.
-
-### Environment variable alternative
-
-If you prefer not to write keys to disk, export them before launching Claude Code:
-
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-export SERPER_API_KEY="..."
-export HUNTER_API_KEY="..."
-```
-
-Environment variables take precedence over `config.yaml`.
+</details>
 
 ---
 
-## Voice / Tone Setup
-
-The Drafter agent uses `~/.networking-agent/voice.md` to match your writing style. Without it, drafts will use a neutral default tone.
-
-```bash
-cp config/voice.example.md ~/.networking-agent/voice.md
-# Then edit voice.md to describe your preferred tone, phrases to avoid, etc.
-```
-
-**Trust model:** the full text of `voice.md` (and the bullets in
-`resume_library.yaml`) is embedded verbatim in every drafting prompt. Treat
-both files like code you wrote yourself — if you copy-paste a third-party
-"voice template", any instructions hidden in it will be followed by the
-drafting model. The agent caps `voice.md` at 16 KB (extra content is
-truncated with a warning), but it does not attempt to sanitize the content;
-only install templates you have read and trust.
-
----
-
-## Quality Gate
-
-Every generated draft passes through three layers before it can be approved:
-
-1. **Generation-fault regen (drafter).** Blocklist phrases, bracketed
-   placeholder tokens, multi-asks, repeated self-intros, and openers already
-   used by `quality.opener_max_repeats` other contacts in the run each
-   trigger ONE corrective regeneration with explicit fix instructions.
-2. **Hard guardrails (deterministic).** Placeholder tokens, metrics that do
-   not appear in the APPROVED FACTS, and over-length messages are marked
-   `HARD_FAIL` — bodies with surviving placeholders are redacted before they
-   are stored. HARD_FAIL drafts cannot be approved without `--force`.
-3. **Critic (Sonnet).** Six rubric dimensions scored 0-5. A draft is held
-   (`CRITIC_HOLD`) only when a dimension is severe (<= 1, including
-   fabrication evidence) or more than two dimensions are weak (< 3).
-   Scores, issues, and a `Held because:` reason are persisted to
-   `drafts.critic_trace` and shown in the approval loop and the artifact.
-
-Faults that survive their regen are `SOFT_FLAG`ged — visible to the reviewer
-but approvable. Tune the gate in `config.yaml` under `quality:`
-(`linkedin_char_limit`, `email_word_limit`, `enable_critic`,
-`opener_max_repeats`, `batch_hard_fail_threshold`).
-
----
-
-## Cost Estimate
-
-All AI calls use `claude-haiku-4-5-20251001` (Sonnet for the critic pass).
-Per-run cost is approximately **$0.10–0.30 per company**.
-
-| Companies/month | Contacts/company | Est. Claude cost | Serper cost | Hunter cost | Total |
-|---|---|---|---|---|---|
-| 10 | 5 | ~$0.10 | ~$0.05 | ~$0.10 | ~$0.25 |
-| 25 | 5 | ~$0.25 | ~$0.10 | ~$0.25 | ~$0.60 |
-| 50 | 5 | ~$0.50 | ~$0.20 | ~$0.50 | ~$1.20 |
-
-See [docs/COSTS.md](docs/COSTS.md) for a detailed per-stage cost breakdown and tips for keeping costs low.
-
-### Staying within free tiers
-
-The default configuration keeps a personal workload free or near-free:
-
-- **Hunter email enrichment is opt-in** (`pipeline.enable_email_enrichment`,
-  default `false`). The free tier is only 25 lookups/month (~1.5 runs), and
-  LinkedIn referrals convert far better than cold email — so the default run
-  spends **zero Hunter quota** and needs no Hunter key. Contacts without an
-  email are stored as `EMAIL_DISABLED` and the drafter skips the cold-email
-  channel. Set it to `true` (and add a Hunter key) only when you specifically
-  want cold-email drafts.
-- **Search responses are cached** (`providers.search_cache_ttl_days`, default
-  14 days). A repeated, resumed, or re-tried run on the same company within
-  the window is served from the local SQLite cache and spends **zero Serper
-  credits**. Set to `0` to disable caching and always hit the live API.
-
-With both defaults, the only unavoidable cost is the Claude API
-(~$0.15–0.30/run), and re-running the same company is essentially free.
-
----
-
-## Commands
+## 🧩 Commands
 
 | Command | Description |
 |---|---|
-| `/network-check` | Preflight check — verifies API keys, DB integrity, config file permissions, and voice.md presence |
-| `/network-run <slug>` | Run the full pipeline (find → select → draft → approve → artifact), or resume from current state |
-| `/network-find <slug>` | Discover and score contacts only; stops before drafting |
-| `/network-draft <slug>` | Generate draft messages for already-selected contacts |
-| `/network-approve <slug>` | Enter the approval loop for drafted messages |
-| `/network-status [slug]` | Show pipeline state for one company or all companies |
-| `/network-dry-run <slug>` | Simulate a full run without making any API calls or DB writes |
-| `/network-purge [slug]` | Delete all stored data for a company (or all companies) — use for GDPR compliance |
-| `/network-providers` | Show current API quota usage and remaining credits for each provider |
-
-### Pipeline states
-
-```
-NEW → FOUND → SELECTED → DRAFTED → APPROVED → SENT
-```
-
-`/network-run` always resumes from the current state, so it is safe to re-run after an interruption.
+| `/network-check` | Preflight — verifies keys, DB integrity, config permissions, and `voice.md`. |
+| `/network-run <slug>` | Full pipeline (find → select → draft → approve → artifact), resumes from state. |
+| `/network-find <slug>` | Discover + classify contacts only; stops before drafting. |
+| `/network-import <file>` | **Import leads from any source** (Apollo/Apify/Cowork/CSV) and optionally `--draft`. |
+| `/network-draft <slug>` | Generate drafts for selected contacts. |
+| `/network-approve <slug>` | Enter the approval loop. |
+| `/network-status [slug]` | Pipeline state for one company or all. |
+| `/network-dry-run <slug>` | Simulate a run — no API calls, no writes. |
+| `/network-providers` | Show API quota usage / remaining credits. |
+| `/network-purge [slug]` | Delete stored data (GDPR) for one company or all. |
 
 ---
 
-## Troubleshooting
+## 🛡️ Quality gate
 
-### 1. `ANTHROPIC_API_KEY not set or invalid`
+Every draft passes three layers before it can be approved:
 
-Set the key in `~/.networking-agent/config.yaml` under `keys.anthropic_api_key`, or export `ANTHROPIC_API_KEY` in your shell. Verify the key is active at [console.anthropic.com](https://console.anthropic.com).
+1. **Generation-fault regen** — blocklist phrases, placeholder tokens, multi-asks, repeated intros, and over-used openers each trigger one corrective regeneration.
+2. **Hard guardrails (deterministic)** — fabricated metrics, surviving placeholders, and over-length messages are `HARD_FAIL`ed (and redacted) — unapprovable without `--force`.
+3. **Critic (Sonnet)** — six rubric dimensions; a draft is held (`CRITIC_HOLD`) only on a severe or multiply-weak score, with a persisted `Held because:` reason.
 
-### 2. `config.yaml permissions too open (expected 600, got 644)`
-
-Run `chmod 600 ~/.networking-agent/config.yaml`. The plugin refuses to load keys from a world-readable file to prevent accidental credential exposure.
-
-### 3. `Serper quota exhausted` / `Hunter quota exhausted`
-
-Free tiers are limited (Serper: 100 searches/month, Hunter: 25 verifications/month). Use `/network-providers` to check remaining quota. Run `/network-dry-run` to test flows without consuming credits. Upgrade your plan or wait for the monthly reset.
-
-### 4. `voice.md not found`
-
-Copy the example: `cp config/voice.example.md ~/.networking-agent/voice.md`. The pipeline will continue without it, but drafts will use a generic tone rather than your personal voice.
-
-### 5. `DB integrity check failed` or `pipeline state corrupted`
-
-The SQLite database lives at `~/.networking-agent/data.db`. If it is corrupted, delete it — the pipeline will recreate it on next run. Use `/network-purge <slug>` first to cleanly remove specific company data, or delete `data.db` entirely to reset everything.
+Faults that survive their regen are `SOFT_FLAG`ged — visible but approvable. Tune everything under `quality:` in `config.yaml`.
 
 ---
 
-## GDPR / Data Deletion
+## 🗺️ Roadmap
 
-Contact data (names, emails, LinkedIn URLs) is stored locally in `~/.networking-agent/data.db`. To delete data for a specific company:
+Currently **v0.4.0** shipped; flexible-input + producer contract on `main`. The plan is two phases, with your live campaign as the proving ground:
 
-```bash
-/network-purge spacex
-```
+- **Phase A — harden (v0.5 → v0.8.5):** all input sources, the Finder brought to the Drafter's quality bar (audit + accuracy scorecard), warm-path/referral-likelihood ranking, the email channel, and the reply → follow-up → conversation loop.
+- **Phase B — generalize (v0.9 → v1.0):** de-hardcode to config, a generic taxonomy, a guided onboarding wizard + coaching, and a public open-source release anyone in any field can adopt.
 
-To delete all stored data:
-
-```bash
-/network-purge
-```
-
-This removes all records from the local database. No data is sent to third-party services beyond what is required for contact discovery (Serper search, Hunter email verification).
+📖 Full version ladder and rationale: **[docs/ROADMAP.md](docs/ROADMAP.md)** · market thesis: **[docs/MARKET_GAP_AND_FEATURE_IDEAS](docs/MARKET_GAP_AND_FEATURE_IDEAS_2026-06-21.md)**.
 
 ---
 
-## License
+## 📚 Documentation
+
+Everything lives in **[`docs/`](docs/README.md)** (indexed): the roadmap, sourcing research, the source-agnostic input design, the Cowork + Chrome producer contract, cost breakdown, and trial scorecards.
+
+---
+
+## 💸 Cost
+
+All AI calls use `claude-haiku-4-5` (Sonnet for the critic). **~$0.15–0.30 per company** with free-tier defaults; re-running the same company is essentially free (search responses are cached). See **[docs/COSTS.md](docs/COSTS.md)**.
+
+---
+
+<details>
+<summary><b>🩺 Troubleshooting</b></summary>
+
+- **`ANTHROPIC_API_KEY not set or invalid`** → set it in `config.yaml` under `keys.anthropic_api_key` or export it; verify at [console.anthropic.com](https://console.anthropic.com).
+- **`config.yaml permissions too open (expected 600)`** → `chmod 600 ~/.networking-agent/config.yaml`.
+- **`Serper/Hunter quota exhausted`** → check `/network-providers`; use `/network-dry-run` to test without spend.
+- **`voice.md not found`** → `cp config/voice.example.md ~/.networking-agent/voice.md` (the run continues with a neutral tone otherwise).
+- **`DB integrity check failed`** → the SQLite DB is at `~/.networking-agent/state.db`; `/network-purge` to clear a company, or delete `state.db` to reset everything.
+
+</details>
+
+---
+
+## 🤝 Contributing
+
+Issues and PRs welcome. The project is in active development toward a public v1.0 — see the [roadmap](docs/ROADMAP.md) for where it's headed. Run the suite with `pytest` (562 tests, ~90% coverage) and lint with `ruff check`.
+
+## 📄 License
 
 MIT — see [LICENSE](LICENSE).
+
+<div align="center">
+<br/>
+<sub>Built with ❤️ and <a href="https://claude.com/claude-code">Claude Code</a> · Started to help friends land interviews.</sub>
+</div>
