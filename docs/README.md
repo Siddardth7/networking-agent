@@ -1,0 +1,43 @@
+# Documentation index
+
+All project documentation, grouped by purpose. Filenames are stable —
+code, tests, and cross-doc links reference these paths, so they are not moved
+into subfolders.
+
+## 📍 Start here
+
+| Doc | What it is |
+|---|---|
+| [ROADMAP.md](ROADMAP.md) | **Canonical plan** — where we are, the phased version ladder (v0.5 → v1.0), and the public-release gate. Read this first. |
+| [MARKET_GAP_AND_FEATURE_IDEAS_2026-06-21.md](MARKET_GAP_AND_FEATURE_IDEAS_2026-06-21.md) | The 2026 market thesis (ATS reality, referral math, why generic AI outreach fails) and the ranked feature ideas behind the roadmap. |
+
+## 🔎 Sourcing & inputs (research + design)
+
+| Doc | What it is |
+|---|---|
+| [LEAD_SOURCING_RESEARCH_2026-06-21.md](LEAD_SOURCING_RESEARCH_2026-06-21.md) | Where contacts come from — current source, the 2026 provider landscape (Apollo/PDL/Serper/Apify, Proxycurl's shutdown), paid-vs-free analysis, the 30-day campaign plan, and the $0 plan. |
+| [FLEXIBLE_INPUT_DESIGN_2026-06-21.md](FLEXIBLE_INPUT_DESIGN_2026-06-21.md) | The source-agnostic input architecture — the canonical contact record every source normalizes to, and how the importer feeds the unchanged Drafter. |
+
+## 🤝 Cowork + Chrome producer (the contact-capture side)
+
+| Doc | What it is |
+|---|---|
+| [CHROME_PRODUCER_CONTRACT.md](CHROME_PRODUCER_CONTRACT.md) | **The agreed interface** — I/O paths (`runs/…`), the honored fields, the daily cycle. The stable contract the producer builds against. |
+| [chrome-capture.example.json](chrome-capture.example.json) | A reference capture file (locked in by a contract regression test). |
+| [COWORK_CHROME_BRIEF_2026-06-21.md](COWORK_CHROME_BRIEF_2026-06-21.md) | The brief handed to Cowork: context + questions for it to self-assess and design its workflow. |
+| [COWORK_CHROME_PRODUCER_RESPONSE_2026-06-21.md](COWORK_CHROME_PRODUCER_RESPONSE_2026-06-21.md) | Cowork's capability assessment, proposed workflow, and daily commands. |
+| [HANDOFF_TO_ENGINEERING_2026-06-21.md](HANDOFF_TO_ENGINEERING_2026-06-21.md) | The wiring handoff that turned the producer response into the implemented contract. |
+
+## 🧪 Trials, validation & reference
+
+| Doc | What it is |
+|---|---|
+| [TRIAL_AST_SPACEMOBILE_2026-06-13.md](TRIAL_AST_SPACEMOBILE_2026-06-13.md) | Live Drafter trial run + scorecard (the model for future Finder trials). |
+| [COSTS.md](COSTS.md) | Per-run cost / quota breakdown. |
+| [INSTALL_SMOKE_TEST.md](INSTALL_SMOKE_TEST.md) | Manual install smoke-test checklist. |
+| [DESIGN_DRIFT_v0.2.0.md](DESIGN_DRIFT_v0.2.0.md) | Recorded design-vs-implementation drift notes. |
+
+---
+
+*Changelog lives at [`../CHANGELOG.md`](../CHANGELOG.md); usage docs at
+[`../README.md`](../README.md) and `../commands/`.*
