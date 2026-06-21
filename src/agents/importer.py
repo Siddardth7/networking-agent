@@ -96,7 +96,15 @@ _ALIAS: dict[str, str] = {
     "focus area": "focus_area",
     "focus_area": "focus_area",
     "hook": "hook",
+    # producer signals (Cowork+Chrome) — docs/CHROME_PRODUCER_CONTRACT.md
+    "school": "school",
+    "alumni confirmed": "alumni_confirmed",
+    "connection degree": "connection_degree",
+    "degree": "connection_degree",
 }
+
+# file-level meta keys lifted from a JSON object's top level (vs per-contact)
+_META_KEYS = ("company", "company_slug", "location", "source", "school")
 
 def _norm_header(h: str) -> str:
     """Lowercase, collapse non-alphanumerics to single spaces, strip."""
@@ -150,6 +158,13 @@ def _coerce_enum(value, enum_cls):
         return None
 
 
+def _coerce_bool(value):
+    """Parse a truthy producer flag → True / False / None (absent)."""
+    if value is None:
+        return None
+    return str(value).strip().lower() in ("true", "1", "yes", "y")
+
+
 # ---------------------------------------------------------------------------
 # File parsing
 # ---------------------------------------------------------------------------
@@ -174,8 +189,7 @@ def _read_rows(path: Path, source: str) -> tuple[list[dict], dict]:
         if isinstance(data, dict):
             contacts = data.get("contacts")
             if isinstance(contacts, list):
-                meta = {k: data[k] for k in ("company", "company_slug", "location", "source")
-                        if k in data}
+                meta = {k: data[k] for k in _META_KEYS if k in data}
                 return [r for r in contacts if isinstance(r, dict)], meta
             # A single bare contact object.
             return [data], {}
@@ -202,6 +216,7 @@ def parse_contacts_file(
     raw_rows, meta = _read_rows(path, source)
     meta_company = meta.get("company") or meta.get("company_slug") or default_company
     meta_location = meta.get("location") or default_location
+    meta_school = meta.get("school")
 
     candidates: list[ContactCandidate] = []
     seen: set[str] = set()
@@ -234,6 +249,9 @@ def parse_contacts_file(
                 snippet=canon.get("about"),
                 hook=canon.get("hook"),
                 location=canon.get("location") or meta_location,
+                school=canon.get("school") or meta_school,
+                alumni_confirmed=_coerce_bool(canon.get("alumni_confirmed")),
+                connection_degree=canon.get("connection_degree"),
             )
         )
     return candidates

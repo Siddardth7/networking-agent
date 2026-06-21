@@ -70,6 +70,15 @@ CSV form: one row per contact; `company`/`location` may be columns or flags.
 channel, no title) and the usable count **without writing anything**. This is
 the contract check a Cowork + Chrome producer runs before importing.
 
+## Producer I/O (Cowork + Chrome)
+
+The Cowork + Chrome producer writes captures to
+`runs/<YYYY-MM-DD>-<company-slug>.json` and reads its daily queue from
+`runs/targets.csv` (`company,location,school,status`). `runs/` is git-ignored
+(real contact data). It honors three extra producer fields — `alumni_confirmed`
+(forces the ALUMNI persona), file-level `school`, and `connection_degree`
+(surfaced for send-prioritization). Full contract: `docs/CHROME_PRODUCER_CONTRACT.md`.
+
 ## Implementation
 
 - CLI entry: `src/cli/network_import.py` → `run_import(args)`

@@ -242,3 +242,57 @@ class TestImport:
         summary = import_contacts(f, anthropic_client=_mk_client())
         assert summary["joby"]["imported"] == 1
         assert summary["sierra-space"]["imported"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Producer signal fields (Cowork+Chrome): alumni_confirmed / school / degree
+# ---------------------------------------------------------------------------
+class TestProducerFields:
+    def test_alumni_confirmed_forces_alumni_without_classifier(self, db_path, tmp_path):
+        # alumni_confirmed + an explicit focus_area → no classifier call at all.
+        init_db()
+        f = tmp_path / "alum.json"
+        f.write_text(json.dumps({
+            "company": "Joby", "school": "UIUC", "contacts": [
+                {"full_name": "A B", "title": "Eng", "alumni_confirmed": True,
+                 "focus_area": "PEER", "connection_degree": "2nd"},
+            ]}))
+        client = _mk_client()
+        import_contacts(f, anthropic_client=client)
+        assert client.messages.create.call_count == 0  # persona+focus both known
+
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                "SELECT persona, shared_signals FROM contacts"
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row["persona"] == "ALUMNI"
+        assert "alumni_confirmed: true" in row["shared_signals"]
+        assert "school: UIUC" in row["shared_signals"]
+        assert "degree: 2nd" in row["shared_signals"]
+
+    def test_alumni_confirmed_overrides_classifier_persona(self, db_path, tmp_path):
+        # No focus_area → classifier runs (for focus), but a classifier persona
+        # of PEER_ENGINEER must NOT override the alumni_confirmed ground truth.
+        init_db()
+        f = tmp_path / "alum2.json"
+        f.write_text(json.dumps([
+            {"full_name": "A B", "company": "Joby", "title": "Eng",
+             "alumni_confirmed": True},
+        ]))
+        client = Mock()
+        client.messages.create.side_effect = lambda **kw: _classify_response(
+            persona="PEER_ENGINEER", focus_area="MANUFACTURING"
+        )
+        import_contacts(f, anthropic_client=client)
+        assert client.messages.create.call_count == 1  # focus still classified
+
+        conn = get_connection()
+        try:
+            row = conn.execute("SELECT persona, focus_area FROM contacts").fetchone()
+        finally:
+            conn.close()
+        assert row["persona"] == "ALUMNI"  # forced, not the classifier's PEER
+        assert row["focus_area"] == "MANUFACTURING"  # classifier filled the gap

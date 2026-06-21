@@ -431,13 +431,21 @@ def ingest_contacts(
 
     results: list[ContactCandidate] = []
     for candidate, email_result in enriched:
-        # Skip the classifier when the source already labeled BOTH fields.
-        if candidate.persona is not None and candidate.focus_area is not None:
-            persona, focus_area, hook_signal = candidate.persona, candidate.focus_area, None
+        # Persona/focus precedence: an explicit label wins; `alumni_confirmed`
+        # (Alumni-tool ground truth) forces ALUMNI; otherwise the classifier
+        # decides. The classifier still runs to fill an unknown focus_area, but
+        # a forced persona is never overridden by its guess.
+        forced_persona = candidate.persona or (
+            Persona.ALUMNI if candidate.alumni_confirmed else None
+        )
+        if forced_persona is not None and candidate.focus_area is not None:
+            persona, focus_area, hook_signal = forced_persona, candidate.focus_area, None
         else:
-            persona, focus_area, hook_signal = _classify_contact(
+            cls_persona, cls_focus, hook_signal = _classify_contact(
                 candidate, company_slug, anthropic_client
             )
+            persona = forced_persona or cls_persona
+            focus_area = candidate.focus_area or cls_focus
 
         # Honor a source-supplied hook; otherwise generate one.
         hook = candidate.hook if candidate.hook else _generate_hook(
@@ -457,6 +465,9 @@ def ingest_contacts(
             snippet=candidate.snippet,
             hook=hook,
             location=candidate.location,
+            school=candidate.school,
+            alumni_confirmed=candidate.alumni_confirmed,
+            connection_degree=candidate.connection_degree,
         )
         results.append(enriched_candidate)
 
@@ -465,6 +476,13 @@ def ingest_contacts(
             signal_parts.append(f"profile: {candidate.snippet[:140]}")
         if company_news:
             signal_parts.append(f"company_news: {company_news[:140]}")
+        # Producer signals (Cowork+Chrome) surfaced for the reviewer.
+        if candidate.alumni_confirmed:
+            signal_parts.append("alumni_confirmed: true")
+        if candidate.school:
+            signal_parts.append(f"school: {candidate.school[:60]}")
+        if candidate.connection_degree:
+            signal_parts.append(f"degree: {candidate.connection_degree[:10]}")
         shared_signals = " | ".join(signal_parts) or None
 
         with with_writer() as conn:

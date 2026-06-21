@@ -117,6 +117,16 @@ class ContactCandidate(BaseModel):
     #   generates one via _generate_hook. `location`: campaign/site context.
     hook: str | None = None
     location: str | None = None
+    # Producer-supplied campaign/provenance signals (Cowork+Chrome producer,
+    # docs/CHROME_PRODUCER_CONTRACT.md). All optional and recorded in
+    # shared_signals for the reviewer. `alumni_confirmed` (sourced via the
+    # LinkedIn Alumni tool) additionally FORCES the ALUMNI persona — a
+    # ground-truth signal stronger than the classifier's guess. `school`:
+    # file-level campaign context. `connection_degree` (1st/2nd/3rd): surfaced
+    # so the reviewer can prioritize the LinkedIn invite channel.
+    school: str | None = None
+    alumni_confirmed: bool | None = None
+    connection_degree: str | None = None
 
 
 class EmailResult(BaseModel):

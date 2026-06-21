@@ -23,6 +23,9 @@ htmlcov/
 data/
 !data/.gitkeep
 
+# Producer captures + daily queue (real contact data / runtime state)
+runs/
+
 # Environment secrets
 .env
 .env.local

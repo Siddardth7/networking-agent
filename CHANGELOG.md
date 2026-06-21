@@ -24,6 +24,13 @@ Versioning: [Semantic Versioning](https://semver.org/)
   the producer-contract check for the Cowork + Chrome automation. The Finder's
   Serper path is unchanged (byte-for-byte behavior; 534 prior tests still green).
   Design: `docs/FLEXIBLE_INPUT_DESIGN_2026-06-21.md`.
+- **Cowork + Chrome producer contract.** Agreed I/O for the read-only LinkedIn
+  capture producer: `runs/<YYYY-MM-DD>-<slug>.json` outputs + `runs/targets.csv`
+  queue (git-ignored), and three honored producer fields — `alumni_confirmed`
+  (forces the ALUMNI persona, ground truth over the classifier), file-level
+  `school`, and `connection_degree` (both surfaced in `shared_signals` for the
+  reviewer). The published sample `docs/chrome-capture.example.json` is locked in
+  by a contract regression test. Contract: `docs/CHROME_PRODUCER_CONTRACT.md`.
 
 ## [0.4.0] - 2026-06-20
 

@@ -1,0 +1,54 @@
+{
+  "company": "Joby Aviation",
+  "company_slug": "joby-aviation",
+  "location": "Dayton, OH",
+  "source": "chrome",
+  "contacts": [
+    {
+      "full_name": "[Alumni 1 — read from UIUC Alumni tool]",
+      "title": "Flight Sciences Engineer",
+      "linkedin_url": "https://www.linkedin.com/in/EXAMPLE-alum-1",
+      "location": "Dayton, OH",
+      "about": "University of Illinois Urbana-Champaign, MS Aerospace Engineering '22 — aerodynamics & flight dynamics",
+      "persona": "ALUMNI"
+    },
+    {
+      "full_name": "[Alumni 2 — read from UIUC Alumni tool]",
+      "title": "Structures Engineer",
+      "linkedin_url": "https://www.linkedin.com/in/EXAMPLE-alum-2",
+      "location": "Dayton, OH",
+      "about": "UIUC Aerospace '21 — composite structures, FEA",
+      "persona": "ALUMNI"
+    },
+    {
+      "full_name": "[Alumni 3 — read from UIUC Alumni tool]",
+      "title": "Manufacturing Engineer",
+      "linkedin_url": "https://www.linkedin.com/in/EXAMPLE-alum-3",
+      "location": "Greater Dayton",
+      "about": "Illinois MechSE '20, now composites manufacturing at Joby",
+      "persona": "ALUMNI"
+    },
+    {
+      "full_name": "[Recruiter — read from People search, title contains 'Talent']",
+      "title": "Technical Recruiter, Engineering",
+      "linkedin_url": "https://www.linkedin.com/in/EXAMPLE-recruiter",
+      "location": "Dayton, OH",
+      "about": "Hiring across structures, propulsion, and manufacturing at Joby",
+      "persona": "RECRUITER"
+    },
+    {
+      "full_name": "[Peer 1 — read from People search]",
+      "title": "Composites Design Engineer",
+      "linkedin_url": "https://www.linkedin.com/in/EXAMPLE-peer-1",
+      "location": "Dayton, OH",
+      "about": "Composite design and layup optimization"
+    },
+    {
+      "full_name": "[Peer 2 — read from People search]",
+      "title": "Stress Analysis Engineer",
+      "linkedin_url": "https://www.linkedin.com/in/EXAMPLE-peer-2",
+      "location": "Dayton, OH",
+      "about": "Airframe stress, fatigue & damage tolerance"
+    }
+  ]
+}
