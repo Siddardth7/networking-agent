@@ -6,6 +6,25 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Source-agnostic contact input (flexible-input design).** Contacts no longer
+  have to come from the Serper Finder. The Finder's second half was extracted
+  into a shared `ingest_contacts()` (enrich → classify → hook → save), and a new
+  `src/agents/importer.py` normalizes any leads file — Apollo export, Apify
+  scrape, Serper/Cowork+Chrome JSON, or a hand-compiled CSV/JSON — into the
+  canonical contact record and runs it through that same path. Headers are
+  matched by alias (`Person Linkedin Url` / `profileUrl` / `linkedin` →
+  `linkedin_url`, etc.); `persona`/`focus_area`/`hook` are generated when absent
+  and honored when the file supplies them; a supplied `email` skips Hunter. New
+  `/network-import <file> [--company] [--source] [--draft] [--validate]` command
+  gives a frictionless "leads file in → drafts out" path (reusing ask-rotation,
+  the marketer approval loop, and the artifact); wired as a CLI entry point at
+  `src/cli/network_import.py` (`python -m src.cli.network_import <file> --draft`),
+  matching the other `network_*` commands. `validate_contacts_file()` is
+  the producer-contract check for the Cowork + Chrome automation. The Finder's
+  Serper path is unchanged (byte-for-byte behavior; 534 prior tests still green).
+  Design: `docs/FLEXIBLE_INPUT_DESIGN_2026-06-21.md`.
+
 ## [0.4.0] - 2026-06-20
 
 Phase 3 — ask-rotation: same-company alumni/peers now get *different* questions

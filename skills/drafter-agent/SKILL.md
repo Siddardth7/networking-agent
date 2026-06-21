@@ -7,6 +7,25 @@ description: "Draft generation sub-agent for the networking-agent plugin. For ea
 
 This skill runs **parallel fan-out draft generation** for selected contacts.
 
+## Source-agnostic input (flexible-input design)
+
+Contacts do **not** have to come from the Serper Finder. Any source — an Apollo
+export, an Apify scrape, a Claude Cowork + Claude-in-Chrome capture, or a
+hand-compiled file — can be normalized into the canonical contact record and
+drafted. Drop a leads file and get drafts:
+
+```
+/network-import <file> --company "Joby Aviation" --draft
+```
+
+The importer (`src/agents/importer.py`) maps CSV/JSON headers by alias
+(`Person Linkedin Url` / `profileUrl` → `linkedin_url`, etc.), fills
+`persona`/`focus_area`/`hook` when the file omits them (honoring them when
+present), runs the shared `ingest_contacts()` enrich path, marks contacts
+SELECTED, and calls `draft_for_contacts` below — unchanged. Only `full_name` is
+required per contact; `title`, `linkedin_url`, and a company are recommended.
+See `commands/network-import.md` and `docs/FLEXIBLE_INPUT_DESIGN_2026-06-21.md`.
+
 ## Entry Point
 
 ```python

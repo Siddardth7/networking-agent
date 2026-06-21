@@ -16,7 +16,12 @@ from src.providers.quota_manager import QuotaManager
 from src.providers.retry import QuotaExhausted
 from src.providers.serper import SerperProvider
 
-__all__ = ["find_contacts", "is_acceptable_hook", "looks_like_verbatim_news"]
+__all__ = [
+    "find_contacts",
+    "ingest_contacts",
+    "is_acceptable_hook",
+    "looks_like_verbatim_news",
+]
 
 _ROLE_KEYWORDS = [
     "quality engineer",
@@ -365,6 +370,130 @@ def _get_or_create_company(company_slug: str) -> int:
         return int(cursor.lastrowid)
 
 
+def ingest_contacts(
+    candidates: list[ContactCandidate],
+    company_id: int,
+    company_slug: str,
+    *,
+    anthropic_client,
+    hunter_provider: HunterProvider | None = None,
+    company_news: str | None = None,
+) -> list[ContactCandidate]:
+    """Source-agnostic ingest: enrich → classify → hook → save.
+
+    This is the second half of the Finder, factored out so that ANY input
+    source — Serper discovery, an Apollo export, an Apify dump, a Cowork +
+    Chrome automation, or a manually compiled file — can flow through the same
+    enrich/classify/hook/save path (flexible-input design, 2026-06-21). Each
+    *candidate* is a canonical ``ContactCandidate``; fields the source already
+    supplied are honored, fields it left blank are generated:
+
+    - ``email``: kept when the candidate already has one (e.g. Apollo); else
+      Hunter-enriched when a provider is given; else left empty.
+    - ``persona`` / ``focus_area``: kept when BOTH are supplied (skips the Haiku
+      classifier call); else classified from title + snippet.
+    - ``hook``: kept when supplied; else generated via the deterministic tiers.
+
+    For Serper-discovered candidates (no persona/email/hook pre-set) this is
+    byte-for-byte the previous behavior. Writes one ``contacts`` row per
+    candidate; does NOT transition company state (the caller owns that).
+    """
+    company_domain = _company_domain(company_id, company_slug)
+    hunter_exhausted = False
+    enriched: list[tuple[ContactCandidate, EmailResult]] = []
+
+    for candidate in candidates:
+        if candidate.email:
+            # Source already supplied an address (e.g. Apollo export) — trust it,
+            # spend no Hunter quota.
+            email_result = EmailResult(
+                email=candidate.email, verified=False, confidence=0, source="IMPORT"
+            )
+        elif hunter_provider is None:
+            email_result = EmailResult(
+                email=None, verified=False, confidence=0, source="EMAIL_DISABLED"
+            )
+        elif hunter_exhausted:
+            email_result = EmailResult(
+                email=None, verified=False, confidence=0, source="HUNTER_EXHAUSTED"
+            )
+        else:
+            try:
+                email_result = hunter_provider.find_email(
+                    full_name=candidate.full_name, company_domain=company_domain
+                )
+            except QuotaExhausted:
+                hunter_exhausted = True
+                email_result = EmailResult(
+                    email=None, verified=False, confidence=0, source="HUNTER_EXHAUSTED"
+                )
+        enriched.append((candidate, email_result))
+
+    results: list[ContactCandidate] = []
+    for candidate, email_result in enriched:
+        # Skip the classifier when the source already labeled BOTH fields.
+        if candidate.persona is not None and candidate.focus_area is not None:
+            persona, focus_area, hook_signal = candidate.persona, candidate.focus_area, None
+        else:
+            persona, focus_area, hook_signal = _classify_contact(
+                candidate, company_slug, anthropic_client
+            )
+
+        # Honor a source-supplied hook; otherwise generate one.
+        hook = candidate.hook if candidate.hook else _generate_hook(
+            candidate,
+            hook_signal=hook_signal,
+            company_news=company_news,
+        )
+
+        enriched_candidate = ContactCandidate(
+            full_name=candidate.full_name,
+            title=candidate.title,
+            linkedin_url=candidate.linkedin_url,
+            company_slug=company_slug,
+            persona=persona,
+            focus_area=focus_area,
+            email=email_result.email,
+            snippet=candidate.snippet,
+            hook=hook,
+            location=candidate.location,
+        )
+        results.append(enriched_candidate)
+
+        signal_parts: list[str] = []
+        if candidate.snippet:
+            signal_parts.append(f"profile: {candidate.snippet[:140]}")
+        if company_news:
+            signal_parts.append(f"company_news: {company_news[:140]}")
+        shared_signals = " | ".join(signal_parts) or None
+
+        with with_writer() as conn:
+            conn.execute(
+                """
+                INSERT INTO contacts
+                    (company_id, full_name, title, persona, focus_area,
+                     linkedin_url, email, email_verified, source_provider,
+                     hook, shared_signals)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    company_id,
+                    candidate.full_name,
+                    candidate.title,
+                    persona.value,
+                    focus_area.value,
+                    candidate.linkedin_url,
+                    email_result.email,
+                    int(email_result.verified),
+                    email_result.source,
+                    hook,
+                    shared_signals,
+                ),
+            )
+
+    return results
+
+
 def find_contacts(
     company_slug: str,
     limit: int = 5,
@@ -431,92 +560,16 @@ def find_contacts(
     # this signal is a nice-to-have, not a blocking step.
     company_news = _fetch_company_news_signal(company_slug, serper_provider)
 
-    # Phase 2: Enrich — on Hunter QuotaExhausted mark remaining contacts HUNTER_EXHAUSTED
-    company_domain = _company_domain(company_id, company_slug)
-    hunter_exhausted = False
-    enriched: list[tuple[ContactCandidate, EmailResult]] = []
-
-    for candidate in candidates:
-        if hunter_provider is None:
-            # Enrichment disabled (v0.2.1 default) — no key, no quota spend.
-            email_result = EmailResult(
-                email=None, verified=False, confidence=0, source="EMAIL_DISABLED"
-            )
-        elif hunter_exhausted:
-            email_result = EmailResult(
-                email=None, verified=False, confidence=0, source="HUNTER_EXHAUSTED"
-            )
-        else:
-            try:
-                email_result = hunter_provider.find_email(
-                    full_name=candidate.full_name, company_domain=company_domain
-                )
-            except QuotaExhausted:
-                hunter_exhausted = True
-                email_result = EmailResult(
-                    email=None, verified=False, confidence=0, source="HUNTER_EXHAUSTED"
-                )
-        enriched.append((candidate, email_result))
-
-    # Phases 3 + 4 + 5: Classify → Hook → Save per contact
-    results: list[ContactCandidate] = []
-
-    for candidate, email_result in enriched:
-        persona, focus_area, hook_signal = _classify_contact(
-            candidate, company_slug, anthropic_client
-        )
-        hook = _generate_hook(
-            candidate,
-            hook_signal=hook_signal,
-            company_news=company_news,
-        )
-
-        enriched_candidate = ContactCandidate(
-            full_name=candidate.full_name,
-            title=candidate.title,
-            linkedin_url=candidate.linkedin_url,
-            company_slug=company_slug,
-            persona=persona,
-            focus_area=focus_area,
-            email=email_result.email,
-            snippet=candidate.snippet,
-        )
-        results.append(enriched_candidate)
-
-        # shared_signals records the raw signal sources behind the hook —
-        # the LinkedIn snippet first (per-contact), then the company news
-        # snippet (shared across the batch). The marketer renders this
-        # field in the approval loop so the reviewer can audit the hook.
-        signal_parts: list[str] = []
-        if candidate.snippet:
-            signal_parts.append(f"profile: {candidate.snippet[:140]}")
-        if company_news:
-            signal_parts.append(f"company_news: {company_news[:140]}")
-        shared_signals = " | ".join(signal_parts) or None
-
-        with with_writer() as conn:
-            conn.execute(
-                """
-                INSERT INTO contacts
-                    (company_id, full_name, title, persona, focus_area,
-                     linkedin_url, email, email_verified, source_provider,
-                     hook, shared_signals)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    company_id,
-                    candidate.full_name,
-                    candidate.title,
-                    persona.value,
-                    focus_area.value,
-                    candidate.linkedin_url,
-                    email_result.email,
-                    int(email_result.verified),
-                    email_result.source,
-                    hook,
-                    shared_signals,
-                ),
-            )
+    # Phases 2–5: Enrich → Classify → Hook → Save — now source-agnostic, shared
+    # with every non-Serper input path (Apollo / Apify / Cowork+Chrome / manual).
+    results = ingest_contacts(
+        candidates,
+        company_id,
+        company_slug,
+        anthropic_client=anthropic_client,
+        hunter_provider=hunter_provider,
+        company_news=company_news,
+    )
 
     # Transition company NEW → FOUND
     with with_writer() as conn:

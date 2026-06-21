@@ -108,6 +108,15 @@ class ContactCandidate(BaseModel):
     # Used by the finder classifier to ground persona + extract a specific
     # hook_signal. May be None when not provided by the search API.
     snippet: str | None = None
+    # ---- Canonical-input fields (flexible-input design, 2026-06-21) ----
+    # ContactCandidate doubles as the canonical record every input source
+    # (Serper, Apollo, Apify, Cowork+Chrome, manual files) normalizes to.
+    # These are honored when a source supplies them and generated otherwise,
+    # so a labeled file skips LLM work while a raw name+URL list is enriched.
+    # `hook`: user/source-supplied hook; when None the Finder/importer
+    #   generates one via _generate_hook. `location`: campaign/site context.
+    hook: str | None = None
+    location: str | None = None
 
 
 class EmailResult(BaseModel):
