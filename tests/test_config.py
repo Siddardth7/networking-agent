@@ -14,7 +14,47 @@ import pytest
 import yaml
 
 import src.core.config as config_module
-from src.core.config import ConfigSecurityError, load_config, write_default_config
+from src.core.config import (
+    ConfigSecurityError,
+    _load_dotenv,
+    load_config,
+    write_default_config,
+)
+
+# ---------------------------------------------------------------------------
+# .env loader
+# ---------------------------------------------------------------------------
+
+
+def test_load_dotenv_parses_and_respects_existing_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_load_dotenv populates os.environ but never overrides an existing var."""
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "# a comment\n"
+        "\n"
+        "APIFY_API_KEY=apify_from_file\n"
+        'export APOLLO_API_KEY="apollo_quoted"\n'
+        "ALREADY_SET=from_file\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("APIFY_API_KEY", raising=False)
+    monkeypatch.delenv("APOLLO_API_KEY", raising=False)
+    monkeypatch.setenv("ALREADY_SET", "from_env")  # must win over the file
+
+    _load_dotenv(paths=[env_file])
+
+    assert os.environ["APIFY_API_KEY"] == "apify_from_file"
+    assert os.environ["APOLLO_API_KEY"] == "apollo_quoted"  # export + quotes stripped
+    assert os.environ["ALREADY_SET"] == "from_env"  # not overwritten
+
+
+def test_load_dotenv_default_gated_off_in_tests() -> None:
+    """The conftest opt-out flag makes the default (no-arg) load a no-op."""
+    # NETWORKING_AGENT_NO_DOTENV is set by conftest; a no-arg call must not read
+    # the developer's real .env. Must simply return without raising.
+    _load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Helpers

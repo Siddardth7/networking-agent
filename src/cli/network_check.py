@@ -202,8 +202,13 @@ def _check_serper() -> tuple[str, bool]:
         cfg = load_config()
         key = cfg.serper_api_key
         if not key:
+            # Serper is now the FALLBACK behind Apify. Missing Serper is only an
+            # error when Apify is also absent (no discovery provider at all).
+            if cfg.apify_api_key:
+                return _ok("Serper (fallback): not configured — OK, Apify is primary"), False
             return _err(
-                "Serper API key: not configured — set SERPER_API_KEY env var or update config.yaml"
+                "Serper API key: not configured — set SERPER_API_KEY (or "
+                "APIFY_API_KEY for primary discovery)"
             ), True
 
         client, should_close = _get_http_client()
@@ -236,6 +241,108 @@ def _check_serper() -> tuple[str, bool]:
             return _err(f"Serper API key: ping failed (HTTP {resp.status_code})"), True
     except Exception as exc:
         return _err(f"Serper API key: check failed ({exc})"), True
+
+
+def _check_apify() -> tuple[str, bool, bool]:
+    """Check 6b: Apify (primary discovery) presence + free validation ping.
+
+    Absence is informational, not a failure — discovery falls back to Serper.
+    Validation hits the free GET /v2/users/me endpoint (no Actor run, no cost).
+    Returns ``(line, is_error, is_warning)``.
+    """
+    try:
+        from src.core.config import load_config  # noqa: PLC0415
+        from src.providers.quota_manager import QuotaManager  # noqa: PLC0415
+
+        cfg = load_config()
+        key = cfg.apify_api_key
+        if not key:
+            return (
+                _ok(
+                    "Apify (primary discovery): not configured — using Serper. "
+                    "Set APIFY_API_KEY to enable."
+                ),
+                False,
+                False,
+            )
+
+        client, should_close = _get_http_client()
+        try:
+            resp = client.get(f"https://api.apify.com/v2/users/me?token={key}")
+        finally:
+            if should_close:
+                client.close()
+
+        if resp.status_code == 200:
+            qm = QuotaManager()
+            remaining = qm.remaining("apify")
+            limit = qm.get_limit("apify")
+            if limit == 0:
+                limit = 40
+                remaining = 40
+            return (
+                _ok(
+                    f"Apify API key: valid ({remaining} / {limit} search pages "
+                    f"remaining this month)"
+                ),
+                False,
+                False,
+            )
+        elif resp.status_code in (401, 403):
+            return (
+                _err(
+                    f"Apify API key: invalid (HTTP {resp.status_code}) — "
+                    f"set APIFY_API_KEY env var or update config.yaml"
+                ),
+                True,
+                False,
+            )
+        else:
+            return _err(f"Apify API key: ping failed (HTTP {resp.status_code})"), True, False
+    except Exception as exc:
+        return _err(f"Apify API key: check failed ({exc})"), True, False
+
+
+def _check_apollo() -> tuple[str, bool, bool]:
+    """Check 7b: Apollo (email fallback) presence + quota.
+
+    Gated on email enrichment like Hunter. NOT live-pinged — Apollo's match
+    endpoint spends credits, so the key is validated lazily on first real use.
+    Returns ``(line, is_error, is_warning)``.
+    """
+    try:
+        from src.core.config import load_config  # noqa: PLC0415
+        from src.providers.quota_manager import QuotaManager  # noqa: PLC0415
+
+        cfg = load_config()
+        if not cfg.enable_email_enrichment:
+            return _ok("Apollo: skipped — email enrichment disabled"), False, False
+        key = cfg.apollo_api_key
+        if not key:
+            return (
+                _ok(
+                    "Apollo (email fallback): not configured — Hunter only. "
+                    "Set APOLLO_API_KEY to enable the fallback."
+                ),
+                False,
+                False,
+            )
+        qm = QuotaManager()
+        remaining = qm.remaining("apollo")
+        limit = qm.get_limit("apollo")
+        if limit == 0:
+            limit = 50
+            remaining = 50
+        return (
+            _ok(
+                f"Apollo API key: configured ({remaining} / {limit} credits "
+                f"remaining this month; validated on first use)"
+            ),
+            False,
+            False,
+        )
+    except Exception as exc:
+        return _err(f"Apollo key: check failed ({exc})"), True, False
 
 
 def _check_hunter() -> tuple[list[str], bool]:
@@ -417,6 +524,18 @@ def run_checks() -> int:
         lines.append(_err(f"Serper check failed: {exc}"))
         error_count += 1
 
+    # Check 6b: Apify (primary discovery) — presence + free validation ping
+    try:
+        line, is_err, is_warn = _check_apify()
+        lines.append(line)
+        if is_err:
+            error_count += 1
+        if is_warn:
+            warning_count += 1
+    except Exception as exc:
+        lines.append(_err(f"Apify check failed: {exc}"))
+        error_count += 1
+
     # Check 7: Hunter live ping + quota (may emit multiple lines)
     try:
         hunter_lines, is_err = _check_hunter()
@@ -429,6 +548,18 @@ def run_checks() -> int:
                 warning_count += 1
     except Exception as exc:
         lines.append(_err(f"Hunter check failed: {exc}"))
+        error_count += 1
+
+    # Check 7b: Apollo (email fallback) — presence + quota (no live ping)
+    try:
+        line, is_err, is_warn = _check_apollo()
+        lines.append(line)
+        if is_err:
+            error_count += 1
+        if is_warn:
+            warning_count += 1
+    except Exception as exc:
+        lines.append(_err(f"Apollo check failed: {exc}"))
         error_count += 1
 
     # Check 8: Voice doc

@@ -223,12 +223,62 @@ def _key_or_none(value: str | None) -> str | None:
     return value
 
 
+def _load_dotenv(paths: list[Path] | None = None) -> None:
+    """Populate ``os.environ`` from a ``.env`` file (best-effort, no deps).
+
+    Looks in the CWD and the repo root (the package's grandparent dir). Already-
+    set environment variables are NEVER overwritten — a real export wins over the
+    file, matching python-dotenv's default and the loader's env-over-YAML rule.
+
+    Minimal parser: ``KEY=VALUE`` per line; ``#`` comments and blank lines
+    skipped; an optional ``export`` prefix and surrounding single/double quotes
+    are stripped. Unreadable or malformed files are ignored so config loading
+    never hard-fails on a stray ``.env``.
+    """
+    if paths is None:
+        # Opt-out used by the test suite so a developer's real .env never leaks
+        # real keys into hermetic tests. Explicit `paths` (unit tests) bypass it.
+        if os.environ.get("NETWORKING_AGENT_NO_DOTENV"):
+            return
+        paths = [Path.cwd() / ".env", Path(__file__).resolve().parents[2] / ".env"]
+
+    seen: set[Path] = set()
+    for path in paths:
+        path = path.resolve()
+        if path in seen or not path.is_file():
+            continue
+        seen.add(path)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export ") :].lstrip()
+            key, sep, value = line.partition("=")
+            if not sep:
+                continue
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
 def load_config() -> Config:
     """Load configuration, merging env vars and YAML (env vars win).
 
     Returns a :class:`Config` instance. API key fields may be None if not
     configured — callers that require them must validate themselves.
     """
+    # Pull any .env values into the environment first so the env-over-YAML rule
+    # below also covers keys the user kept in a .env file (already-exported vars
+    # are not overwritten). NETWORKING_AGENT_CONFIG must already be resolvable,
+    # so read it after the .env load.
+    _load_dotenv()
+
     path: Path = _resolve_config_path()  # env override → module-level → default
 
     # --- Load YAML if it exists (and verify permissions) ---

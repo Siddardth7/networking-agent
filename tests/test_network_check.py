@@ -19,7 +19,7 @@ from src.core.db import init_db
 # ---------------------------------------------------------------------------
 
 
-def make_mock_handler(anthropic=200, serper=200, hunter=200):
+def make_mock_handler(anthropic=200, serper=200, hunter=200, apify=200):
     def handler(request):
         url = str(request.url)
         if "anthropic.com" in url:
@@ -28,13 +28,15 @@ def make_mock_handler(anthropic=200, serper=200, hunter=200):
             return httpx.Response(serper, json={"organic": []}, request=request)
         if "hunter.io" in url:
             return httpx.Response(hunter, json={"data": {}}, request=request)
+        if "apify.com" in url:
+            return httpx.Response(apify, json={"data": {"username": "test"}}, request=request)
         return httpx.Response(404, request=request)
 
     return handler
 
 
-def make_client(anthropic=200, serper=200, hunter=200):
-    transport = httpx.MockTransport(make_mock_handler(anthropic, serper, hunter))
+def make_client(anthropic=200, serper=200, hunter=200, apify=200):
+    transport = httpx.MockTransport(make_mock_handler(anthropic, serper, hunter, apify))
     return httpx.Client(transport=transport)
 
 
@@ -147,6 +149,61 @@ class TestBadAnthropic:
         assert result == 1
         assert "✗" in captured.out
         assert "Anthropic" in captured.out
+
+
+class TestApify:
+    def test_apify_valid_when_configured(self, tmp_path, monkeypatch, env_keys, capsys):
+        """Apify key present + 200 from users/me → reported valid, still green."""
+        # Isolate from the real ~/.networking-agent/config.yaml.
+        monkeypatch.setenv("NETWORKING_AGENT_CONFIG", str(tmp_path / "none.yaml"))
+        monkeypatch.setenv("APIFY_API_KEY", "apify_test_key")
+        db_path = tmp_path / "state.db"
+        monkeypatch.setattr(db_module, "_DB_PATH", db_path)
+        init_db()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        (tmp_path / ".networking-agent").mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".networking-agent" / "voice.md").write_text("voice\n")
+
+        network_check.set_http_client(make_client(apify=200))
+        result = network_check.run_checks()
+
+        captured = capsys.readouterr()
+        assert result == 0
+        assert "Apify API key: valid" in captured.out
+
+    def test_apify_invalid_key_is_error(self, tmp_path, monkeypatch, env_keys, capsys):
+        """Apify key present but 401 → error (return 1)."""
+        monkeypatch.setenv("NETWORKING_AGENT_CONFIG", str(tmp_path / "none.yaml"))
+        monkeypatch.setenv("APIFY_API_KEY", "apify_bad")
+        db_path = tmp_path / "state.db"
+        monkeypatch.setattr(db_module, "_DB_PATH", db_path)
+        init_db()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+
+        network_check.set_http_client(make_client(apify=401))
+        result = network_check.run_checks()
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "Apify API key: invalid" in captured.out
+
+    def test_apify_absent_is_informational(self, tmp_path, monkeypatch, env_keys, capsys):
+        """No Apify key → info line, not an error (Serper covers discovery)."""
+        monkeypatch.setenv("NETWORKING_AGENT_CONFIG", str(tmp_path / "none.yaml"))
+        monkeypatch.delenv("APIFY_API_KEY", raising=False)
+        db_path = tmp_path / "state.db"
+        monkeypatch.setattr(db_module, "_DB_PATH", db_path)
+        init_db()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        (tmp_path / ".networking-agent").mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".networking-agent" / "voice.md").write_text("voice\n")
+
+        network_check.set_http_client(make_client())
+        result = network_check.run_checks()
+
+        captured = capsys.readouterr()
+        assert result == 0
+        assert "Apify (primary discovery): not configured" in captured.out
 
 
 class TestBadSerper:
