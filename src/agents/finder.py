@@ -11,6 +11,9 @@ import re
 from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import ContactCandidate, EmailResult, FocusArea, Persona
+from src.providers.apify import ApifyProvider
+from src.providers.apollo import ApolloProvider
+from src.providers.base import SearchProvider
 from src.providers.hunter import HunterProvider
 from src.providers.quota_manager import QuotaManager
 from src.providers.retry import QuotaExhausted
@@ -370,6 +373,105 @@ def _get_or_create_company(company_slug: str) -> int:
         return int(cursor.lastrowid)
 
 
+def _discover(
+    providers: list[SearchProvider],
+    company: str,
+    role_keywords: list[str],
+    limit: int,
+) -> list[ContactCandidate]:
+    """Try each discovery provider in order; return the first non-empty result.
+
+    Fallback semantics (input-stack decision 2026-06-25): Apify is primary,
+    Serper the fallback. An empty result falls through to the next lane (Google
+    may surface profiles a structured people-search missed), so ``[]`` is only
+    returned once every lane has *run* and found nothing. A provider that
+    *fails* (quota exhausted, auth, network) is skipped so the next lane gets a
+    turn. Only when EVERY provider failed do we re-raise — the last
+    QuotaExhausted if any (preserves the old hard-stop contract), else the last
+    error.
+    """
+    quota_exc: QuotaExhausted | None = None
+    other_exc: Exception | None = None
+    ran_clean = False
+    for provider in providers:
+        try:
+            candidates = provider.search_linkedin_profiles(
+                company=company, role_keywords=role_keywords, limit=limit
+            )
+        except QuotaExhausted as exc:
+            quota_exc = exc
+            continue
+        except Exception as exc:  # provider down/misconfigured → try the next lane
+            other_exc = exc
+            continue
+        ran_clean = True
+        if candidates:
+            return candidates
+    if ran_clean:
+        return []
+    if quota_exc is not None:
+        raise quota_exc
+    if other_exc is not None:
+        raise other_exc
+    return []
+
+
+def _resolve_email(
+    candidate: ContactCandidate,
+    hunter_provider: HunterProvider | None,
+    apollo_provider: ApolloProvider | None,
+    company_domain: str,
+    state: dict[str, bool],
+) -> EmailResult:
+    """Resolve one candidate's email: source-supplied → Hunter → Apollo.
+
+    *state* carries per-batch exhaustion flags (``hunter_exhausted`` /
+    ``apollo_exhausted``) so an exhausted provider is skipped for the rest of
+    the batch instead of re-raising each time. The ``HUNTER_EXHAUSTED`` sentinel
+    is preserved for the Hunter-only path (existing contract); it's only emitted
+    once Apollo has also failed/absent.
+    """
+    if candidate.email:
+        # Source already supplied an address (e.g. Apollo export) — trust it.
+        return EmailResult(email=candidate.email, verified=False, confidence=0, source="IMPORT")
+    if hunter_provider is None and apollo_provider is None:
+        return EmailResult(email=None, verified=False, confidence=0, source="EMAIL_DISABLED")
+
+    # Primary: Hunter.
+    hunter_result: EmailResult | None = None
+    if hunter_provider is not None and not state["hunter_exhausted"]:
+        try:
+            hunter_result = hunter_provider.find_email(
+                full_name=candidate.full_name, company_domain=company_domain
+            )
+        except QuotaExhausted:
+            state["hunter_exhausted"] = True
+    if hunter_result is not None and hunter_result.email:
+        return hunter_result
+
+    # Fallback: Apollo (only when Hunter yielded nothing).
+    if apollo_provider is not None and not state["apollo_exhausted"]:
+        try:
+            apollo_result = apollo_provider.find_email(
+                full_name=candidate.full_name, company_domain=company_domain
+            )
+        except QuotaExhausted:
+            state["apollo_exhausted"] = True
+        else:
+            if apollo_result.email:
+                return apollo_result
+
+    # Nothing found — pick the most informative empty sentinel.
+    apollo_unavailable = apollo_provider is None or state["apollo_exhausted"]
+    if hunter_provider is not None and state["hunter_exhausted"] and apollo_unavailable:
+        return EmailResult(email=None, verified=False, confidence=0, source="HUNTER_EXHAUSTED")
+    if hunter_result is not None:
+        return hunter_result  # Hunter ran, found nothing (source="hunter")
+    if apollo_provider is not None:
+        return EmailResult(email=None, verified=False, confidence=0, source="apollo")
+    return EmailResult(email=None, verified=False, confidence=0, source="EMAIL_DISABLED")
+
+
 def ingest_contacts(
     candidates: list[ContactCandidate],
     company_id: int,
@@ -377,6 +479,7 @@ def ingest_contacts(
     *,
     anthropic_client,
     hunter_provider: HunterProvider | None = None,
+    apollo_provider: ApolloProvider | None = None,
     company_news: str | None = None,
 ) -> list[ContactCandidate]:
     """Source-agnostic ingest: enrich → classify → hook → save.
@@ -399,34 +502,15 @@ def ingest_contacts(
     candidate; does NOT transition company state (the caller owns that).
     """
     company_domain = _company_domain(company_id, company_slug)
-    hunter_exhausted = False
+    # Per-batch exhaustion flags shared across candidates: once a provider hits
+    # its monthly cap we skip it for the rest of the batch (Hunter → Apollo).
+    email_state = {"hunter_exhausted": False, "apollo_exhausted": False}
     enriched: list[tuple[ContactCandidate, EmailResult]] = []
 
     for candidate in candidates:
-        if candidate.email:
-            # Source already supplied an address (e.g. Apollo export) — trust it,
-            # spend no Hunter quota.
-            email_result = EmailResult(
-                email=candidate.email, verified=False, confidence=0, source="IMPORT"
-            )
-        elif hunter_provider is None:
-            email_result = EmailResult(
-                email=None, verified=False, confidence=0, source="EMAIL_DISABLED"
-            )
-        elif hunter_exhausted:
-            email_result = EmailResult(
-                email=None, verified=False, confidence=0, source="HUNTER_EXHAUSTED"
-            )
-        else:
-            try:
-                email_result = hunter_provider.find_email(
-                    full_name=candidate.full_name, company_domain=company_domain
-                )
-            except QuotaExhausted:
-                hunter_exhausted = True
-                email_result = EmailResult(
-                    email=None, verified=False, confidence=0, source="HUNTER_EXHAUSTED"
-                )
+        email_result = _resolve_email(
+            candidate, hunter_provider, apollo_provider, company_domain, email_state
+        )
         enriched.append((candidate, email_result))
 
     results: list[ContactCandidate] = []
@@ -517,6 +601,8 @@ def find_contacts(
     limit: int = 5,
     serper_provider: SerperProvider | None = None,
     hunter_provider: HunterProvider | None = None,
+    apify_provider: ApifyProvider | None = None,
+    apollo_provider: ApolloProvider | None = None,
     anthropic_client=None,
 ) -> list[ContactCandidate]:
     """Run the 5-phase Finder pipeline for *company_slug*.
@@ -535,19 +621,30 @@ def find_contacts(
     init_db()
     cfg = load_config()
 
-    if serper_provider is None:
-        if not cfg.serper_api_key:
-            raise ValueError("SERPER_API_KEY not configured")
+    # Discovery providers: Apify (primary) → Serper (fallback). Build whichever
+    # keys are present; at least one is required. An injected serper_provider
+    # (tests) is honored as-is. Serper also powers the Tier-4 company-news hook.
+    if serper_provider is None and cfg.serper_api_key:
         serper_provider = SerperProvider(
             api_key=cfg.serper_api_key,
             quota_manager=QuotaManager(),
             cache_ttl_days=cfg.search_cache_ttl_days,
         )
+    if apify_provider is None and cfg.apify_api_key:
+        apify_provider = ApifyProvider(api_key=cfg.apify_api_key, quota_manager=QuotaManager())
+
+    search_chain = [p for p in (apify_provider, serper_provider) if p is not None]
+    if not search_chain:
+        raise ValueError("No discovery provider configured (set APIFY_API_KEY or SERPER_API_KEY)")
 
     if hunter_provider is None and cfg.enable_email_enrichment:
         if not cfg.hunter_api_key:
             raise ValueError("HUNTER_API_KEY not configured")
         hunter_provider = HunterProvider(api_key=cfg.hunter_api_key, quota_manager=QuotaManager())
+    # Apollo email fallback: only when enrichment is on and a key exists. Hunter
+    # stays primary; Apollo fills the gaps it misses (input-stack decision).
+    if apollo_provider is None and cfg.enable_email_enrichment and cfg.apollo_api_key:
+        apollo_provider = ApolloProvider(api_key=cfg.apollo_api_key, quota_manager=QuotaManager())
 
     if anthropic_client is None:
         anthropic_client = get_anthropic_client(cfg.anthropic_api_key)
@@ -561,31 +658,42 @@ def find_contacts(
             (company_id,),
         )
 
-    # Phase 1: Discover — QuotaExhausted propagates; company stays NEW
-    candidates = serper_provider.search_linkedin_profiles(
+    # Phase 1: Discover — Apify primary, Serper fallback. QuotaExhausted only
+    # propagates when EVERY lane is exhausted; company stays NEW in that case.
+    candidates = _discover(
+        search_chain,
         company=company_slug.replace("-", " "),
         role_keywords=_ROLE_KEYWORDS,
         limit=limit,
     )
 
     if not candidates:
+        # Both automated lanes (Apify → Serper) came up empty. The FINAL fallback
+        # is manual: source profiles by hand and feed them through
+        # `/network-import` (importer.py) — same enrich/classify/hook/draft path.
+        # A dedicated producer feature is postponed (input-stack decision).
         with with_writer() as conn:
             conn.execute("UPDATE companies SET state = 'FOUND' WHERE id = ?", (company_id,))
         return []
 
     # Phase 1.5: One company-news search per run, shared across all contacts
-    # as a Tier-4 fallback hook. Errors are swallowed inside the helper —
-    # this signal is a nice-to-have, not a blocking step.
-    company_news = _fetch_company_news_signal(company_slug, serper_provider)
+    # as a Tier-4 fallback hook. Needs Serper; skipped when only Apify is wired.
+    # Errors are swallowed inside the helper — this signal is a nice-to-have.
+    company_news = (
+        _fetch_company_news_signal(company_slug, serper_provider)
+        if serper_provider is not None
+        else None
+    )
 
-    # Phases 2–5: Enrich → Classify → Hook → Save — now source-agnostic, shared
-    # with every non-Serper input path (Apollo / Apify / Cowork+Chrome / manual).
+    # Phases 2–5: Enrich → Classify → Hook → Save — source-agnostic, shared with
+    # every input path (Apify / Apollo / Serper / Cowork+Chrome / manual).
     results = ingest_contacts(
         candidates,
         company_id,
         company_slug,
         anthropic_client=anthropic_client,
         hunter_provider=hunter_provider,
+        apollo_provider=apollo_provider,
         company_news=company_news,
     )
 

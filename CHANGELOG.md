@@ -6,7 +6,32 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Apify is now the primary LinkedIn discovery source, with Serper as fallback
+  (input-stack decision 2026-06-25).** New `ApifyProvider`
+  (`harvestapi/linkedin-profile-search`, Full mode, no cookies) becomes the first
+  discovery lane in the Finder; Serper is tried only when Apify is exhausted,
+  misconfigured, or finds nothing. Single API key, no rotation (the LinkedIn send
+  cap bounds demand below one free account's monthly credit). Billed per
+  25-profile page; a `QuotaManager("apify")` monthly cap (default 40 pages ≈ ~$8)
+  is the coarse budget guard. Configure via `APIFY_API_KEY`.
+- **Apollo email fallback after Hunter.** New `ApolloProvider` (people/match)
+  fills addresses Hunter misses; Hunter stays primary. Per-batch exhaustion flags
+  skip a capped provider for the rest of the batch (`HUNTER_EXHAUSTED` sentinel
+  preserved). Opt-in with the existing email toggle + `APOLLO_API_KEY`.
+- Finder discovery and email now run through ordered fallback chains
+  (`_discover`, `_resolve_email`); both are unit-tested independently of the DB.
+- **Manual scraping (Cowork+Chrome producer) is the documented FINAL fallback** —
+  already supported today via `/network-import`; dedicated feature development is
+  postponed.
+
 ### Fixed
+- **Apify profile imports no longer drop company / mangle location.** Apify
+  LinkedIn actors return nested fields (`location.linkedinText`,
+  `currentPosition.companyName`) the flat alias map couldn't see — company was
+  dropped and location stringified as a dict. New `_lift_apify_nested()` lifts
+  those paths before aliasing; covered by a regression test using the real
+  harvestapi shape.
 - **LinkedIn connection notes no longer lost to length HARD_FAIL (live-validation
   finding).** The drafter already gave an over-length `LINKEDIN_CONNECTION` note
   one corrective regen, but the model could still return marginally over the

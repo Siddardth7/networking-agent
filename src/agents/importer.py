@@ -107,6 +107,33 @@ _ALIAS: dict[str, str] = {
 # file-level meta keys lifted from a JSON object's top level (vs per-contact)
 _META_KEYS = ("company", "company_slug", "location", "source", "school")
 
+# Apify LinkedIn profile actors nest company/location, which the flat alias map
+# can't see — company would be dropped and location stringified as a dict. Lift
+# these nested paths to the flat keys before aliasing.
+# ponytail: add a (path, target) tuple if a new actor nests another field.
+_APIFY_NESTED: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("location", "linkedinText"), "location"),
+    (("currentPosition", "companyName"), "company"),
+)
+
+
+def _lift_apify_nested(raw: dict) -> dict:
+    """Return a copy of ``raw`` with nested Apify fields lifted to flat keys.
+
+    Flat sources (Apollo, CSV) are untouched: their values aren't dicts, so the
+    nested walk bails and the original flat value is preserved.
+    """
+    lifted = dict(raw)
+    for path, target in _APIFY_NESTED:
+        cur = raw
+        for seg in path:
+            cur = cur.get(seg) if isinstance(cur, dict) else None
+            if cur is None:
+                break
+        if isinstance(cur, str) and cur.strip():
+            lifted[target] = cur
+    return lifted
+
 def _norm_header(h: str) -> str:
     """Lowercase, collapse non-alphanumerics to single spaces, strip."""
     return re.sub(r"[^a-z0-9]+", " ", str(h).lower()).strip()
@@ -124,6 +151,7 @@ def _apply_aliases(raw: dict) -> dict:
     Unknown keys are ignored. Returns a dict of canonical_field -> value (str),
     with blanks dropped.
     """
+    raw = _lift_apify_nested(raw)
     canon: dict[str, str] = {}
     for key, value in raw.items():
         if value is None:

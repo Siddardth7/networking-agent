@@ -78,6 +78,24 @@ class TestParse:
         assert c.snippet == "UIUC AE alum"
         assert c.company_slug == "joby"
 
+    def test_apify_nested_profile_lifts_company_and_location(self, tmp_path):
+        # Real harvestapi/linkedin-profile-search shape: company + location nested.
+        f = tmp_path / "apify_nested.json"
+        f.write_text(json.dumps([
+            {"firstName": "André", "lastName": "Tavares Ferreira",
+             "headline": "Founder @AFERIA",
+             "linkedinUrl": "https://www.linkedin.com/in/andre-tavares-ferreira",
+             "about": "Business transformation in manufacturing.",
+             "location": {"linkedinText": "Solingen, Germany", "countryCode": "DE"},
+             "currentPosition": {"companyName": "AFERIA", "position": "Founder"}},
+        ]))
+        [c] = parse_contacts_file(f)
+        assert c.full_name == "André Tavares Ferreira"
+        assert c.title == "Founder @AFERIA"  # headline still wins for title
+        assert c.company_slug == "aferia"  # lifted from currentPosition.companyName
+        assert c.location == "Solingen, Germany"  # lifted, not a stringified dict
+        assert "{" not in (c.location or "")
+
     def test_canonical_json_object_with_meta(self, tmp_path):
         f = tmp_path / "chrome.json"
         f.write_text(json.dumps({

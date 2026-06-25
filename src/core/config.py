@@ -96,10 +96,19 @@ class Config:
     anthropic_api_key: str | None = None
     serper_api_key: str | None = None
     hunter_api_key: str | None = None
+    # Apify = primary LinkedIn discovery; Apollo = email fallback after Hunter
+    # (input-stack decision 2026-06-25). Single Apify key, no rotation.
+    apify_api_key: str | None = None
+    apollo_api_key: str | None = None
 
     # Provider limits
     serper_monthly_limit: int = 100
     hunter_monthly_limit: int = 25
+    # Apify is billed per 25-profile search page (~$0.20/page in Full mode); the
+    # call cap is a coarse $-budget guard (~$8/mo ≈ 40 pages). ponytail: page
+    # count, not exact USD — Apify's own free credit is the real hard stop.
+    apify_monthly_limit: int = 40
+    apollo_monthly_limit: int = 50
 
     # Search-response cache TTL in days (v0.2.1). Repeat queries within the
     # window are served from SQLite and spend zero search credits. 0 disables.
@@ -242,10 +251,18 @@ def load_config() -> Config:
     hunter_api_key = _key_or_none(
         os.environ.get("HUNTER_API_KEY") or yaml_keys.get("hunter_api_key")
     )
+    apify_api_key = _key_or_none(
+        os.environ.get("APIFY_API_KEY") or yaml_keys.get("apify_api_key")
+    )
+    apollo_api_key = _key_or_none(
+        os.environ.get("APOLLO_API_KEY") or yaml_keys.get("apollo_api_key")
+    )
 
     # --- Numeric settings (YAML only; no env override needed per spec) ---
     serper_monthly_limit = int(yaml_providers.get("serper_monthly_limit", 100))
     hunter_monthly_limit = int(yaml_providers.get("hunter_monthly_limit", 25))
+    apify_monthly_limit = int(yaml_providers.get("apify_monthly_limit", 40))
+    apollo_monthly_limit = int(yaml_providers.get("apollo_monthly_limit", 50))
     search_cache_ttl_days = int(yaml_providers.get("search_cache_ttl_days", 14))
     finder_limit = int(yaml_pipeline.get("finder_limit", 5))
     enable_email_enrichment = bool(yaml_pipeline.get("enable_email_enrichment", False))
@@ -261,8 +278,12 @@ def load_config() -> Config:
         anthropic_api_key=anthropic_api_key,
         serper_api_key=serper_api_key,
         hunter_api_key=hunter_api_key,
+        apify_api_key=apify_api_key,
+        apollo_api_key=apollo_api_key,
         serper_monthly_limit=serper_monthly_limit,
         hunter_monthly_limit=hunter_monthly_limit,
+        apify_monthly_limit=apify_monthly_limit,
+        apollo_monthly_limit=apollo_monthly_limit,
         search_cache_ttl_days=search_cache_ttl_days,
         finder_limit=finder_limit,
         enable_email_enrichment=enable_email_enrichment,
