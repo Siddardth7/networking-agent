@@ -89,10 +89,30 @@ def run_import(
         print(f"Import failed: file not found: {file_path}", file=sys.stderr)
         return 1
 
-    total_imported = sum(s["imported"] for s in summary.values())
-    total_drafted = sum(s["drafted"] for s in summary.values())
-    print(f"Imported {total_imported} contact(s) across {len(summary)} company(ies):")
-    for slug, s in summary.items():
+    by_company = summary["by_company"]
+    contribution = summary["contribution"]
+
+    # "No silent caps": always surface what the source contributed and dropped.
+    dropped = contribution["dropped"]
+    drop_bits = [
+        f"{n} {label}"
+        for label, n in (
+            ("no-name", dropped["no_name"]),
+            ("no-company", dropped["no_company"]),
+            ("duplicate", dropped["duplicate"]),
+        )
+        if n
+    ]
+    drop_suffix = f" (dropped: {', '.join(drop_bits)})" if drop_bits else ""
+    print(
+        f"Source '{contribution['source']}': {contribution['rows_read']} row(s) read "
+        f"→ {contribution['usable']} usable{drop_suffix}"
+    )
+
+    total_imported = sum(s["imported"] for s in by_company.values())
+    total_drafted = sum(s["drafted"] for s in by_company.values())
+    print(f"Imported {total_imported} contact(s) across {len(by_company)} company(ies):")
+    for slug, s in by_company.items():
         line = f"  {slug}: {s['imported']} imported"
         if draft:
             line += f", {s['drafted']} drafts generated"

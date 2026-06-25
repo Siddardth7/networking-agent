@@ -23,6 +23,7 @@ __all__ = [
     "ContactImportError",
     "import_contacts",
     "parse_contacts_file",
+    "parse_contacts_file_with_report",
     "validate_contacts_file",
 ]
 
@@ -198,42 +199,56 @@ def _read_rows(path: Path, source: str) -> tuple[list[dict], dict]:
     )
 
 
-def parse_contacts_file(
+def parse_contacts_file_with_report(
     path: str | Path,
     source: str = "auto",
     *,
     default_company: str | None = None,
     default_location: str | None = None,
-) -> list[ContactCandidate]:
-    """Parse a leads file into canonical ContactCandidate records (no DB writes).
+) -> tuple[list[ContactCandidate], dict]:
+    """Parse a leads file and return ``(candidates, contribution_report)``.
 
-    Each record resolves its company from (record company/company_slug → file
-    meta → *default_company*). Records without a resolvable company or a
-    full_name are skipped — see :func:`validate_contacts_file` to surface those.
-    Deduplicates by normalized LinkedIn URL, else by name+company.
+    Same parsing as :func:`parse_contacts_file`, but also tallies *what was
+    dropped and why* so the import path can surface it ("no silent caps",
+    ROADMAP A1). The report is::
+
+        {"source": <str>, "rows_read": <int>, "usable": <int>,
+         "dropped": {"no_name": <int>, "no_company": <int>, "duplicate": <int>}}
+
+    where ``rows_read`` is the raw record count, ``usable`` the count that
+    became canonical contacts, and each ``dropped`` bucket counts a skip reason
+    (a row with neither a name nor a company is counted once, under ``no_name``,
+    since name is checked first).
     """
     path = Path(path)
     raw_rows, meta = _read_rows(path, source)
     meta_company = meta.get("company") or meta.get("company_slug") or default_company
     meta_location = meta.get("location") or default_location
     meta_school = meta.get("school")
+    # A JSON object can carry its own `source` tag; fall back to the requested
+    # source ("auto"/"apollo"/…) so the report names the input either way.
+    report_source = meta.get("source") or source
 
+    dropped = {"no_name": 0, "no_company": 0, "duplicate": 0}
     candidates: list[ContactCandidate] = []
     seen: set[str] = set()
     for raw in raw_rows:
         canon = _apply_aliases(raw)
         full_name = canon.get("full_name")
         if not full_name:
+            dropped["no_name"] += 1
             continue
 
         company = canon.get("company_slug") or canon.get("company") or meta_company
         if not company:
+            dropped["no_company"] += 1
             continue
         company_slug = _slugify(company)
 
         url = (canon.get("linkedin_url") or "").rstrip("/").lower()
         dedup_key = url or f"{full_name.lower()}|{company_slug}"
         if dedup_key in seen:
+            dropped["duplicate"] += 1
             continue
         seen.add(dedup_key)
 
@@ -254,6 +269,34 @@ def parse_contacts_file(
                 connection_degree=canon.get("connection_degree"),
             )
         )
+
+    report = {
+        "source": report_source,
+        "rows_read": len(raw_rows),
+        "usable": len(candidates),
+        "dropped": dropped,
+    }
+    return candidates, report
+
+
+def parse_contacts_file(
+    path: str | Path,
+    source: str = "auto",
+    *,
+    default_company: str | None = None,
+    default_location: str | None = None,
+) -> list[ContactCandidate]:
+    """Parse a leads file into canonical ContactCandidate records (no DB writes).
+
+    Each record resolves its company from (record company/company_slug → file
+    meta → *default_company*). Records without a resolvable company or a
+    full_name are skipped — see :func:`validate_contacts_file` to surface those,
+    or :func:`parse_contacts_file_with_report` for per-file drop counts.
+    Deduplicates by normalized LinkedIn URL, else by name+company.
+    """
+    candidates, _report = parse_contacts_file_with_report(
+        path, source, default_company=default_company, default_location=default_location
+    )
     return candidates
 
 
@@ -359,16 +402,25 @@ def import_contacts(
     anthropic_client=None,
     hunter_provider=None,
 ) -> dict:
-    """Import a leads file end-to-end. Returns a per-company summary.
+    """Import a leads file end-to-end. Returns a structured summary.
 
     Parses *path* → normalizes to canonical ContactCandidates → runs the shared
     ``ingest_contacts`` enrich/classify/hook/save path → optionally marks the
     imported contacts SELECTED and drafts them. Multi-company files are grouped
-    so ask-rotation still operates per company. Returns
-    ``{slug: {"imported": int, "contact_ids": [...], "drafted": int}}``.
+    so ask-rotation still operates per company. Returns::
+
+        {
+          "by_company": {slug: {"imported": int, "contact_ids": [...], "drafted": int}},
+          "contribution": {"source": str, "rows_read": int, "usable": int,
+                           "dropped": {"no_name": int, "no_company": int, "duplicate": int}},
+        }
+
+    The ``contribution`` block is the "no silent caps" record (ROADMAP A1): how
+    many rows this source actually contributed and what was dropped, surfaced so
+    a thin or lossy file is never mistaken for full coverage.
     """
     init_db()
-    candidates = parse_contacts_file(
+    candidates, contribution = parse_contacts_file_with_report(
         path, source, default_company=company, default_location=location
     )
     if not candidates:
@@ -385,7 +437,7 @@ def import_contacts(
     for c in candidates:
         groups.setdefault(c.company_slug, []).append(c)
 
-    summary: dict[str, dict] = {}
+    by_company: dict[str, dict] = {}
     for slug, group in groups.items():
         company_id = _get_or_create_company(slug)
         before = _max_contact_id(company_id)
@@ -415,9 +467,9 @@ def import_contacts(
             results = draft_for_contacts(new_ids, anthropic_client=anthropic_client)
             drafted = sum(len(v) for v in results.values())
 
-        summary[slug] = {
+        by_company[slug] = {
             "imported": len(new_ids),
             "contact_ids": new_ids,
             "drafted": drafted,
         }
-    return summary
+    return {"by_company": by_company, "contribution": contribution}

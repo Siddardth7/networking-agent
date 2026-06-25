@@ -51,12 +51,20 @@ class TestImport:
 
         def fake_import(path, **kwargs):
             captured.update(kwargs)
-            return {"joby-aviation": {"imported": 2, "contact_ids": [1, 2], "drafted": 0}}
+            return {
+                "by_company": {
+                    "joby-aviation": {"imported": 2, "contact_ids": [1, 2], "drafted": 0}
+                },
+                "contribution": {"source": "apollo", "rows_read": 3, "usable": 2,
+                                 "dropped": {"no_name": 1, "no_company": 0, "duplicate": 0}},
+            }
 
         rc = run_import(_args(company="Joby"), _import_fn=fake_import)
         assert rc == 0
         out = capsys.readouterr().out
         assert "Imported 2" in out and "joby-aviation: 2 imported" in out
+        # "No silent caps": the contribution line surfaces reads + drops.
+        assert "3 row(s) read" in out and "2 usable" in out and "1 no-name" in out
         assert captured["auto_select"] is False and captured["draft"] is False
 
     def test_draft_flag_passes_through_and_reports(self, capsys):
@@ -64,7 +72,11 @@ class TestImport:
 
         def fake_import(path, **kwargs):
             captured.update(kwargs)
-            return {"joby": {"imported": 2, "contact_ids": [1, 2], "drafted": 6}}
+            return {
+                "by_company": {"joby": {"imported": 2, "contact_ids": [1, 2], "drafted": 6}},
+                "contribution": {"source": "auto", "rows_read": 2, "usable": 2,
+                                 "dropped": {"no_name": 0, "no_company": 0, "duplicate": 0}},
+            }
 
         rc = run_import(_args(draft=True), _import_fn=fake_import)
         assert rc == 0

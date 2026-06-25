@@ -15,6 +15,15 @@ Versioning: [Semantic Versioning](https://semver.org/)
   `docs/README.md` index so the docs folder is navigable.
 
 ### Added
+- **Per-source contribution logging ("no silent caps", ROADMAP A1).** The import
+  path now reports exactly what each source contributed and what it dropped, so a
+  thin or lossy file is never mistaken for full coverage. New
+  `parse_contacts_file_with_report()` tallies `rows_read` / `usable` and a
+  per-reason `dropped` breakdown (`no_name` / `no_company` / `duplicate`);
+  `import_contacts()` now returns `{"by_company": {...}, "contribution": {...}}`
+  and `/network-import` prints a `Source '<src>': N row(s) read → M usable
+  (dropped: …)` line before the per-company summary. `parse_contacts_file()` is
+  unchanged (still returns the contact list).
 - **Source-agnostic contact input (flexible-input design).** Contacts no longer
   have to come from the Serper Finder. The Finder's second half was extracted
   into a shared `ingest_contacts()` (enrich → classify → hook → save), and a new

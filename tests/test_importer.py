@@ -16,6 +16,7 @@ from src.agents.importer import (
     ContactImportError,
     import_contacts,
     parse_contacts_file,
+    parse_contacts_file_with_report,
     validate_contacts_file,
 )
 from src.core.db import get_connection, init_db
@@ -125,6 +126,54 @@ class TestParse:
 
 
 # ---------------------------------------------------------------------------
+# Contribution report ("no silent caps", ROADMAP A1)
+# ---------------------------------------------------------------------------
+class TestContributionReport:
+    def test_report_tallies_every_drop_reason(self, tmp_path):
+        f = tmp_path / "mixed.json"
+        f.write_text(json.dumps([
+            {"title": "no name"},                                   # → no_name
+            {"full_name": "No Company"},                            # → no_company
+            {"full_name": "Dup", "linkedin_url": "https://li/x", "company": "Co"},
+            {"full_name": "Dup 2", "linkedin_url": "https://li/x/", "company": "Co"},  # dup URL
+            {"full_name": "Good", "company": "Co"},
+        ]))
+        candidates, report = parse_contacts_file_with_report(f)
+        assert report["rows_read"] == 5
+        assert report["usable"] == 2 == len(candidates)
+        assert report["dropped"] == {"no_name": 1, "no_company": 1, "duplicate": 1}
+
+    def test_report_source_prefers_file_level_tag(self, tmp_path):
+        f = tmp_path / "tagged.json"
+        f.write_text(json.dumps({
+            "company": "Co", "source": "chrome",
+            "contacts": [{"full_name": "A B", "title": "Eng"}],
+        }))
+        _candidates, report = parse_contacts_file_with_report(f)
+        assert report["source"] == "chrome"  # file tag wins over the "auto" default
+
+    def test_clean_file_reports_no_drops(self, tmp_path):
+        f = tmp_path / "clean.csv"
+        f.write_text("name,company\nA B,Co\nC D,Co\n")
+        _candidates, report = parse_contacts_file_with_report(f, source="manual")
+        assert report["source"] == "manual"
+        assert report["dropped"] == {"no_name": 0, "no_company": 0, "duplicate": 0}
+
+    def test_import_returns_contribution_block(self, db_path, tmp_path):
+        init_db()
+        f = tmp_path / "leads.json"
+        f.write_text(json.dumps([
+            {"full_name": "A B", "company": "Joby", "title": "Eng"},
+            {"company": "Joby", "title": "nameless"},  # dropped: no_name
+        ]))
+        summary = import_contacts(f, anthropic_client=_mk_client())
+        assert summary["by_company"]["joby"]["imported"] == 1
+        contribution = summary["contribution"]
+        assert contribution["rows_read"] == 2 and contribution["usable"] == 1
+        assert contribution["dropped"]["no_name"] == 1
+
+
+# ---------------------------------------------------------------------------
 # Validation (the producer contract check)
 # ---------------------------------------------------------------------------
 class TestValidate:
@@ -173,7 +222,7 @@ class TestImport:
         )
         client = _mk_client()
         summary = import_contacts(f, anthropic_client=client)
-        assert summary["joby-aviation"]["imported"] == 2
+        assert summary["by_company"]["joby-aviation"]["imported"] == 2
 
         conn = get_connection()
         try:
@@ -240,8 +289,8 @@ class TestImport:
             {"full_name": "C D", "company": "Sierra Space", "title": "Eng"},
         ]))
         summary = import_contacts(f, anthropic_client=_mk_client())
-        assert summary["joby"]["imported"] == 1
-        assert summary["sierra-space"]["imported"] == 1
+        assert summary["by_company"]["joby"]["imported"] == 1
+        assert summary["by_company"]["sierra-space"]["imported"] == 1
 
 
 # ---------------------------------------------------------------------------
