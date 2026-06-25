@@ -16,7 +16,6 @@ from pathlib import Path
 
 from src.agents.achievement_matcher import load_resume_library, match_achievements
 from src.agents.critic import critique_draft, hard_fail_trace
-from src.agents.humanizer import humanize
 from src.agents.guardrails import (
     check_draft,
     detect_multi_ask,
@@ -25,6 +24,7 @@ from src.agents.guardrails import (
     hard_check,
     redact_placeholders,
 )
+from src.agents.humanizer import humanize
 from src.agents.shared import (
     CHANNEL_CONSTRAINTS,
     call_claude,
@@ -45,7 +45,12 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-# Cap workers to avoid hitting Anthropic Tier 1 rate limits (50 RPM)
+# Hard ceiling on parallel draft workers, and the monkeypatch point used by
+# tests to force serial (workers=1) execution. The binding Anthropic limit is
+# input-tokens-per-minute (ITPM; 50k on Tier 1), NOT RPM — a full batch at
+# high concurrency busts ITPM and even max_retries=8 can't recover. The
+# effective worker count is min(this, Config.drafter_max_workers); this
+# constant is the absolute ceiling, the config field is the tunable default.
 _MAX_WORKERS = 6
 
 _MODEL = HAIKU_MODEL
@@ -234,6 +239,46 @@ _OPENER_WORD_WINDOW = 12
 # on X — would value connecting" and "Saw your work on X." share an opener.
 _SENTENCE_SPLIT_RE = re.compile(r"[.!?\n—]")
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9\s]")
+
+# Splits on sentence boundaries while KEEPING the terminator on the left side
+# (lookbehind), so trimmed notes end on a clean sentence rather than mid-word.
+_SENTENCE_KEEP_RE = re.compile(r"(?<=[.!?\n—])\s+")
+
+
+def _trim_to_char_limit(text: str, limit: int) -> str:
+    """Best-effort deterministic trim of an over-length note to ``<= limit``.
+
+    Last-resort recovery for a LinkedIn connection note that still busts the
+    hard char cap after its corrective regen (e.g. 287 vs 280): rather than
+    HARD_FAIL a marginal overage, keep as many leading whole sentences as fit;
+    if even the first sentence is too long, truncate on a word boundary and
+    append an ellipsis. Pure function. Returns the original text unchanged
+    when it is already within ``limit`` (or when ``limit`` is non-positive).
+    """
+    text = text.strip()
+    if limit <= 0 or len(text) <= limit:
+        return text
+
+    kept = ""
+    for sentence in _SENTENCE_KEEP_RE.split(text):
+        candidate = f"{kept} {sentence}".strip() if kept else sentence.strip()
+        if len(candidate) <= limit:
+            kept = candidate
+        else:
+            break
+    if kept:
+        return kept
+
+    # First sentence alone exceeds the cap: word-boundary truncate + ellipsis
+    # (reserve one char for the "…").
+    out = ""
+    for word in text.split():
+        candidate = f"{out} {word}".strip() if out else word
+        if len(candidate) + 1 <= limit:
+            out = candidate
+        else:
+            break
+    return f"{out}…" if out else text[: max(0, limit - 1)] + "…"
 
 
 def normalize_opener(text: str) -> str:
@@ -638,10 +683,28 @@ def _draft_one_channel(
         _parse_email_body_subject(text) if channel == Channel.COLD_EMAIL else (text, None)
     )
 
+    # Auto-trim (LinkedIn connection only): the one-shot length regen above
+    # asks the model to compress, but it can come back still marginally over
+    # the cap (e.g. 287 vs 280). Rather than let hard_check HARD_FAIL a draft
+    # that is otherwise fine, deterministically trim it to fit. The trim is
+    # surfaced as SOFT_FLAG below so the reviewer sees the note was machine-
+    # shortened rather than silently sent as OK.
+    auto_trimmed = False
+    if channel == Channel.LINKEDIN_CONNECTION and len(body) > linkedin_char_limit:
+        trimmed = _trim_to_char_limit(body, linkedin_char_limit)
+        if trimmed != body and len(trimmed) <= linkedin_char_limit:
+            body = trimmed
+            auto_trimmed = True
+
     # A fault that survives its corrective regen stays visible to the
     # reviewer as SOFT_FLAG (placeholders escalate to HARD_FAIL below).
-    soft_failed = regenerated and (
-        check_draft(text) is not None or detect_multi_ask(body) or detect_redundant_intro(body)
+    soft_failed = auto_trimmed or (
+        regenerated
+        and (
+            check_draft(text) is not None
+            or detect_multi_ask(body)
+            or detect_redundant_intro(body)
+        )
     )
 
     # Register the final opener; a draft that still repeats an overused
@@ -867,7 +930,8 @@ def draft_for_contacts(
 ) -> dict[int, list[Draft]]:
     """Generate drafts for all selected contacts using parallel fan-out.
 
-    Spawns up to _MAX_WORKERS threads (capped at 6 to respect Anthropic Tier 1 limits).
+    Spawns up to min(_MAX_WORKERS, Config.drafter_max_workers) threads
+    (default 3, sized to keep a batch under the Anthropic Tier-1 ITPM ceiling).
     Each contact's 3 channel drafts are generated sequentially within that contact's
     thread (to allow ordered guardrail logic), but contacts run in parallel.
 
@@ -900,7 +964,11 @@ def draft_for_contacts(
     # None and behave exactly as before.
     ask_angles = assign_ask_angles(contact_ids) if cfg.enable_ask_rotation else {}
 
-    workers = min(_MAX_WORKERS, max(1, len(contact_ids)))
+    # Effective concurrency = min(hard ceiling, configured default, batch size).
+    # Tests monkeypatch _MAX_WORKERS=1 to force serial execution; that still
+    # wins here via the min(). (Finding A: default 3 keeps a batch under the
+    # Tier-1 ITPM limit; users on higher tiers raise cfg.drafter_max_workers.)
+    workers = max(1, min(_MAX_WORKERS, cfg.drafter_max_workers, len(contact_ids)))
     results: dict[int, list[Draft]] = {}
     errors: list[tuple[int, Exception]] = []
 

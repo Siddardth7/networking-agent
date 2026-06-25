@@ -142,22 +142,25 @@ class TestQualityCodePersisted:
         assert row["quality_code"] == "HARD_FAIL"
         assert row["quality_flag"] == 1
 
-    def test_overlong_linkedin_note_marked_hard_fail(self, db_path):
+    def test_overlong_linkedin_note_auto_trimmed_to_fit(self, db_path):
+        # v0.5.x (Finding A/B): when the length-regen STILL busts the cap, the
+        # note is deterministically auto-trimmed to fit and marked SOFT_FLAG —
+        # visible to the reviewer — rather than HARD_FAILed. Live data showed
+        # marginal overages (287 vs 280) being lost to HARD_FAIL; this recovers
+        # them.
         _, ids = _seed(1)
-        long_note = "x" * 320  # > 280-char cutoff
-        # Both the first draft AND its length-regen are over-length, so the
-        # note cannot be compressed under the cap and must HARD_FAIL.
         client = _mk_client(
             [
-                long_note,
-                "y" * 320,  # length-regen still over the cutoff
+                "x" * 320,  # CONN gen 1: over cutoff → length-regen
+                "y" * 320,  # CONN regen: still over → auto-trim to fit
                 "Conversational follow-up.",
                 "Subject: hi\n\nBody.",
             ]
         )
         result = draft_for_contacts(ids, anthropic_client=client)
         conn_draft = next(d for d in result[ids[0]] if d.channel == "LINKEDIN_CONNECTION")
-        assert conn_draft.quality_code == "HARD_FAIL"
+        assert conn_draft.quality_code == "SOFT_FLAG"
+        assert len(conn_draft.body) <= 280
 
     def test_overlong_note_compressed_by_length_regen(self, db_path):
         """An over-length first draft whose regen fits the cap passes — the

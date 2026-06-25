@@ -5,7 +5,10 @@ from src.agents.humanizer import humanize
 
 class TestExactlyFamily:
     def test_exactly_the_kind_of_stripped(self):
-        assert humanize("that's exactly the kind of work I want") == "that's the kind of work I want"
+        assert (
+            humanize("that's exactly the kind of work I want")
+            == "that's the kind of work I want"
+        )
 
     def test_exactly_the_direction_stripped(self):
         assert (

@@ -157,11 +157,14 @@ class TestHardFailReasonPersisted:
 
     def test_hard_fail_trace_has_reason(self, db_path):
         cid = _seed_one_contact()
-        over_length = "x" * 320  # over the 280-char cutoff
+        # Use a surviving placeholder as the HARD_FAIL vehicle: as of v0.5.x the
+        # LinkedIn auto-trim recovers over-length notes (SOFT_FLAG), so length
+        # is no longer a HARD_FAIL path. A bracketed token that survives its
+        # corrective regen remains the canonical hard-fail trigger here.
         client = _mk_client(
             [
-                over_length,  # CONN gen 1 (over-length → length-regen)
-                "y" * 320,  # CONN length-regen still over the cutoff → HARD_FAIL
+                f"Saw your {PLACEHOLDER_NOTE}.",  # CONN gen 1 → placeholder regen
+                f"Still {PLACEHOLDER_NOTE}.",  # CONN regen still dirty → HARD_FAIL
                 "Clean follow-up message.",  # POST gen 1
             ]
         )
@@ -172,7 +175,7 @@ class TestHardFailReasonPersisted:
         trace = json.loads(conn_draft.critic_trace)
         assert trace["quality_code"] == "HARD_FAIL"
         assert trace["reason"]
-        assert "320 chars" in trace["reason"]
+        assert "Placeholder token leaked" in trace["reason"]
 
 
 class TestHeldReasonRendering:

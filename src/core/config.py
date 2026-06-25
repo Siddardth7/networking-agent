@@ -117,8 +117,18 @@ class Config:
     # Quality / channel constraints (Layer 3+5). These are the hard limits
     # enforced in code by `guardrails.hard_check` — keep in sync with the
     # prompt text in `drafter._CHANNEL_CONSTRAINTS`.
-    linkedin_char_limit: int = 280  # safe cutoff under LinkedIn's 300-char note cap (margin for spaces/emoji; the cap is 300 on all plans — free accounts are limited on note *count*, not length)
+    # safe cutoff under LinkedIn's 300-char note cap (margin for spaces/emoji;
+    # the cap is 300 on all plans — free accounts are limited on note *count*,
+    # not length).
+    linkedin_char_limit: int = 280
     email_word_limit: int = 150  # cold-email body word cap
+
+    # Drafter parallel fan-out. The binding Anthropic limit is input-tokens-
+    # per-minute (ITPM; 50k on Tier 1), not RPM — a full batch at high
+    # concurrency busts ITPM and even max_retries can't recover. 3 keeps a
+    # batch under the Tier-1 ITPM ceiling out of the box; raise it on higher
+    # tiers. Effective workers = min(this, drafter._MAX_WORKERS hard ceiling).
+    drafter_max_workers: int = 3
 
     # Batch-quality checkpoint between Drafter and Marketer.
     # batch_hard_fail_threshold = max fraction of HARD_FAIL drafts tolerated

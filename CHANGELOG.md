@@ -6,6 +6,28 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Fixed
+- **LinkedIn connection notes no longer lost to length HARD_FAIL (live-validation
+  finding).** The drafter already gave an over-length `LINKEDIN_CONNECTION` note
+  one corrective regen, but the model could still return marginally over the
+  280-char cap (observed against a real Apollo export: 287 vs 280) — and those
+  drafts HARD_FAILed, dead on arrival. The drafter now deterministically
+  auto-trims a still-over note to fit (keeping leading whole sentences; word-
+  boundary + ellipsis fallback) and marks it `SOFT_FLAG` so the reviewer sees it
+  was machine-shortened rather than silently sent. New `_trim_to_char_limit()`
+  helper, covered by unit + integration tests.
+- **Drafter batch concurrency tuned for the Anthropic Tier-1 limit (live-
+  validation finding).** A full batch at the old fixed `_MAX_WORKERS=6` sustained
+  throughput above the Tier-1 **input-tokens-per-minute** ceiling (50k ITPM),
+  so `max_retries=8` could not recover and large imports partially failed with
+  `RateLimitError` (failed contacts correctly rolled back to `SELECTED`, fully
+  retryable). Concurrency is now `min(_MAX_WORKERS ceiling, Config.drafter_max_workers)`
+  with a new `drafter_max_workers` default of `3` (keeps a batch under the
+  Tier-1 ITPM ceiling out of the box; raise it on higher tiers).
+- **Resolved 3 pre-existing `ruff` lint issues** (import ordering in
+  `drafter.py`, two `E501` over-length lines in `config.py` and
+  `test_humanizer.py`). `ruff check` is now clean.
+
 ### Changed
 - **README rewritten** as a professional landing page (animated header, badges,
   a mermaid pipeline diagram, market-thesis intro, collapsible sections). Fixes

@@ -192,3 +192,12 @@ def test_get_anthropic_client_raises_without_key(
 
     with pytest.raises(ValueError, match="ANTHROPIC_API_KEY not configured"):
         get_anthropic_client()
+
+
+def test_drafter_max_workers_defaults_to_three() -> None:
+    """Finding A: the out-of-the-box drafter concurrency must stay low enough
+    to keep a full batch under the Anthropic Tier-1 ITPM ceiling (50k/min).
+    A regression that raises this default would reintroduce batch 429s."""
+    from src.core.config import Config
+
+    assert Config().drafter_max_workers == 3
