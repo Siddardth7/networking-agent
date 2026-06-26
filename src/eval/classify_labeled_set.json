@@ -1,0 +1,160 @@
+[
+  {
+    "full_name": "Dr. Anjali Rao",
+    "title": "PhD Candidate, Aerospace Structures",
+    "company_slug": "georgia-tech",
+    "snippet": "PhD candidate at Georgia Tech researching composite airframe fatigue and damage tolerance.",
+    "expected_persona": "ALUMNI",
+    "expected_focus_area": "ALUMNI_ACADEMIC",
+    "note": "Student/PhD -> ALUMNI; academic -> ALUMNI_ACADEMIC."
+  },
+  {
+    "full_name": "Marco Bianchi",
+    "title": "Graduate Research Assistant, Composites",
+    "company_slug": "uiuc",
+    "snippet": "MS researcher optimizing carbon-fiber layup and cure cycles.",
+    "expected_persona": "ALUMNI",
+    "expected_focus_area": "ALUMNI_ACADEMIC"
+  },
+  {
+    "full_name": "Priya Nair",
+    "title": "Postdoctoral Researcher, Additive Manufacturing",
+    "company_slug": "mit",
+    "snippet": "Postdoc studying laser powder-bed fusion of Ti-6Al-4V for aerospace brackets.",
+    "expected_persona": "ALUMNI",
+    "expected_focus_area": "ALUMNI_ACADEMIC",
+    "note": "Academic research dominates even though topic is additive."
+  },
+  {
+    "full_name": "Tyler Brooks",
+    "title": "Undergraduate Research Assistant",
+    "company_slug": "purdue",
+    "snippet": "Senior undergrad on the university rocketry team, airframe structures sub-lead.",
+    "expected_persona": "ALUMNI",
+    "expected_focus_area": "ALUMNI_ACADEMIC"
+  },
+  {
+    "full_name": "Dana Whitfield",
+    "title": "Technical Recruiter",
+    "company_slug": "joby-aviation",
+    "snippet": "Hiring engineers across structures, manufacturing, and quality.",
+    "expected_persona": "RECRUITER",
+    "expected_focus_area": "PEER"
+  },
+  {
+    "full_name": "Sofia Mendez",
+    "title": "Talent Acquisition Partner",
+    "company_slug": "anduril",
+    "snippet": "Connecting aerospace and defense talent with our engineering teams.",
+    "expected_persona": "RECRUITER",
+    "expected_focus_area": "PEER"
+  },
+  {
+    "full_name": "Greg Olsen",
+    "title": "HR Generalist",
+    "company_slug": "sierra-space",
+    "snippet": "People operations: recruiting, onboarding, and employee relations.",
+    "expected_persona": "RECRUITER",
+    "expected_focus_area": "PEER",
+    "note": "Edge case: HR/people-ops maps to RECRUITER, not an engineer."
+  },
+  {
+    "full_name": "Hannah Cole",
+    "title": "University Recruiter",
+    "company_slug": "blue-origin",
+    "snippet": "Campus hiring lead for early-career engineering roles.",
+    "expected_persona": "RECRUITER",
+    "expected_focus_area": "PEER"
+  },
+  {
+    "full_name": "Robert Vance",
+    "title": "Director of Structural Engineering",
+    "company_slug": "joby-aviation",
+    "snippet": "Leads the airframe loads and structures organization across two programs.",
+    "expected_persona": "SENIOR_MANAGER",
+    "expected_focus_area": "STRUCTURAL_ANALYSIS"
+  },
+  {
+    "full_name": "Lucia Romano",
+    "title": "VP of Manufacturing",
+    "company_slug": "archer-aviation",
+    "snippet": "Runs production operations and quality for the eVTOL line.",
+    "expected_persona": "SENIOR_MANAGER",
+    "expected_focus_area": "MANUFACTURING"
+  },
+  {
+    "full_name": "James Okafor",
+    "title": "Principal Composites Engineer",
+    "company_slug": "boeing",
+    "snippet": "20+ years; principal individual contributor on bonded composite primary structures.",
+    "expected_persona": "SENIOR_MANAGER",
+    "expected_focus_area": "COMPOSITE_DESIGN",
+    "note": "Stress case: senior/principal IC counts as SENIOR_MANAGER per the enum rule, not PEER."
+  },
+  {
+    "full_name": "Mei Lin",
+    "title": "Senior Staff Materials Engineer",
+    "company_slug": "spacex",
+    "snippet": "Staff-level metallurgist leading alloy qualification for engine components.",
+    "expected_persona": "SENIOR_MANAGER",
+    "expected_focus_area": "MATERIALS",
+    "note": "Senior/Staff IC -> SENIOR_MANAGER."
+  },
+  {
+    "full_name": "Aaron Feldman",
+    "title": "Engineering Manager, Additive Manufacturing",
+    "company_slug": "relativity-space",
+    "snippet": "Manages the metal AM group, from DMLS process development to qualification.",
+    "expected_persona": "SENIOR_MANAGER",
+    "expected_focus_area": "ADDITIVE"
+  },
+  {
+    "full_name": "Carlos Reyes",
+    "title": "Stress Engineer",
+    "company_slug": "joby-aviation",
+    "snippet": "FEA on wing-box, static and fatigue loads analysis.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "STRUCTURAL_ANALYSIS"
+  },
+  {
+    "full_name": "Nina Patel",
+    "title": "Composites Engineer",
+    "company_slug": "archer-aviation",
+    "snippet": "Layup design, tooling, and cure-cycle development for primary structures.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "COMPOSITE_DESIGN"
+  },
+  {
+    "full_name": "Derek Schmidt",
+    "title": "Manufacturing Engineer",
+    "company_slug": "sierra-space",
+    "snippet": "Production line support and MRB dispositions for composite parts.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "MANUFACTURING"
+  },
+  {
+    "full_name": "Olivia Grant",
+    "title": "Materials Engineer II",
+    "company_slug": "blue-origin",
+    "snippet": "Coatings, alloy testing, and failure analysis.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "MATERIALS"
+  },
+  {
+    "full_name": "Sam Turner",
+    "title": "Additive Manufacturing Engineer",
+    "company_slug": "relativity-space",
+    "snippet": "DMLS process development and parameter tuning.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "ADDITIVE"
+  },
+  {
+    "full_name": "Riya Kapoor",
+    "title": "Design Engineer",
+    "company_slug": "anduril",
+    "snippet": "General mechanical design across subsystems; CAD and tolerancing.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "PEER",
+    "note": "Generalist engineer with no specialty -> PEER focus."
+  }
+]

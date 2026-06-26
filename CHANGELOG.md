@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Classify-accuracy scorecard (issue #4).** New `src/eval/classify_scorecard.py`
+  + a 19-contact labeled set measure the Finder classifier's persona/focus-area
+  precision/recall/F1 (closes audit gap D3 — classify was tested for shape, never
+  accuracy). Classifier-agnostic (keyless-tested in CI; live run via
+  `python -m src.eval.classify_scorecard`). Baseline: **persona 100% / focus 68%**
+  — the focus gap is mostly unspecified-convention behavior (ALUMNI→ALUMNI_ACADEMIC,
+  RECRUITER→PEER), routed to #5. Agreed bar: persona 100% / focus ≥95%. See
+  `docs/CLASSIFY_SCORECARD_2026-06-26.md`.
 - **Branch coverage + CI (issue #2).** `pytest` now runs with `--cov-branch`; a
   GitHub Actions workflow (`.github/workflows/ci.yml`) runs `ruff` + the gated
   test suite on every push/PR. The coverage gate (`fail_under`) ratcheted 80 → 88

@@ -35,6 +35,7 @@ into subfolders.
 |---|---|
 | [TRIAL_AST_SPACEMOBILE_2026-06-13.md](TRIAL_AST_SPACEMOBILE_2026-06-13.md) | Live Drafter trial run + scorecard (the model for future Finder trials). |
 | [FINDER_AUDIT_2026-06-26.md](FINDER_AUDIT_2026-06-26.md) | **Finder defect catalog** (issue #3) — 12 defects across discovery/classify/hook, severity-ranked, routed to fix issues. The Finder's first audit. |
+| [CLASSIFY_SCORECARD_2026-06-26.md](CLASSIFY_SCORECARD_2026-06-26.md) | **Classify-accuracy baseline** (issue #4) — persona 100% / focus 68%; the focus gap is mostly unspecified-convention behavior, routed to #5. Bar: persona 100% / focus ≥95%. Reproduce with `python -m src.eval.classify_scorecard`. |
 | [COSTS.md](COSTS.md) | Per-run cost / quota breakdown. |
 | [INSTALL_SMOKE_TEST.md](INSTALL_SMOKE_TEST.md) | Manual install smoke-test checklist. |
 | [DESIGN_DRIFT_v0.2.0.md](DESIGN_DRIFT_v0.2.0.md) | Recorded design-vs-implementation drift notes. |
