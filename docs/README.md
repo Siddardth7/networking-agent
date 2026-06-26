@@ -9,6 +9,7 @@ into subfolders.
 | Doc | What it is |
 |---|---|
 | [ROADMAP.md](ROADMAP.md) | **Canonical plan** — where we are, the phased version ladder (v0.5 → v1.0), and the public-release gate. Read this first. |
+| [ANTI_AI_DETECTION.md](ANTI_AI_DETECTION.md) | **The moat thread** (started #6) — why "would a recruiter flag this as AI in 20s?" is a first-class gate, and the deterministic tell scanner + LLM `tone` dimension that enforce it. Extended each release. |
 | [DEFINITION_OF_DONE.md](DEFINITION_OF_DONE.md) | **Process contract** — the mandatory per-issue + per-version gates (ponytail → tester → 95% line+branch loop → `/code-review` → ponytail-review). Mirrored as pinned issue #1. Read before starting any issue. |
 | [MARKET_GAP_AND_FEATURE_IDEAS_2026-06-21.md](MARKET_GAP_AND_FEATURE_IDEAS_2026-06-21.md) | The 2026 market thesis (ATS reality, referral math, why generic AI outreach fails) and the ranked feature ideas behind the roadmap. |
 

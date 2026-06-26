@@ -6,6 +6,15 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Anti-AI-detection critic dimension (issue #6) — starts the moat thread.**
+  New deterministic `critic.scan_ai_tells()` flags known AI-writing tells (filler
+  openers, "I came across your profile", corporate buzzwords, cover-letter voice,
+  …) in the draft body + subject; any hit is an automatic `CRITIC_HOLD`,
+  complementing the LLM `tone` dimension's holistic judgment. High-precision so
+  human-grade drafts pass clean. Research: ~33% of recruiters spot AI outreach in
+  20s — quality is the moat. See `docs/ANTI_AI_DETECTION.md`.
+
 ### Changed
 - **Classify accuracy hits the v0.5.5 bar (issue #5): persona 100% / focus 100%**
   (baseline was 100% / 68%). `finder._classify_contact` now **deterministically**

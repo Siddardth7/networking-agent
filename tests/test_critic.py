@@ -14,6 +14,7 @@ from src.agents.critic import (
     CriticResult,
     _build_tool_schema,
     critique_draft,
+    scan_ai_tells,
 )
 
 # ---------------------------------------------------------------------------
@@ -229,3 +230,137 @@ class TestPromptContent:
         )
         kwargs = client.messages.create.call_args.kwargs
         assert kwargs["model"] == SONNET_MODEL
+
+
+# ---------------------------------------------------------------------------
+# Anti-AI-detection scanner + gate integration (moat thread, issue #6)
+# ---------------------------------------------------------------------------
+
+# Human-grade drafts in Sid's 4-part voice (Intro -> Source -> Hook -> Close).
+# These MUST stay clean — precision is the whole point (acceptance: human passes).
+_HUMAN_DRAFTS = [
+    "Saw your wing-box stress work at Joby. I'm finishing an MS in composites at "
+    "UIUC and have been digging into bonded-repair fatigue. Would value 15 minutes "
+    "on how your team handles it.",
+    "Your talk on additive bracket qualification stuck with me. I did powder-bed "
+    "fusion trials on Ti-6Al-4V for a senior project. Open to a quick chat about "
+    "how Relativity approaches process control?",
+    "We overlapped at Boeing structures before I went back for grad school. I'm "
+    "targeting eVTOL loads roles now. Could you point me to who owns airframe "
+    "loads on your team?",
+]
+
+_AI_DRAFTS = [
+    ("filler opener", "I hope this message finds you well. I came across your "
+     "profile and wanted to reach out."),
+    ("buzzword", "I would love to leverage my passion for innovation and delve "
+     "into synergies with your team."),
+    ("cover-letter", "As a results-driven engineer, I am writing to express my "
+     "interest. It is a testament to your work."),
+]
+
+
+class TestScanAITells:
+    def test_empty_text_is_clean(self):
+        assert scan_ai_tells("") == []
+
+    def test_human_grade_drafts_are_clean(self):
+        for draft in _HUMAN_DRAFTS:
+            assert scan_ai_tells(draft) == [], f"false positive on: {draft!r}"
+
+    def test_detects_filler_opener(self):
+        tells = scan_ai_tells("I hope this message finds you well.")
+        assert any("filler opener" in t for t in tells)
+
+    def test_detects_multiple_tells(self):
+        body = (
+            "I hope this finds you well. I came across your profile. As a "
+            "passionate engineer, I would love the opportunity to connect."
+        )
+        assert len(scan_ai_tells(body)) >= 3
+
+    def test_known_ai_drafts_all_flagged(self):
+        for _label, draft in _AI_DRAFTS:
+            assert scan_ai_tells(draft), f"missed AI draft: {draft!r}"
+
+
+class TestAntiAIDetectionGate:
+    def test_clean_human_draft_passes(self):
+        client = Mock()
+        client.messages.create.return_value = _make_critic_response(
+            {dim: 5 for dim in RUBRIC_DIMENSIONS}
+        )
+        result = critique_draft(
+            body=_HUMAN_DRAFTS[0],
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts="Did composites work.",
+            anthropic_client=client,
+        )
+        assert result.passed is True
+        assert result.quality_code == "OK"
+
+    def test_ai_tell_holds_even_with_perfect_scores(self):
+        client = Mock()
+        client.messages.create.return_value = _make_critic_response(
+            {dim: 5 for dim in RUBRIC_DIMENSIONS}
+        )
+        result = critique_draft(
+            body="I came across your profile and wanted to reach out.",
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts="Did X.",
+            anthropic_client=client,
+        )
+        assert result.passed is False
+        assert result.quality_code == "CRITIC_HOLD"
+        assert any("ai_detection" in i for i in result.issues)
+        assert "AI-detection tells" in (result.reason or "")
+
+    def test_tell_in_subject_holds(self):
+        client = Mock()
+        client.messages.create.return_value = _make_critic_response(
+            {dim: 5 for dim in RUBRIC_DIMENSIONS}
+        )
+        result = critique_draft(
+            body=_HUMAN_DRAFTS[0],
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts="Did X.",
+            anthropic_client=client,
+            subject="Excited to connect about structures",
+        )
+        assert result.passed is False
+        assert any("ai_detection" in i for i in result.issues)
+
+    def test_reason_combines_score_and_tell(self):
+        client = Mock()
+        bad = {dim: 5 for dim in RUBRIC_DIMENSIONS}
+        bad["specificity"] = SEVERE_SCORE
+        client.messages.create.return_value = _make_critic_response(bad)
+        result = critique_draft(
+            body="I hope this message finds you well.",
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts="Did X.",
+            anthropic_client=client,
+        )
+        assert result.passed is False
+        assert "dimension(s)" in (result.reason or "")
+        assert "AI-detection tells" in (result.reason or "")
+
+    def test_duplicate_tell_in_body_and_subject_deduped(self):
+        client = Mock()
+        client.messages.create.return_value = _make_critic_response(
+            {dim: 5 for dim in RUBRIC_DIMENSIONS}
+        )
+        result = critique_draft(
+            body="I came across your profile.",
+            contact=_contact(),
+            channel="COLD_EMAIL",
+            source_facts="Did X.",
+            anthropic_client=client,
+            subject="I came across your profile",
+        )
+        # Same tell in body + subject -> surfaced once (dedup), not duplicated.
+        assert len([i for i in result.issues if "cold-open" in i]) == 1

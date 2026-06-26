@@ -17,6 +17,7 @@ Traceability: DRAFTER_ROOT_CAUSE_AUDIT.md Layer 4.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 
 from src.core.config import SONNET_MODEL
@@ -26,6 +27,7 @@ __all__ = [
     "critique_draft",
     "evaluate_scores",
     "hard_fail_trace",
+    "scan_ai_tells",
     "RUBRIC_DIMENSIONS",
     "MIN_SCORE",
     "SEVERE_SCORE",
@@ -136,6 +138,71 @@ def hard_fail_trace(reason: str | None) -> str:
         issues=[reason_str],
         reason=reason_str,
     ).to_json()
+
+
+# ---------------------------------------------------------------------------
+# Anti-AI-detection — deterministic tell scanner (moat thread, issue #6)
+# ---------------------------------------------------------------------------
+#
+# Research: ~33% of recruiters say they spot AI-written outreach within 20s, and
+# AI-shaped messages get ignored — our quality is the moat. The critic's `tone`
+# dimension judges this holistically; this scanner is the deterministic backstop
+# for KNOWN, high-precision tells so they can never reach the wire even on an
+# off LLM run. Curated for PRECISION (a human-grade draft MUST pass): every entry
+# is a phrase almost never found in sharp, genuine outreach. This is the START of
+# the thread — holistic per-channel calibration and rhythm/structure analysis
+# come in later releases. See docs/ANTI_AI_DETECTION.md. Extend deliberately.
+_AI_TELL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("filler opener (hope-this-finds-you)", re.compile(
+        r"\bi hope (?:this (?:message|email|note|letter) )?finds you\b"
+        r"|\bi hope (?:you(?:'re| are)|things are)[^.!?]{0,20}\bwell\b", re.I)),
+    ("cold-open (came-across/stumbled-upon)", re.compile(
+        r"\bi (?:came across|stumbled (?:up)?on)\b", re.I)),
+    ("reaching-out cliché", re.compile(
+        r"\bi (?:wanted to reach out|am reaching out to"
+        r"|am writing to (?:express|inquire|introduce))\b", re.I)),
+    ("corporate buzzword", re.compile(
+        r"\b(?:leverage my|leverage your|delve into|spearhead(?:ed|ing)?"
+        r"|synerg(?:y|ies)|paradigm shift)\b", re.I)),
+    ("today's-fast-paced cliché", re.compile(
+        r"\bin today'?s (?:fast-paced|ever-(?:changing|evolving)|digital|competitive)\b", re.I)),
+    ("ever-evolving-landscape cliché", re.compile(
+        r"\bever-(?:changing|evolving) (?:landscape|world|industry|field)\b"
+        r"|\bnavigat(?:e|ing) the (?:complexities|landscape)\b", re.I)),
+    ("testament cliché", re.compile(r"\bis a testament to\b", re.I)),
+    ("passion cliché", re.compile(
+        r"\b(?:i am|i'm) (?:deeply |truly |incredibly |genuinely )?passionate about\b"
+        r"|\bpassion for (?:excellence|innovation|technology|learning)\b", re.I)),
+    ("excitement cliché", re.compile(
+        r"\b(?:thrilled|excited|delighted|eager) to (?:connect|share|announce|be part)\b", re.I)),
+    ("resonate cliché", re.compile(r"\bresonate[sd]? (?:deeply )?with\b", re.I)),
+    ("align cliché", re.compile(
+        r"\b(?:aligns?|aligning) (?:perfectly |closely )?with (?:my|your|the)\b", re.I)),
+    ("wealth-of-experience cliché", re.compile(
+        r"\b(?:wealth|vast|breadth|wide (?:range|array)) of "
+        r"(?:experience|knowledge|expertise)\b", re.I)),
+    ("closing cliché", re.compile(
+        r"\b(?:feel free to|don'?t hesitate to) (?:reach out|connect|contact)\b"
+        r"|\bi would (?:love|welcome) the (?:opportunity|chance) to\b", re.I)),
+    ("cover-letter voice", re.compile(
+        r"\bas a (?:passionate|results[- ]driven|detail[- ]oriented"
+        r"|highly motivated|dedicated|seasoned)\b", re.I)),
+    ("not-only-but-also construction", re.compile(
+        r"\bnot only\b[^.!?]{0,80}\bbut also\b", re.I)),
+    ("formal transition filler", re.compile(
+        r"\b(?:furthermore|moreover)\b|\bit'?s worth noting that\b|\bneedless to say\b", re.I)),
+)
+
+
+def scan_ai_tells(text: str) -> list[str]:
+    """Return the labels of known AI-writing tells found in *text* (empty = clean).
+
+    Deterministic, high-precision backstop to the critic's holistic ``tone``
+    judgment (moat thread, issue #6). Pure function, no side effects.
+    """
+    if not text:
+        return []
+    return [label for label, pattern in _AI_TELL_PATTERNS if pattern.search(text)]
 
 
 # ---------------------------------------------------------------------------
@@ -301,17 +368,33 @@ def critique_draft(
     issues = [str(x) for x in issues_raw if x]
 
     passed, failing = evaluate_scores(scores)
+
+    # Deterministic anti-AI-detection backstop (moat thread, issue #6): scan the
+    # body and subject for known tells. Any hit is an automatic hold — a tell a
+    # recruiter spots in 20s defeats the message regardless of the rubric scores.
+    tells = scan_ai_tells(body)
+    for t in scan_ai_tells(subject or ""):
+        if t not in tells:
+            tells.append(t)
+    if tells:
+        issues = issues + [f"ai_detection: AI tell — {t}" for t in tells]
+        passed = False
+
     if not passed:
-        reason = (
-            f"critic held the draft on {len(failing)} dimension(s): "
-            f"{', '.join(f'{d}={scores[d]}' for d in failing)}"
-        )
+        reason_parts: list[str] = []
+        if failing:
+            reason_parts.append(
+                f"critic held the draft on {len(failing)} dimension(s): "
+                f"{', '.join(f'{d}={scores[d]}' for d in failing)}"
+            )
+        if tells:
+            reason_parts.append(f"AI-detection tells: {', '.join(tells)}")
         return CriticResult(
             passed=False,
             quality_code="CRITIC_HOLD",
             scores=scores,
             issues=issues,
-            reason=reason,
+            reason="; ".join(reason_parts),
         )
 
     return CriticResult(
