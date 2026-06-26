@@ -195,7 +195,14 @@ parallel product decision, not a 0.x version.)*
 - The Cowork + Chrome producer is built in Cowork, not this repo; this plugin
   stays its sink (`docs/CHROME_PRODUCER_CONTRACT.md`).
 
-## Definition of done (per phase)
+## Definition of done
+
+**Per-issue and per-version gates** (ponytail → dedicated tester → 95% line+branch
+learning loop → `/code-review` → ponytail-review): see
+[`DEFINITION_OF_DONE.md`](DEFINITION_OF_DONE.md). Work is tracked as GitHub issues
++ milestones; pinned issue #1 mirrors that contract.
+
+### Per-phase exit gates
 
 - **Phase A done (v0.8.5):** from any input, the Finder yields relevant,
   correctly-classified, well-hooked, *ranked* contacts; the full loop (reach →
