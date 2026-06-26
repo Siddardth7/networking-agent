@@ -137,7 +137,7 @@ def test_format_scorecard_no_errors():
 
 def test_load_labeled_set_default():
     labeled = load_labeled_set()
-    assert len(labeled) >= 18
+    assert len(labeled) >= 24  # expanded in #5 for ≥95% discriminating power
     # every persona is represented
     personas = {lc.expected_persona for lc in labeled}
     assert personas == set(Persona)

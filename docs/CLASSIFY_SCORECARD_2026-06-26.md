@@ -88,3 +88,31 @@ shows the live model doesn't yet follow it because it was never told.
    suggested (non-canonical seniority like "Lead Engineer", academic titles like
    "Research Scientist", a domain-saturated recruiter). Re-run until
    **persona 100% / focus ≥95%**.
+
+---
+
+## Update — after #5 fixes (2026-06-26): BAR MET ✅
+
+| Dimension | Baseline | After #5 | Bar | Status |
+|---|---:|---:|---:|---|
+| Persona | 100% | **100%** | 100% | ✅ |
+| Focus-area | 68% | **100%** | ≥95% | ✅ |
+
+**What changed (#5):**
+1. **Deterministic persona→focus override** in `finder._classify_contact`: ALUMNI →
+   `ALUMNI_ACADEMIC`, RECRUITER → `PEER`, enforced **in code** (not the prompt —
+   the model ignored the prompt rule for a strong-topic grad student). Engineers
+   keep the model's focus. Covered by `TestPersonaFocusOverride` (deterministic,
+   keyless) + the `find_contacts` integration test.
+2. **Generalist guidance:** `PEER` description tightened so a non-specialty title
+   lands on `PEER` instead of an over-read specialty (fixed the Riya/Design-Engineer
+   miss).
+3. **Labeled set expanded 19 → 28** for ≥95% discriminating margin (at n=19, ≥95%
+   brittlely required 100%).
+
+First live run after the override: **persona 100% / focus 100%, macro-F1 1.00/1.00,
+0 mispredictions.** Note: LLM output is non-deterministic, so the *engineer* focus
+decisions (the only ones still model-driven) may vary slightly run-to-run; the two
+non-engineer conventions are now deterministic and cannot regress. The keyless
+harness tests guard the metric logic; re-run `python -m src.eval.classify_scorecard`
+to refresh live numbers.

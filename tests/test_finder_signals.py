@@ -41,6 +41,50 @@ def _make_classifier_response(persona: str, focus_area: str, hook_signal: str = 
     return resp
 
 
+class TestPersonaFocusOverride:
+    """Issue #5: focus_area is deterministically forced for non-engineer personas
+    (ALUMNI -> ALUMNI_ACADEMIC, RECRUITER -> PEER), regardless of the model's
+    topic guess; engineer personas keep the model's focus."""
+
+    def _cand(self) -> ContactCandidate:
+        return ContactCandidate(full_name="A", title="t", company_slug="x")
+
+    def test_alumni_forced_to_academic_focus(self):
+        client = Mock()
+        client.messages.create.return_value = _make_classifier_response(
+            "ALUMNI", "COMPOSITE_DESIGN"
+        )
+        persona, focus, _ = _classify_contact(self._cand(), "x", client)
+        assert persona is Persona.ALUMNI
+        assert focus is FocusArea.ALUMNI_ACADEMIC  # overridden, not COMPOSITE_DESIGN
+
+    def test_recruiter_forced_to_peer_focus(self):
+        client = Mock()
+        client.messages.create.return_value = _make_classifier_response(
+            "RECRUITER", "MANUFACTURING"
+        )
+        persona, focus, _ = _classify_contact(self._cand(), "x", client)
+        assert persona is Persona.RECRUITER
+        assert focus is FocusArea.PEER  # overridden, not MANUFACTURING
+
+    def test_engineer_focus_preserved(self):
+        client = Mock()
+        client.messages.create.return_value = _make_classifier_response(
+            "PEER_ENGINEER", "COMPOSITE_DESIGN"
+        )
+        persona, focus, _ = _classify_contact(self._cand(), "x", client)
+        assert persona is Persona.PEER_ENGINEER
+        assert focus is FocusArea.COMPOSITE_DESIGN  # NOT overridden
+
+    def test_senior_manager_focus_preserved(self):
+        client = Mock()
+        client.messages.create.return_value = _make_classifier_response(
+            "SENIOR_MANAGER", "STRUCTURAL_ANALYSIS"
+        )
+        _, focus, _ = _classify_contact(self._cand(), "x", client)
+        assert focus is FocusArea.STRUCTURAL_ANALYSIS  # NOT overridden
+
+
 # ---------------------------------------------------------------------------
 # Hook tier ordering
 # ---------------------------------------------------------------------------

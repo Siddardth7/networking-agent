@@ -156,5 +156,81 @@
     "expected_persona": "PEER_ENGINEER",
     "expected_focus_area": "PEER",
     "note": "Generalist engineer with no specialty -> PEER focus."
+  },
+  {
+    "full_name": "Elena Petrova",
+    "title": "Senior Engineer, Loads & Dynamics",
+    "company_slug": "joby-aviation",
+    "snippet": "Senior IC owning aircraft loads and dynamic analysis; no reports.",
+    "expected_persona": "SENIOR_MANAGER",
+    "expected_focus_area": "STRUCTURAL_ANALYSIS",
+    "note": "Senior IC -> SENIOR_MANAGER; loads/dynamics -> STRUCTURAL_ANALYSIS."
+  },
+  {
+    "full_name": "Dr. Kwame Mensah",
+    "title": "Research Scientist, Composites Lab",
+    "company_slug": "stanford",
+    "snippet": "University research scientist on bonded composite repair methods.",
+    "expected_persona": "ALUMNI",
+    "expected_focus_area": "ALUMNI_ACADEMIC",
+    "note": "Academic title that sounds industry; university research -> ALUMNI/ALUMNI_ACADEMIC."
+  },
+  {
+    "full_name": "Brittany Hughes",
+    "title": "Recruiting Coordinator",
+    "company_slug": "archer-aviation",
+    "snippet": "Coordinates interviews and candidate logistics for engineering hiring.",
+    "expected_persona": "RECRUITER",
+    "expected_focus_area": "PEER"
+  },
+  {
+    "full_name": "Victor Salazar",
+    "title": "Sourcing Recruiter — Structures & Stress",
+    "company_slug": "spacex",
+    "snippet": "Sourcing structures, stress, and loads engineers for the Starship team.",
+    "expected_persona": "RECRUITER",
+    "expected_focus_area": "PEER",
+    "note": "Domain-saturated recruiter snippet — stress-tests RECRUITER -> PEER over topic keywords."
+  },
+  {
+    "full_name": "Aisha Khan",
+    "title": "Carbon Fiber Process Engineer",
+    "company_slug": "joby-aviation",
+    "snippet": "Develops carbon-fiber prepreg layup and autoclave cure processes.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "COMPOSITE_DESIGN"
+  },
+  {
+    "full_name": "Diego Morales",
+    "title": "CNC Manufacturing Engineer",
+    "company_slug": "sierra-space",
+    "snippet": "CNC machining, fixturing, and production quality on the shop floor.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "MANUFACTURING"
+  },
+  {
+    "full_name": "Hana Suzuki",
+    "title": "Metallurgist",
+    "company_slug": "blue-origin",
+    "snippet": "Alloy selection, heat treatment, and metallurgical failure analysis.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "MATERIALS"
+  },
+  {
+    "full_name": "Owen Fitzgerald",
+    "title": "Metal Additive Engineer",
+    "company_slug": "relativity-space",
+    "snippet": "Powder-bed fusion and DED process development for engine parts.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "ADDITIVE"
+  },
+  {
+    "full_name": "Chloe Bennett",
+    "title": "Mechanical Engineer",
+    "company_slug": "anduril",
+    "snippet": "Broad mechanical engineering across subsystems; no stated specialty.",
+    "expected_persona": "PEER_ENGINEER",
+    "expected_focus_area": "PEER",
+    "note": "Reinforces generalist -> PEER (do not over-classify to a specialty)."
   }
 ]

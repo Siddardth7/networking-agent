@@ -125,7 +125,9 @@ class TestFindContacts:
         assert results[1].persona == Persona.SENIOR_MANAGER
         assert results[1].focus_area == FocusArea.STRUCTURAL_ANALYSIS
         assert results[2].persona == Persona.RECRUITER
-        assert results[2].focus_area == FocusArea.MANUFACTURING
+        # Issue #5: RECRUITER focus is deterministically forced to PEER, overriding
+        # the model's MANUFACTURING guess (focus_area is meaningful only for engineers).
+        assert results[2].focus_area == FocusArea.PEER
 
     def test_emails_assigned(self, db_path, mock_serper, mock_hunter, mock_anthropic):
         init_db()

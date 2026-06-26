@@ -6,6 +6,14 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed
+- **Classify accuracy hits the v0.5.5 bar (issue #5): persona 100% / focus 100%**
+  (baseline was 100% / 68%). `finder._classify_contact` now **deterministically**
+  forces focus-area for the two non-engineer personas (ALUMNI → `ALUMNI_ACADEMIC`,
+  RECRUITER → `PEER`) in code rather than via the prompt, which the model ignored
+  on strong-topic cases; engineers keep the model's focus. `PEER` guidance tightened
+  for generalist titles. Labeled set expanded 19 → 28 for ≥95% discriminating margin.
+
 ### Added
 - **Classify-accuracy scorecard (issue #4).** New `src/eval/classify_scorecard.py`
   + a 19-contact labeled set measure the Finder classifier's persona/focus-area

@@ -104,8 +104,10 @@ def _classify_contact(
                             "MANUFACTURING: production/quality/MRB/supplier. "
                             "MATERIALS: metallurgy/alloys. "
                             "ADDITIVE: 3D printing. "
-                            "PEER: general engineer. "
-                            "ALUMNI_ACADEMIC: academic/PhD."
+                            "PEER: a generalist engineer with NO clear single "
+                            "specialty — use this (do NOT guess a specialty) when "
+                            "the title/snippet doesn't clearly point to one above. "
+                            "ALUMNI_ACADEMIC: academic/PhD/research/student."
                         ),
                     },
                     "hook_signal": {
@@ -169,6 +171,15 @@ def _classify_contact(
     try:
         focus_area = FocusArea(data.get("focus_area", "PEER"))
     except ValueError:
+        focus_area = FocusArea.PEER
+
+    # focus_area is only meaningful for engineers. For the two non-engineer
+    # personas the convention is deterministic, so enforce it in code rather than
+    # the prompt — the model ignored the prompt rule when the topic signal was
+    # strong (e.g. a composites grad student). Issue #5 / FINDER_AUDIT D3.
+    if persona is Persona.ALUMNI:
+        focus_area = FocusArea.ALUMNI_ACADEMIC
+    elif persona is Persona.RECRUITER:
         focus_area = FocusArea.PEER
 
     raw_signal = (data.get("hook_signal") or "").strip()
