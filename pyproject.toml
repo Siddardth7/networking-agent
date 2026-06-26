@@ -36,14 +36,17 @@ select = ["E", "F", "I", "N", "W", "UP"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "--tb=short --cov=src"
+addopts = "--tb=short --cov=src --cov-branch"
 
 [tool.coverage.run]
 source = ["src"]
 omit = ["tests/*"]
 
 [tool.coverage.report]
-fail_under = 80
+# Ratchet only upward (issue #2). Floor = measured line+branch on 2026-06-25.
+# Target 95 at v0.5.5 close, once coverage-baseline gaps (#21) are filled.
+fail_under = 88
+show_missing = true
 
 [tool.setuptools.packages.find]
 include = ["src*"]

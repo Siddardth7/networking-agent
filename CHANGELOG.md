@@ -7,6 +7,11 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Branch coverage + CI (issue #2).** `pytest` now runs with `--cov-branch`; a
+  GitHub Actions workflow (`.github/workflows/ci.yml`) runs `ruff` + the gated
+  test suite on every push/PR. The coverage gate (`fail_under`) ratcheted 80 → 88
+  (the measured line+branch floor); it climbs to **95** at the v0.5.5 close once
+  the coverage-baseline gaps (#21) are filled. Ratchet upward only.
 - **Apify is now the primary LinkedIn discovery source, with Serper as fallback
   (input-stack decision 2026-06-25).** New `ApifyProvider`
   (`harvestapi/linkedin-profile-search`, Full mode, no cookies) becomes the first
