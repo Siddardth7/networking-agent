@@ -34,6 +34,7 @@ into subfolders.
 | Doc | What it is |
 |---|---|
 | [TRIAL_AST_SPACEMOBILE_2026-06-13.md](TRIAL_AST_SPACEMOBILE_2026-06-13.md) | Live Drafter trial run + scorecard (the model for future Finder trials). |
+| [FINDER_AUDIT_2026-06-26.md](FINDER_AUDIT_2026-06-26.md) | **Finder defect catalog** (issue #3) — 12 defects across discovery/classify/hook, severity-ranked, routed to fix issues. The Finder's first audit. |
 | [COSTS.md](COSTS.md) | Per-run cost / quota breakdown. |
 | [INSTALL_SMOKE_TEST.md](INSTALL_SMOKE_TEST.md) | Manual install smoke-test checklist. |
 | [DESIGN_DRIFT_v0.2.0.md](DESIGN_DRIFT_v0.2.0.md) | Recorded design-vs-implementation drift notes. |
