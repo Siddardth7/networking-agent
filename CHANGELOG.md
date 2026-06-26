@@ -16,6 +16,10 @@ Versioning: [Semantic Versioning](https://semver.org/)
   20s — quality is the moat. See `docs/ANTI_AI_DETECTION.md`.
 
 ### Changed
+- **Coverage push — core + CLI to ≥95% (issue #25).** +68 hermetic tests bring
+  `network_check` 72→95%, `network_import` 80→100%, and `config`/`orchestrator`/
+  `migrations`/`search_cache`/`network_status` to 100% (others 97%). No source
+  changes — tests only. Repo line+branch 89→94% (toward the 95% v0.5.5 gate, #7).
 - **Classify accuracy hits the v0.5.5 bar (issue #5): persona 100% / focus 100%**
   (baseline was 100% / 68%). `finder._classify_contact` now **deterministically**
   forces focus-area for the two non-engineer personas (ALUMNI → `ALUMNI_ACADEMIC`,

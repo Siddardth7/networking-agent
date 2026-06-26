@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import argparse
 
+import pytest
+
 from src.cli.network_import import run_import
 
 
@@ -98,3 +100,62 @@ class TestImport:
         rc = run_import(_args(file=None))
         assert rc == 1
         assert "required" in capsys.readouterr().err
+
+    def test_file_not_found_returns_1(self, capsys):
+        """FileNotFoundError from import_fn → returns 1 with message (lines 88-90)."""
+        def fake_import(path, **kwargs):
+            raise FileNotFoundError("no such file")
+
+        rc = run_import(_args(file="nonexistent.csv"), _import_fn=fake_import)
+        assert rc == 1
+        assert "file not found" in capsys.readouterr().err
+
+
+class TestLazyImports:
+    def test_validate_fn_none_uses_real_importer(self, monkeypatch, tmp_path, capsys):
+        """_validate_fn=None triggers the lazy import (line 58)."""
+        from src.agents import importer as importer_module
+
+        fake_report = {"ok": True, "count": 1, "errors": [], "warnings": []}
+
+        monkeypatch.setattr(importer_module, "validate_contacts_file",
+                            lambda path, source, default_company=None: fake_report)
+
+        rc = run_import(_args(file="x.csv", validate=True))
+        assert rc == 0
+        assert "OK" in capsys.readouterr().out
+
+    def test_import_fn_none_uses_real_importer(self, monkeypatch, capsys):
+        """_import_fn=None triggers the lazy import (line 71)."""
+        from src.agents import importer as importer_module
+
+        fake_summary = {
+            "by_company": {"acme": {"imported": 1, "contact_ids": [1], "drafted": 0}},
+            "contribution": {
+                "source": "manual", "rows_read": 1, "usable": 1,
+                "dropped": {"no_name": 0, "no_company": 0, "duplicate": 0},
+            },
+        }
+        monkeypatch.setattr(importer_module, "import_contacts",
+                            lambda path, **kwargs: fake_summary)
+
+        rc = run_import(_args(file="x.csv"))
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Imported 1" in out
+
+
+def test_main_entrypoint_validate(monkeypatch, tmp_path):
+    """Cover the __main__ argparse block + run_import wiring via the DB-free
+    --validate path (catches CLI/argparse regressions). Issue #25."""
+    import runpy
+    import sys
+
+    f = tmp_path / "leads.json"
+    f.write_text('{"company": "acme", "contacts": [{"full_name": "Ada Lovelace"}]}')
+    monkeypatch.setattr(sys, "argv", ["network-import", str(f), "--validate"])
+    # Drop the cached import so runpy re-executes it cleanly as __main__.
+    monkeypatch.delitem(sys.modules, "src.cli.network_import", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_module("src.cli.network_import", run_name="__main__")
+    assert exc.value.code == 0

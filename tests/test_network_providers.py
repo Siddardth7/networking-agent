@@ -133,3 +133,40 @@ def test_add_flag_no_db_writes(isolated_db, qm, capsys, monkeypatch) -> None:
     assert rc == 0
     assert write_calls == [], "--add must not trigger any DB writes"
     mock_client.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Test 5 — Non-zero limit skips default override (branch 69->75 False branch)
+# ---------------------------------------------------------------------------
+
+
+def test_list_with_nonzero_limit_skips_default(isolated_db, capsys) -> None:
+    """When limit > 0 in DB, fallback to _DEFAULT_LIMITS is skipped (branch 69->75)."""
+    from src.cli.network_providers import run_providers
+
+    # Seed quota rows with non-zero limits so get_limit() returns > 0
+    from src.core.db import with_writer
+
+    with with_writer() as conn:
+        from datetime import datetime
+
+        month_key = datetime.now().strftime("%Y-%m")
+        conn.execute(
+            "INSERT OR REPLACE INTO quota (provider, month_key, used, limit_val) "
+            "VALUES ('serper', ?, 10, 100)",
+            (month_key,),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO quota (provider, month_key, used, limit_val) "
+            "VALUES ('hunter', ?, 5, 25)",
+            (month_key,),
+        )
+
+    qm = QuotaManager(db_path=str(isolated_db))
+    rc = run_providers(_make_args(), _quota_manager=qm)
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    # Remaining = limit - used: serper 90/100, hunter 20/25
+    assert "90 / 100" in captured.out
+    assert "20 / 25" in captured.out

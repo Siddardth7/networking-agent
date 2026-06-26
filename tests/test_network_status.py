@@ -238,3 +238,98 @@ def test_update_without_response_returns_1(tmp_path, capsys):
     assert rc == 1
     out = capsys.readouterr().out
     assert "--response" in out or "required" in out.lower()
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage tests
+# ---------------------------------------------------------------------------
+
+
+def test_summary_view_deduplicates_providers(tmp_path, capsys):
+    """Two quota rows for same provider → dedup via `seen` set (line 102 - continue)."""
+    seed_db(tmp_path)
+
+    # Insert a second quota row for 'serper' (different month, same provider)
+    with with_writer() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO quota (provider, month_key, used, limit_val) "
+            "VALUES ('serper', '2024-12', 5, 100)"
+        )
+
+    rc = run_status(make_args())
+    assert rc == 0
+    out = capsys.readouterr().out
+    # 'serper' should appear only once in quota section
+    assert out.count("serper") == 1
+
+
+def test_company_view_no_contacts(tmp_path, capsys):
+    """Company with no contacts → 'No contacts found.' (lines 146-147)."""
+    with with_writer() as conn:
+        conn.execute(
+            "INSERT INTO companies (slug, name, state) "
+            "VALUES ('empty-co', 'Empty Co', 'NEW')"
+        )
+
+    rc = run_status(make_args(company="empty-co"))
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "No contacts found" in out
+
+
+def test_company_view_no_drafts(tmp_path, capsys):
+    """Contact with no drafts → '(no drafts)' printed (line 167)."""
+    with with_writer() as conn:
+        conn.execute(
+            "INSERT INTO companies (slug, name, state) VALUES ('nodraft-co', 'No Draft', 'NEW')"
+        )
+        co_id = conn.execute(
+            "SELECT id FROM companies WHERE slug='nodraft-co'"
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO contacts (company_id, full_name, state) "
+            "VALUES (?, 'Bob Nodraft', 'NEW')",
+            (co_id,),
+        )
+
+    rc = run_status(make_args(company="nodraft-co"))
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "(no drafts)" in out
+
+
+def test_company_view_no_outreach_log(tmp_path, capsys):
+    """Contact with draft but no outreach log → '(no outreach log entries)' (line 185)."""
+    with with_writer() as conn:
+        conn.execute(
+            "INSERT INTO companies (slug, name, state) VALUES ('nolog-co', 'No Log', 'FOUND')"
+        )
+        co_id = conn.execute(
+            "SELECT id FROM companies WHERE slug='nolog-co'"
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO contacts (company_id, full_name, state) "
+            "VALUES (?, 'Carol NoLog', 'SELECTED')",
+            (co_id,),
+        )
+        ct_id = conn.execute(
+            "SELECT id FROM contacts WHERE company_id=?", (co_id,)
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO drafts (contact_id, channel, version, quality_flag, approved) "
+            "VALUES (?, 'EMAIL', 1, 'GOOD', 0)",
+            (ct_id,),
+        )
+
+    rc = run_status(make_args(company="nolog-co"))
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "(no outreach log entries)" in out
+
+
+def test_update_log_not_found(tmp_path, capsys):
+    """Updating a non-existent log ID returns 1 and prints message (lines 211-212)."""
+    rc = run_status(make_args(update=99999, response="POSITIVE"))
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "not found" in out.lower()

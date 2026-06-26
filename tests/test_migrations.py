@@ -143,3 +143,28 @@ def test_migration_002_adds_quality_code_column(tmp_path: Path) -> None:
         assert row["quality_code"] == "OK"
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# 6. Missing migrations dir → no-op returns current version (line 68)
+# ---------------------------------------------------------------------------
+
+
+def test_missing_migrations_dir_is_noop(tmp_path: Path, monkeypatch) -> None:
+    """If _MIGRATIONS_DIR does not exist, run_migrations returns current version unchanged."""
+    import src.core.migrations as mig_module
+
+    conn = _open_conn(tmp_path / "test.db")
+    try:
+        # Point _MIGRATIONS_DIR at a non-existent directory
+        nonexistent = tmp_path / "no_migrations_here"
+        monkeypatch.setattr(mig_module, "_MIGRATIONS_DIR", nonexistent)
+
+        # Pre-set user_version to something specific
+        conn.execute("PRAGMA user_version = 7")
+        conn.commit()
+
+        result = run_migrations(conn)
+        assert result == 7  # unchanged, returned as-is
+    finally:
+        conn.close()

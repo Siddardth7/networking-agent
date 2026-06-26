@@ -428,3 +428,75 @@ class TestPurgeAll:
         run_purge(args, _log_path=log_path, _drafts_dir=drafts_dir)
 
         assert not drafts_dir.exists()
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage tests
+# ---------------------------------------------------------------------------
+
+
+class TestSafeRmtreeEdgeCases:
+    def test_regular_file_returns_false(self, tmp_path: Path) -> None:
+        """_safe_rmtree on a plain file (not dir, not symlink) returns False (line 75)."""
+        from src.cli.network_purge import _safe_rmtree
+
+        plain_file = tmp_path / "plain.txt"
+        plain_file.write_text("data")
+
+        result = _safe_rmtree(plain_file)
+        assert result is False
+        # File should still exist (not deleted)
+        assert plain_file.exists()
+
+
+class TestRunPurgeDbPathOverride:
+    def test_db_path_override_initialises_db(self, tmp_path: Path) -> None:
+        """Passing _db_path to run_purge triggers db init (lines 178-179)."""
+        fresh_db = tmp_path / "override.db"
+        assert not fresh_db.exists()
+
+        log_path = tmp_path / "purge.log"
+        args = _make_args()  # no-op (no target) to keep it minimal
+
+        # run_purge with _db_path should set _DB_PATH and call init_db
+        rc = run_purge(args, _db_path=fresh_db, _log_path=log_path)
+        # No target → returns 1 with error message, but DB must have been created
+        assert rc == 1
+        assert fresh_db.exists()
+
+
+class TestRunPurgeException:
+    def test_exception_during_purge_returns_1(self, tmp_path: Path, capsys) -> None:
+        """Exception inside purge logic → error message, return 1 (lines 245-247)."""
+        import unittest.mock as _mock
+
+        _seed_contact()
+        log_path = tmp_path / "purge.log"
+        args = _make_args(contact=42)
+
+        # Patch the module-level _purge_contact to raise so the except handler fires
+        with _mock.patch("src.cli.network_purge._purge_contact",
+                         side_effect=RuntimeError("db exploded")):
+            rc = run_purge(args, _log_path=log_path)
+
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert "Error during purge" in out
+
+
+class TestBuildParser:
+    def test_build_parser_returns_parser(self) -> None:
+        """_build_parser creates a valid ArgumentParser (lines 258-285)."""
+        from src.cli.network_purge import _build_parser
+
+        parser = _build_parser()
+        # Should parse --contact 42
+        ns = parser.parse_args(["--contact", "42"])
+        assert ns.contact == 42
+        # Should parse --company slug
+        ns2 = parser.parse_args(["--company", "my-co"])
+        assert ns2.company == "my-co"
+        # Should parse --all --confirm
+        ns3 = parser.parse_args(["--all", "--confirm"])
+        assert ns3.all is True
+        assert ns3.confirm is True

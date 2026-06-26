@@ -322,3 +322,57 @@ def test_found_state_with_selection_calls_draft():
     stubs["_draft_for_contacts"].assert_called_once_with(selected_ids, None)
     stubs["_run_approval_loop"].assert_called_once_with(company_id)
     stubs["_write_artifact"].assert_called_once_with(company_id)
+
+
+# ---------------------------------------------------------------------------
+# Test 10: SELECTED state, no SELECTED contacts → draft skipped
+# ---------------------------------------------------------------------------
+
+
+def test_selected_state_no_selected_contacts_skips_draft():
+    """SELECTED company with zero SELECTED contacts → draft not called (branch 199->201)."""
+    slug = "kappa-labs"
+    company_id = _seed_company(slug, "SELECTED")
+
+    # All contacts already DRAFTED — none in SELECTED state
+    _seed_contact(company_id, "DRAFTED", "Alice Drafted")
+
+    stubs = _make_stubs()
+    run_pipeline(slug, **stubs)
+
+    stubs["_draft_for_contacts"].assert_not_called()
+    stubs["_run_approval_loop"].assert_called_once_with(company_id)
+    stubs["_write_artifact"].assert_called_once_with(company_id)
+
+
+# ---------------------------------------------------------------------------
+# Test 11: Lazy imports (None → real module) — covered by patching the modules
+# ---------------------------------------------------------------------------
+
+
+def test_lazy_imports_resolved_when_none(monkeypatch):
+    """All six injection params defaulting to None causes lazy imports (lines 154-176).
+
+    We monkeypatch the real module functions so no actual API/DB work happens.
+    """
+    import src.agents.artifact_writer as aw_mod
+    import src.agents.drafter as drafter_mod
+    import src.agents.finder as finder_mod
+    import src.agents.marketer as marketer_mod
+    import src.cli.network_check as nc_mod
+    import src.cli.selection_gate as gate_mod
+
+    slug = "lambda-robotics"
+    _seed_company(slug, "NEW")
+
+    monkeypatch.setattr(nc_mod, "run_checks", lambda: 0)
+    monkeypatch.setattr(finder_mod, "find_contacts",
+                        lambda slug, limit=None, anthropic_client=None: [])
+    monkeypatch.setattr(gate_mod, "run_selection_gate", lambda company_id: [])
+    monkeypatch.setattr(drafter_mod, "draft_for_contacts",
+                        lambda ids, client: {})
+    monkeypatch.setattr(marketer_mod, "run_approval_loop", lambda company_id: None)
+    monkeypatch.setattr(aw_mod, "write_artifact", lambda company_id: Path("/tmp/x.md"))
+
+    # Call with NO injection overrides — triggers all lazy imports
+    run_pipeline(slug)  # should not raise

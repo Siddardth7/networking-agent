@@ -241,3 +241,155 @@ def test_drafter_max_workers_defaults_to_three() -> None:
     from src.core.config import Config
 
     assert Config().drafter_max_workers == 3
+
+
+# ---------------------------------------------------------------------------
+# _check_permissions direct test (dead code — never called internally)
+# ---------------------------------------------------------------------------
+
+
+def test_check_permissions_raises_on_bad_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_check_permissions raises ConfigSecurityError when mode != 0o600 (lines 165-167)."""
+    from src.core.config import _check_permissions
+
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("keys: {}")
+    os.chmod(cfg_file, 0o644)
+
+    with pytest.raises(ConfigSecurityError):
+        _check_permissions(cfg_file)
+
+
+def test_check_permissions_ok_on_correct_mode(tmp_path: Path) -> None:
+    """_check_permissions does NOT raise when mode is 0o600."""
+    from src.core.config import _check_permissions
+
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("keys: {}")
+    os.chmod(cfg_file, 0o600)
+
+    _check_permissions(cfg_file)  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# write_default_config skips existing file (line 182)
+# ---------------------------------------------------------------------------
+
+
+def test_write_default_config_skips_if_file_exists(tmp_path: Path) -> None:
+    """write_default_config is a no-op when the file already exists (line 182)."""
+    cfg_path = tmp_path / "config.yaml"
+    original_content = "original: true\n"
+    cfg_path.write_text(original_content)
+    os.chmod(cfg_path, 0o600)
+
+    write_default_config(cfg_path)
+
+    # File must be unchanged
+    assert cfg_path.read_text() == original_content
+
+
+# ---------------------------------------------------------------------------
+# _load_dotenv: default-path branch when NO_DOTENV is not set (line 243)
+# ---------------------------------------------------------------------------
+
+
+def test_load_dotenv_uses_default_paths_when_no_opt_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With NO_DOTENV unset, _load_dotenv sets paths from CWD/.env etc. (line 243)."""
+    monkeypatch.delenv("NETWORKING_AGENT_NO_DOTENV", raising=False)
+    # No .env file in CWD or repo root → no-op but line 243 is reached
+    _load_dotenv()  # must not raise; just resolves default paths
+
+
+# ---------------------------------------------------------------------------
+# _load_dotenv: skip non-existent paths (line 249 - continue)
+# ---------------------------------------------------------------------------
+
+
+def test_load_dotenv_skips_nonexistent_path(tmp_path: Path) -> None:
+    """Passing a non-existent file path silently skips it (line 249)."""
+    nonexistent = tmp_path / "does_not_exist.env"
+    _load_dotenv(paths=[nonexistent])  # must not raise; the continue fires
+
+
+def test_load_dotenv_skips_duplicate_paths(tmp_path: Path) -> None:
+    """Duplicate path in list is only processed once (line 249 - already seen)."""
+    env_file = tmp_path / ".env"
+    env_file.write_text("DUP_KEY=value\n")
+
+    import os as _os
+    _os.environ.pop("DUP_KEY", None)
+    _load_dotenv(paths=[env_file, env_file])  # same file twice
+    assert _os.environ.get("DUP_KEY") == "value"
+    # cleanup
+    _os.environ.pop("DUP_KEY", None)
+
+
+# ---------------------------------------------------------------------------
+# _load_dotenv: OSError on unreadable file (lines 253-254)
+# ---------------------------------------------------------------------------
+
+
+def test_load_dotenv_handles_oserror_on_unreadable_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OSError while reading the file is silently ignored (lines 253-254)."""
+    env_file = tmp_path / ".env"
+    env_file.write_text("SHOULD_NOT_SET=1\n")
+
+    original_read = Path.read_text
+
+    def boom(self, *args, **kwargs):
+        if self == env_file:
+            raise OSError("permission denied")
+        return original_read(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", boom)
+
+    _load_dotenv(paths=[env_file])  # must not raise
+    import os as _os
+    assert "SHOULD_NOT_SET" not in _os.environ
+
+
+# ---------------------------------------------------------------------------
+# _load_dotenv: line without '=' separator (line 263 - continue)
+# ---------------------------------------------------------------------------
+
+
+def test_load_dotenv_skips_line_without_separator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lines without '=' are skipped (line 263)."""
+    env_file = tmp_path / ".env"
+    env_file.write_text("NOSEPARATORHERE\nGOOD_KEY=good_value\n")
+    monkeypatch.delenv("GOOD_KEY", raising=False)
+
+    _load_dotenv(paths=[env_file])
+    import os as _os
+    assert _os.environ.get("GOOD_KEY") == "good_value"
+    _os.environ.pop("GOOD_KEY", None)
+
+
+# ---------------------------------------------------------------------------
+# get_anthropic_client with explicit key (lines 358->361, 364-370)
+# ---------------------------------------------------------------------------
+
+
+def test_get_anthropic_client_with_explicit_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Passing api_key directly skips load_config (branch 358->361) and builds client (364-370)."""
+    from unittest.mock import MagicMock, patch
+
+    from src.core.config import get_anthropic_client
+
+    mock_client = MagicMock()
+    with patch("anthropic.Anthropic", return_value=mock_client) as mock_cls:
+        result = get_anthropic_client(api_key="explicit-key")
+
+    mock_cls.assert_called_once_with(api_key="explicit-key", max_retries=8)
+    assert result is mock_client

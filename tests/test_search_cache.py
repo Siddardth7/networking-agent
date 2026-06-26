@@ -155,3 +155,22 @@ class TestConfigKnob:
         from src.core.config import load_config
 
         assert load_config().search_cache_ttl_days == 7
+
+
+class TestCacheGetCorruptJson:
+    def test_corrupt_json_returns_none(self, db_path):
+        """Cached row with invalid JSON returns None (lines 59-60 - JSONDecodeError)."""
+        from src.core.search_cache import _cache_key
+
+        key = _cache_key("serper", {"q": "corrupt"})
+        # Insert a row with invalid JSON directly
+        with with_writer() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO search_cache "
+                "(cache_key, provider, query, response, created_at) "
+                "VALUES (?, ?, ?, ?, datetime('now'))",
+                (key, "serper", '{"q":"corrupt"}', "NOT_VALID_JSON{{{"),
+            )
+
+        result = cache_get("serper", {"q": "corrupt"}, ttl_days=14)
+        assert result is None
