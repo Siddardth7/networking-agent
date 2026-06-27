@@ -6,6 +6,13 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-06-27
+
+Theme: **Finder Audit + Classify.** First audit of the Finder, a classify-accuracy
+scorecard driven to persona 100% / focus 100%, the start of the anti-AI-detection
+moat, and a coverage push that took the repo to ~96.6% (line+branch) — flipping the
+gate to 95.
+
 ### Added
 - **Anti-AI-detection critic dimension (issue #6) — starts the moat thread.**
   New deterministic `critic.scan_ai_tells()` flags known AI-writing tells (filler
@@ -44,8 +51,12 @@ Versioning: [Semantic Versioning](https://semver.org/)
 - **Branch coverage + CI (issue #2).** `pytest` now runs with `--cov-branch`; a
   GitHub Actions workflow (`.github/workflows/ci.yml`) runs `ruff` + the gated
   test suite on every push/PR. The coverage gate (`fail_under`) ratcheted 80 → 88
-  (the measured line+branch floor); it climbs to **95** at the v0.5.5 close once
-  the coverage-baseline gaps (#21) are filled. Ratchet upward only.
+  during the cycle, then **flipped to 95 at the v0.5.5 close** (#7) once the
+  coverage push (#21/#25/#23) brought the repo to ~96.6%. Ratchet upward only.
+
+## [0.5.0] - 2026-06-25
+
+### Added
 - **Apify is now the primary LinkedIn discovery source, with Serper as fallback
   (input-stack decision 2026-06-25).** New `ApifyProvider`
   (`harvestapi/linkedin-profile-search`, Full mode, no cookies) becomes the first
