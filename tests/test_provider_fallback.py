@@ -52,12 +52,63 @@ class _Email:
 # --- _discover ------------------------------------------------------------
 
 
-def test_primary_results_win_fallback_untouched():
+def test_accumulates_across_providers_to_limit():
+    # v0.6.0 best-effort-to-N: primary returns fewer than the limit, so the
+    # fallback tops up (the change from "first non-empty wins").
     apify = _Search(result=[_cand("A")])
-    serper = _Search(result=[_cand("B")])
+    serper = _Search(result=[_cand("B"), _cand("C")])
     out = _discover([apify, serper], company="acme", role_keywords=[], limit=5)
+    assert [c.full_name for c in out] == ["A", "B", "C"]
+    assert serper.calls == 1
+
+
+def test_primary_meeting_limit_leaves_fallback_untouched():
+    apify = _Search(result=[_cand("A"), _cand("B"), _cand("C")])
+    serper = _Search(result=[_cand("D")])
+    out = _discover([apify, serper], company="acme", role_keywords=[], limit=3)
+    assert [c.full_name for c in out] == ["A", "B", "C"]
+    assert serper.calls == 0  # limit already met → fallback never invoked
+
+
+def test_dedup_across_providers():
+    apify = _Search(result=[_cand("A")])
+    serper = _Search(result=[_cand("A"), _cand("B")])  # "A" duplicate by name
+    out = _discover([apify, serper], company="acme", role_keywords=[], limit=5)
+    assert [c.full_name for c in out] == ["A", "B"]
+
+
+def test_blank_identity_candidate_skipped():
+    blank = ContactCandidate(full_name="", company_slug="acme")
+    apify = _Search(result=[blank, _cand("A")])
+    out = _discover([apify], company="acme", role_keywords=[], limit=5)
     assert [c.full_name for c in out] == ["A"]
-    assert serper.calls == 0  # fallback never invoked
+
+
+def test_shortfall_is_logged(caplog):
+    apify = _Search(result=[_cand("A")])
+    serper = _Search(result=[])
+    with caplog.at_level("WARNING", logger="networking_agent.finder"):
+        out = _discover([apify, serper], company="acme", role_keywords=[], limit=5)
+    assert [c.full_name for c in out] == ["A"]
+    assert any("best-effort 1/5" in r.getMessage() for r in caplog.records)
+
+
+def test_provider_error_logged_not_silently_swallowed(caplog):
+    # FINDER_AUDIT D1: primary errors, fallback runs clean-and-empty → [] but the
+    # error is surfaced via the log, not silently dropped.
+    apify = _Search(raises=RuntimeError("bad apify key"))
+    serper = _Search(result=[])
+    with caplog.at_level("WARNING", logger="networking_agent.finder"):
+        out = _discover([apify, serper], company="acme", role_keywords=[], limit=5)
+    assert out == []
+    assert any("bad apify key" in r.getMessage() for r in caplog.records)
+
+
+def test_all_failed_non_quota_reraises():
+    apify = _Search(raises=RuntimeError("boom"))
+    serper = _Search(raises=RuntimeError("boom2"))
+    with pytest.raises(RuntimeError):
+        _discover([apify, serper], company="acme", role_keywords=[], limit=5)
 
 
 def test_primary_exhausted_falls_back_to_serper():

@@ -6,6 +6,15 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed
+- **Finder discovery is now best-effort-to-N across providers (issue #8, v0.6.0).**
+  `_discover` accumulates deduped results up to the limit across the provider
+  chain (Apify → Serper) — asking each lane only for the shortfall — instead of
+  returning the first non-empty lane. **No silent caps:** provider failures and
+  any final shortfall are logged at WARNING, fixing FINDER_AUDIT **D1** (a bad
+  Apify key no longer looks like "no contacts exist"). Remaining #8 work:
+  config-driven role keywords (D2/D4) and end-to-end location filtering.
+
 ## [0.5.5] - 2026-06-27
 
 Theme: **Finder Audit + Classify.** First audit of the Finder, a classify-accuracy

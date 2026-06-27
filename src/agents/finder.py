@@ -6,6 +6,7 @@ Traceability: DESIGN.md §4 (Finder phases), §6 (Hook generation), §8.12 (HUNT
 
 from __future__ import annotations
 
+import logging
 import re
 
 from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
@@ -18,6 +19,8 @@ from src.providers.hunter import HunterProvider
 from src.providers.quota_manager import QuotaManager
 from src.providers.retry import QuotaExhausted
 from src.providers.serper import SerperProvider
+
+_LOG = logging.getLogger("networking_agent.finder")
 
 __all__ = [
     "find_contacts",
@@ -384,46 +387,82 @@ def _get_or_create_company(company_slug: str) -> int:
         return int(cursor.lastrowid)
 
 
+def _dedup_key(candidate: ContactCandidate) -> str:
+    """Stable identity for cross-provider dedup: LinkedIn URL, else name."""
+    return (candidate.linkedin_url or candidate.full_name or "").strip().lower()
+
+
 def _discover(
     providers: list[SearchProvider],
     company: str,
     role_keywords: list[str],
     limit: int,
 ) -> list[ContactCandidate]:
-    """Try each discovery provider in order; return the first non-empty result.
+    """Best-effort accumulation to *limit* across providers, in order, deduped.
 
-    Fallback semantics (input-stack decision 2026-06-25): Apify is primary,
-    Serper the fallback. An empty result falls through to the next lane (Google
-    may surface profiles a structured people-search missed), so ``[]`` is only
-    returned once every lane has *run* and found nothing. A provider that
-    *fails* (quota exhausted, auth, network) is skipped so the next lane gets a
-    turn. Only when EVERY provider failed do we re-raise — the last
-    QuotaExhausted if any (preserves the old hard-stop contract), else the last
-    error.
+    Apify (primary) → Serper (fallback): each provider is asked only for the
+    shortfall (``limit - collected``), results are deduped by LinkedIn URL (else
+    name), and accumulation stops once *limit* is reached (so a provider that
+    already fills the quota leaves the next lane untouched). A provider that
+    *fails* (quota, auth, network) is logged and skipped so the next lane gets a
+    turn; a provider that returns too few falls through to top up.
+
+    No silent caps (ROADMAP A3, FINDER_AUDIT D1): every provider failure and any
+    final shortfall is logged at WARNING — a bad key no longer looks like "no
+    contacts exist." Only when EVERY provider failed do we re-raise: the last
+    QuotaExhausted if any (preserves the hard-stop contract), else the last error.
     """
+    collected: list[ContactCandidate] = []
+    seen: set[str] = set()
     quota_exc: QuotaExhausted | None = None
     other_exc: Exception | None = None
-    ran_clean = False
+    ran_any = False
     for provider in providers:
+        if len(collected) >= limit:
+            break
+        name = type(provider).__name__
         try:
             candidates = provider.search_linkedin_profiles(
-                company=company, role_keywords=role_keywords, limit=limit
+                company=company, role_keywords=role_keywords, limit=limit - len(collected)
             )
         except QuotaExhausted as exc:
             quota_exc = exc
+            _LOG.warning("discovery: %s quota exhausted — trying next lane", name)
             continue
         except Exception as exc:  # provider down/misconfigured → try the next lane
             other_exc = exc
+            _LOG.warning("discovery: %s failed (%s) — trying next lane", name, exc)
             continue
-        ran_clean = True
-        if candidates:
-            return candidates
-    if ran_clean:
-        return []
-    if quota_exc is not None:
-        raise quota_exc
-    if other_exc is not None:
-        raise other_exc
+        ran_any = True
+        added = 0
+        for cand in candidates:
+            key = _dedup_key(cand)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            collected.append(cand)
+            added += 1
+            if len(collected) >= limit:
+                break
+        _LOG.info("discovery: %s added %d (%d/%d)", name, added, len(collected), limit)
+
+    if collected:
+        if len(collected) < limit:
+            _LOG.warning(
+                "discovery: best-effort %d/%d — providers exhausted", len(collected), limit
+            )
+        return collected
+
+    # Nothing collected at all.
+    if not ran_any:
+        if quota_exc is not None:
+            raise quota_exc
+        if other_exc is not None:
+            raise other_exc
+    elif other_exc is not None:
+        # A provider errored but a later lane ran clean-and-empty (D1): surface it
+        # via the log instead of silently returning [].
+        _LOG.warning("discovery: 0 contacts and a provider errored: %s", other_exc)
     return []
 
 
