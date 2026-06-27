@@ -16,6 +16,11 @@ Versioning: [Semantic Versioning](https://semver.org/)
   20s — quality is the moat. See `docs/ANTI_AI_DETECTION.md`.
 
 ### Changed
+- **Coverage push — drafter family to ≥95% (issue #23).** +100 hermetic tests:
+  `marketer` 84→99%, `dispatch` 79→100%, `drafter` 93→99%. Tests only. With #25,
+  repo line+branch is now **~96.6% (committed tree) — above the 95% v0.5.5 gate**
+  (#7). Remaining sub-95 modules (hunter, finder, importer) are tracked tech-debt
+  (#22/#24), not release blockers.
 - **Coverage push — core + CLI to ≥95% (issue #25).** +68 hermetic tests bring
   `network_check` 72→95%, `network_import` 80→100%, and `config`/`orchestrator`/
   `migrations`/`search_cache`/`network_status` to 100% (others 97%). No source
