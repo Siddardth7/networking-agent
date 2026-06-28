@@ -16,7 +16,14 @@ import sys
 from src.core.db import get_connection, with_writer
 from src.core.schemas import Outcome
 
-__all__ = ["set_contact_outcome", "list_outcomes", "run_outcome", "VALID_OUTCOMES"]
+__all__ = [
+    "set_contact_outcome",
+    "list_outcomes",
+    "report_outcomes",
+    "aggregate_outcomes",
+    "run_outcome",
+    "VALID_OUTCOMES",
+]
 
 VALID_OUTCOMES: set[str] = {o.value for o in Outcome}
 
@@ -80,8 +87,74 @@ def list_outcomes() -> int:
     return 0
 
 
+def aggregate_outcomes(rows: list[tuple[str | None, str | None]]) -> dict:
+    """Aggregate ``(company_slug, outcome)`` rows into a report summary. Pure.
+
+    Returns ``{"total", "responded", "by_outcome", "by_company"}`` where
+    ``responded`` counts contacts with any outcome other than ``NONE``,
+    ``by_outcome`` maps each non-NONE outcome to its count, and ``by_company``
+    maps each slug to ``{"total", "responded"}``.
+    """
+    by_outcome: dict[str, int] = {}
+    by_company: dict[str, dict[str, int]] = {}
+    total = responded = 0
+    for slug, outcome in rows:
+        total += 1
+        company = slug or "?"
+        bucket = by_company.setdefault(company, {"total": 0, "responded": 0})
+        bucket["total"] += 1
+        if outcome and outcome != Outcome.NONE.value:
+            responded += 1
+            bucket["responded"] += 1
+            by_outcome[outcome] = by_outcome.get(outcome, 0) + 1
+    return {
+        "total": total,
+        "responded": responded,
+        "by_outcome": by_outcome,
+        "by_company": by_company,
+    }
+
+
+def report_outcomes() -> int:
+    """Print an outcomes rollup — overall response rate + per-company breakdown."""
+    conn = get_connection()
+    try:
+        rows = [
+            (r["company_slug"], r["outcome"])
+            for r in conn.execute(
+                """
+                SELECT co.slug AS company_slug, c.outcome
+                FROM contacts c
+                LEFT JOIN companies co ON co.id = c.company_id
+                """
+            ).fetchall()
+        ]
+    finally:
+        conn.close()
+
+    summary = aggregate_outcomes(rows)
+    if summary["total"] == 0:
+        print("No contacts yet.")
+        return 0
+
+    rate = 100 * summary["responded"] / summary["total"]
+    print(
+        f"Outcome report — {summary['responded']}/{summary['total']} contacts "
+        f"responded ({rate:.0f}%)"
+    )
+    if summary["by_outcome"]:
+        breakdown = ", ".join(f"{k} {v}" for k, v in sorted(summary["by_outcome"].items()))
+        print(f"By outcome: {breakdown}")
+    print("By company:")
+    for slug, b in sorted(summary["by_company"].items()):
+        print(f"  {slug}: {b['responded']}/{b['total']} responded")
+    return 0
+
+
 def run_outcome(args: argparse.Namespace) -> int:
-    """Dispatch: ``--list`` queries, otherwise record a contact's outcome."""
+    """Dispatch: ``--report`` rolls up, ``--list`` queries, else record an outcome."""
+    if getattr(args, "report", False):
+        return report_outcomes()
     if getattr(args, "list", False):
         return list_outcomes()
     if args.contact_id is None or args.outcome is None:
@@ -103,4 +176,5 @@ if __name__ == "__main__":  # pragma: no cover
     )
     parser.add_argument("--notes", default=None, help="Optional free-text notes")
     parser.add_argument("--list", action="store_true", help="List all recorded outcomes")
+    parser.add_argument("--report", action="store_true", help="Rollup report per company")
     sys.exit(run_outcome(parser.parse_args()))

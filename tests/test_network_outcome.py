@@ -10,7 +10,9 @@ import argparse
 import pytest
 
 from src.cli.network_outcome import (
+    aggregate_outcomes,
     list_outcomes,
+    report_outcomes,
     run_outcome,
     set_contact_outcome,
 )
@@ -116,3 +118,47 @@ class TestRunOutcome:
         )
         assert rc == 0
         assert _row(cid)["outcome"] == "REPLIED"
+
+
+class TestReport:
+    def test_aggregate_pure(self):
+        rows = [
+            ("acme", "REPLIED"),
+            ("acme", "POC"),
+            ("acme", "NONE"),
+            ("beta", "SPONSORSHIP_YES"),
+            (None, None),  # no company / no outcome
+        ]
+        s = aggregate_outcomes(rows)
+        assert s["total"] == 5
+        assert s["responded"] == 3
+        assert s["by_outcome"] == {"REPLIED": 1, "POC": 1, "SPONSORSHIP_YES": 1}
+        assert s["by_company"]["acme"] == {"total": 3, "responded": 2}
+        assert s["by_company"]["?"] == {"total": 1, "responded": 0}
+
+    def test_report_empty(self, capsys):
+        assert report_outcomes() == 0
+        assert "No contacts yet." in capsys.readouterr().out
+
+    def test_report_rollup(self, capsys):
+        a = _seed_contact("Alice Smith")
+        _seed_contact("Bob Jones")  # NONE
+        set_contact_outcome(a, "POC")
+        assert report_outcomes() == 0
+        out = capsys.readouterr().out
+        assert "1/2 contacts responded (50%)" in out
+        assert "By outcome: POC 1" in out
+        assert "acme: 1/2 responded" in out
+
+    def test_report_no_outcomes_skips_breakdown(self, capsys):
+        _seed_contact("Alice Smith")  # all NONE
+        assert report_outcomes() == 0
+        out = capsys.readouterr().out
+        assert "0/1 contacts responded (0%)" in out
+        assert "By outcome:" not in out  # no responded → no breakdown line
+
+    def test_run_report_dispatch(self, capsys):
+        assert run_outcome(
+            argparse.Namespace(report=True, list=False, contact_id=None, outcome=None)
+        ) == 0
+        assert "No contacts yet." in capsys.readouterr().out
