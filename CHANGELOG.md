@@ -6,6 +6,11 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-06-28
+
+v0.7.5 = outcome tracking — record and report what actually happens to sent
+outreach, closing the feedback loop that will later tune the referral ranking.
+
 ### Added
 - **Per-contact outreach outcomes (issue #15, A6).** Capture the feedback signal —
   whether a contact replied, yielded a point of contact, or gave a sponsorship
