@@ -23,37 +23,13 @@ from src.providers.retry import AuthError, QuotaExhausted
 # Shared Hunter API response fixtures
 # ---------------------------------------------------------------------------
 
-HUNTER_VERIFIED: dict = {
-    "data": {
-        "email": "jane.doe@boeing.com",
-        "score": 94,
-        "verification": {"status": "valid"},
-    }
-}
+# Domain-search responses: the org email *pattern* (#13). One lookup per company
+# infers every contact's address locally — the uncapped channel.
+HUNTER_PATTERN: dict = {"data": {"pattern": "{first}.{last}", "organization": "Boeing"}}
 
-HUNTER_UNVERIFIED: dict = {
-    "data": {
-        "email": "john@gmail.com",
-        "score": 30,
-        "verification": {"status": "webmail"},
-    }
-}
+HUNTER_PATTERN_INITIAL: dict = {"data": {"pattern": "{f}{last}"}}
 
-HUNTER_ACCEPT_ALL: dict = {
-    "data": {
-        "email": "bob@company.com",
-        "score": 60,
-        "verification": {"status": "accept_all"},
-    }
-}
-
-HUNTER_NO_EMAIL: dict = {
-    "data": {
-        "email": None,
-        "score": 0,
-        "verification": {"status": "unknown"},
-    }
-}
+HUNTER_NO_PATTERN: dict = {"data": {"pattern": None, "organization": "Example"}}
 
 
 # ---------------------------------------------------------------------------
@@ -109,52 +85,63 @@ def qm(tmp_db: Path) -> QuotaManager:
 # ---------------------------------------------------------------------------
 
 
-def test_find_email_verified() -> None:
-    """A 'valid' verification status → verified=True with correct fields."""
-    client = _make_client(HUNTER_VERIFIED)
+def test_find_email_inferred_from_pattern() -> None:
+    """A '{first}.{last}' pattern → a locally-inferred, unverified address."""
+    client = _make_client(HUNTER_PATTERN)
     provider = HunterProvider(api_key="test-key", http_client=client)
 
     result = provider.find_email("Jane Doe", "boeing.com")
 
     assert result.email == "jane.doe@boeing.com"
-    assert result.verified is True
-    assert result.confidence == 94
-    assert result.source == "hunter"
+    assert result.verified is False  # inference is a best-effort guess
+    assert result.confidence == 50
+    assert result.source == "hunter_pattern"
 
 
 # ---------------------------------------------------------------------------
-# Test 2 — Unverified response (status="webmail")
+# Test 2 — initial-based pattern format
 # ---------------------------------------------------------------------------
 
 
-def test_find_email_unverified() -> None:
-    """A 'webmail' verification status → verified=False; email is still returned."""
-    client = _make_client(HUNTER_UNVERIFIED)
+def test_find_email_initial_pattern() -> None:
+    """A '{f}{last}' pattern infers 'jdoe@domain'."""
+    client = _make_client(HUNTER_PATTERN_INITIAL)
     provider = HunterProvider(api_key="test-key", http_client=client)
 
-    result = provider.find_email("John Smith", "gmail.com")
+    result = provider.find_email("Jane Doe", "boeing.com")
 
-    assert result.verified is False
-    assert result.email == "john@gmail.com"
-    assert result.source == "hunter"
+    assert result.email == "jdoe@boeing.com"
+    assert result.source == "hunter_pattern"
 
 
 # ---------------------------------------------------------------------------
-# Test 3 — accept_all status → verified=True
+# Test 3 — pattern cached: one lookup serves every contact at a company
 # ---------------------------------------------------------------------------
 
 
-def test_find_email_accept_all() -> None:
-    """An 'accept_all' catch-all domain → verified=True."""
-    client = _make_client(HUNTER_ACCEPT_ALL)
-    provider = HunterProvider(api_key="test-key", http_client=client)
+def test_pattern_cached_uncapped_across_contacts(qm: QuotaManager) -> None:
+    """#13: the first contact spends one Hunter credit; the rest are free."""
+    qm._ensure_row("hunter", 25)
+    before = qm.remaining("hunter")
 
-    result = provider.find_email("Bob Builder", "company.com")
+    calls = {"n": 0}
 
-    assert result.verified is True
-    assert result.email == "bob@company.com"
-    assert result.confidence == 60
-    assert result.source == "hunter"
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json=HUNTER_PATTERN, request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    provider = HunterProvider(api_key="test-key", quota_manager=qm, http_client=client)
+
+    a = provider.find_email("Jane Doe", "boeing.com")
+    b = provider.find_email("John Smith", "boeing.com")
+    c = provider.find_email("Amy Lee", "boeing.com")
+
+    assert a.email == "jane.doe@boeing.com"
+    assert b.email == "john.smith@boeing.com"
+    assert c.email == "amy.lee@boeing.com"
+    assert calls["n"] == 1  # one domain-search served all three
+    assert qm.remaining("hunter") == before - 1  # one credit spent
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +174,7 @@ def test_quota_incremented_after_successful_call(qm: QuotaManager) -> None:
     qm._ensure_row("hunter", 25)
     before = qm.remaining("hunter")
 
-    client = _make_client(HUNTER_VERIFIED)
+    client = _make_client(HUNTER_PATTERN)
     provider = HunterProvider(api_key="test-key", quota_manager=qm, http_client=client)
 
     provider.find_email("Jane Doe", "boeing.com")
@@ -207,7 +194,7 @@ def test_quota_exhausted_raises(qm: QuotaManager) -> None:
     for _ in range(25):
         qm.increment("hunter", 1)
 
-    client = _make_client(HUNTER_VERIFIED)
+    client = _make_client(HUNTER_PATTERN)
     provider = HunterProvider(api_key="test-key", quota_manager=qm, http_client=client)
 
     with pytest.raises(QuotaExhausted) as exc_info:
@@ -223,7 +210,7 @@ def test_quota_exhausted_raises(qm: QuotaManager) -> None:
 
 def test_find_email_null_result() -> None:
     """Hunter returning email=null → EmailResult with email=None, verified=False."""
-    client = _make_client(HUNTER_NO_EMAIL)
+    client = _make_client(HUNTER_NO_PATTERN)
     provider = HunterProvider(api_key="test-key", http_client=client)
 
     result = provider.find_email("Unknown Person", "example.com")
@@ -306,13 +293,13 @@ def test_find_email_scrubs_key_on_timeout(monkeypatch) -> None:
 
 def test_find_email_happy_path_no_scrubbing() -> None:
     """Regression: happy path with leaky-looking key still returns a valid result."""
-    client = _make_client(HUNTER_VERIFIED)
+    client = _make_client(HUNTER_PATTERN)
     provider = HunterProvider(api_key=_LEAKY_KEY, http_client=client)
 
     result = provider.find_email("Jane Doe", "boeing.com")
 
     assert result.email == "jane.doe@boeing.com"
-    assert result.verified is True
+    assert result.source == "hunter_pattern"
 
 
 def test_scrub_api_key_in_exc_unit() -> None:
@@ -353,3 +340,149 @@ def test_scrubbed_hunter_call_context_manager() -> None:
     rendered = repr(exc) + " " + str(exc) + " " + str(exc.request.url)
     assert _LEAKY_KEY not in rendered
     assert exc.__cause__ is None  # `from None` broke the chain
+
+
+# ---------------------------------------------------------------------------
+# #13 — apply_email_pattern unit tests + find_email unfilled/close paths
+# ---------------------------------------------------------------------------
+
+
+def test_apply_email_pattern_formats() -> None:
+    from src.providers.hunter import apply_email_pattern
+
+    assert apply_email_pattern("{first}.{last}", "Jane", "Doe", "b.com") == "jane.doe@b.com"
+    assert apply_email_pattern("{f}{last}", "Jane", "Doe", "b.com") == "jdoe@b.com"
+    assert apply_email_pattern("{first}", "Jane", "Doe", "b.com") == "jane@b.com"
+    got = apply_email_pattern("{first_name}_{last_name}", "Jane", "Doe", "b.com")
+    assert got == "jane_doe@b.com"
+
+
+def test_apply_email_pattern_returns_none() -> None:
+    from src.providers.hunter import apply_email_pattern
+
+    assert apply_email_pattern("", "Jane", "Doe", "b.com") is None  # no pattern
+    assert apply_email_pattern("{first}.{last}", "Jane", "Doe", "") is None  # no domain
+    assert apply_email_pattern("{unknown}", "Jane", "Doe", "b.com") is None  # unfilled token
+    assert apply_email_pattern("{last}", "Cher", "", "b.com") is None  # empty local part
+
+
+def test_find_email_pattern_unfillable_falls_through() -> None:
+    # Pattern present but the name can't fill it → empty result, source "hunter",
+    # so the chain falls through to Apollo.
+    client = _make_client({"data": {"pattern": "{last}"}})
+    provider = HunterProvider(api_key="test-key", http_client=client)
+    result = provider.find_email("Cher", "b.com")  # single name → no last
+    assert result.email is None
+    assert result.source == "hunter"
+
+
+def test_close_releases_client() -> None:
+    client = _make_client(HUNTER_PATTERN)
+    provider = HunterProvider(api_key="k", http_client=client)
+    provider.close()
+    assert client.is_closed
+
+
+# ---------------------------------------------------------------------------
+# #13 (was #22-deferred) — scrubber defensive branches
+# ---------------------------------------------------------------------------
+
+
+def test_scrub_non_http_exception() -> None:
+    # A non-httpx exception: args are scrubbed (str args), non-str args passed
+    # through unchanged.
+    from src.providers.hunter import scrub_api_key_in_exc
+
+    exc = ValueError(f"failed api_key={_LEAKY_KEY}", 42)
+    scrubbed = scrub_api_key_in_exc(exc, _LEAKY_KEY)
+    assert isinstance(scrubbed, ValueError)
+    assert _LEAKY_KEY not in str(scrubbed.args[0])
+    assert scrubbed.args[1] == 42  # non-str arg untouched
+
+
+def test_scrub_request_error_without_bound_request() -> None:
+    from src.providers.hunter import scrub_api_key_in_exc
+
+    exc = httpx.ConnectError(f"connect failed api_key={_LEAKY_KEY}")  # no request bound
+    scrubbed = scrub_api_key_in_exc(exc, _LEAKY_KEY)
+    assert isinstance(scrubbed, httpx.ConnectError)
+    assert _LEAKY_KEY not in str(scrubbed)
+
+
+def test_scrub_http_error_when_request_rebuild_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    # If httpx.Request() raises during rebuild, the scrubber degrades gracefully
+    # (except: pass) and still returns a scrubbed HTTPStatusError.
+    import src.providers.hunter as hunter_mod
+
+    leaky = f"https://api.hunter.io/v2/domain-search?api_key={_LEAKY_KEY}"
+    req = httpx.Request("GET", leaky)
+    resp = httpx.Response(500, request=req, content=b"x")
+    exc = httpx.HTTPStatusError("500", request=req, response=resp)
+
+    def _boom(*a, **k):
+        raise RuntimeError("no request for you")
+
+    monkeypatch.setattr(hunter_mod.httpx, "Request", _boom)
+    scrubbed = scrub_via(hunter_mod, exc)
+    assert _LEAKY_KEY not in str(scrubbed)
+
+
+def test_scrub_http_error_when_response_rebuild_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    import src.providers.hunter as hunter_mod
+
+    leaky = f"https://api.hunter.io/v2/domain-search?api_key={_LEAKY_KEY}"
+    req = httpx.Request("GET", leaky)
+    resp = httpx.Response(500, request=req, content=b"x")
+    exc = httpx.HTTPStatusError("500", request=req, response=resp)
+
+    def _boom(*a, **k):
+        raise RuntimeError("no response")
+
+    monkeypatch.setattr(hunter_mod.httpx, "Response", _boom)
+    scrubbed = scrub_via(hunter_mod, exc)
+    assert _LEAKY_KEY not in str(scrubbed)
+
+
+def test_scrub_request_error_when_request_rebuild_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    import src.providers.hunter as hunter_mod
+
+    leaky = f"https://api.hunter.io/v2/domain-search?api_key={_LEAKY_KEY}"
+    req = httpx.Request("GET", leaky)
+    exc = httpx.ConnectError(f"failed {leaky}", request=req)
+
+    def _boom(*a, **k):
+        raise RuntimeError("no request")
+
+    monkeypatch.setattr(hunter_mod.httpx, "Request", _boom)
+    scrubbed = scrub_via(hunter_mod, exc)
+    assert _LEAKY_KEY not in str(scrubbed)
+
+
+def scrub_via(hunter_mod, exc):
+    return hunter_mod.scrub_api_key_in_exc(exc, _LEAKY_KEY)
+
+
+def test_scrub_generic_exc_reconstruct_fails_returns_original() -> None:
+    # A non-http exception whose constructor rejects the scrubbed args → the
+    # scrubber gives back the original rather than crashing.
+    from src.providers.hunter import scrub_api_key_in_exc
+
+    class _NoArgError(Exception):
+        def __init__(self) -> None:  # rejects type(exc)(*new_args)
+            super().__init__("fixed message")
+
+    exc = _NoArgError()
+    assert scrub_api_key_in_exc(exc, _LEAKY_KEY) is exc
+
+
+def test_scrub_request_error_reconstruct_fails_returns_original() -> None:
+    # A RequestError subclass that won't accept (msg, request=) or (msg) → both
+    # construction attempts raise and the original is returned.
+    from src.providers.hunter import scrub_api_key_in_exc
+
+    class _NoArgReqError(httpx.RequestError):
+        def __init__(self) -> None:
+            super().__init__("boom")
+
+    exc = _NoArgReqError()
+    assert scrub_api_key_in_exc(exc, _LEAKY_KEY) is exc
