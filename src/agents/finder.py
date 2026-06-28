@@ -565,7 +565,12 @@ def _resolve_email(
         return EmailResult(email=None, verified=False, confidence=0, source="APOLLO_EXHAUSTED")
     if apollo_provider is not None:
         return EmailResult(email=None, verified=False, confidence=0, source="apollo")
-    return EmailResult(email=None, verified=False, confidence=0, source="EMAIL_DISABLED")
+    # Defensive: unreachable — the both-providers-None case already returned
+    # EMAIL_DISABLED above (line 528), so reaching here would mean a present
+    # provider produced neither a result nor an exhaustion flag.
+    return EmailResult(  # pragma: no cover
+        email=None, verified=False, confidence=0, source="EMAIL_DISABLED"
+    )
 
 
 def ingest_contacts(

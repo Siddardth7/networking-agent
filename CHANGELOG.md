@@ -15,7 +15,11 @@ Versioning: [Semantic Versioning](https://semver.org/)
   — offsetting LinkedIn's ~100-invite/week ceiling. Inferred addresses are
   best-effort (`verified=False`, `source="hunter_pattern"`); when a company has
   no pattern the chain falls through to Apollo, and the `HUNTER_EXHAUSTED`
-  quota/fallback contract is preserved.
+  quota/fallback contract is preserved. **Validated end-to-end (issue #14):**
+  hermetic tests run the real Hunter-pattern + Apollo providers through
+  `_resolve_email` with a real QuotaManager — fallback ordering, quota
+  exhaustion, the `HUNTER_EXHAUSTED`/`APOLLO_EXHAUSTED` sentinels, and the
+  one-lookup-per-company uncapped behavior — fully branch-covering the path.
 
 ### Removed
 - **Dormant PDL provider deleted (issue #22).** `pdl.py` was built but never
