@@ -211,6 +211,41 @@ class TestClassifierTuple:
         assert signal is not None
         assert len(signal) == 80
 
+
+class TestTrimHookSignal:
+    """#10 trial residual: an overshooting hook signal must trim on a word
+    boundary, not mid-word ('…large assembly stru')."""
+
+    def test_short_unchanged(self):
+        from src.agents.finder import _trim_hook_signal
+
+        assert _trim_hook_signal("led 787 stress team") == "led 787 stress team"
+
+    def test_exactly_at_ceiling_unchanged(self):
+        from src.agents.finder import _MAX_HOOK_SIGNAL_LEN, _trim_hook_signal
+
+        text = "a" * _MAX_HOOK_SIGNAL_LEN
+        assert _trim_hook_signal(text) == text
+
+    def test_overshoot_trims_on_word_boundary(self):
+        from src.agents.finder import _MAX_HOOK_SIGNAL_LEN, _trim_hook_signal
+
+        text = (
+            "Four years in aerospace manufacturing, quality assurance "
+            "and large assembly structures"
+        )
+        out = _trim_hook_signal(text)
+        assert len(out) <= _MAX_HOOK_SIGNAL_LEN
+        assert not out.endswith("stru")  # no mid-word cut
+        assert out == text[: len(out)]  # a clean prefix, ending on a whole word
+        assert not out.endswith(" ")
+
+    def test_single_overlong_token_hard_cut(self):
+        from src.agents.finder import _MAX_HOOK_SIGNAL_LEN, _trim_hook_signal
+
+        out = _trim_hook_signal("x" * 200)
+        assert len(out) == _MAX_HOOK_SIGNAL_LEN
+
     def test_snippet_passed_into_user_message(self):
         client = Mock()
         client.messages.create.return_value = _make_classifier_response(
