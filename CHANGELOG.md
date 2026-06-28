@@ -6,8 +6,24 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-28
+
+v0.6.0 = "develop the Finder like the Drafter" (Sid's stated focus). Finder
+discovery, hook grounding, and correctness are hardened, and a live trial
+declares the Finder at parity with the Drafter's quality bar.
+
+### Added
+- **Live Finder trial + scorecard — Finder/Drafter parity (issue #10).** New
+  `src/eval/finder_scorecard.py` scores Finder output on the same shape of
+  objective, ground-truth-free criteria the AST drafter trial used (discovery
+  yield, hook quality, classify spread) with a PASS/REVIEW/FAIL verdict and a
+  markdown render; the live entrypoint runs `find_contacts` and reads the rows
+  back. Documented live run on AST SpaceMobile (LinkedIn-only, isolated DB):
+  13/15 discovered, 0 GENERIC / 0 verbatim-news / 13/13 hooks whitelisted →
+  **PASS, Finder declared at parity** (`docs/TRIAL_FINDER_AST_SPACEMOBILE_2026-06-28.md`).
+
 ### Changed
-- **Finder discovery is now best-effort-to-N across providers (issue #8, v0.6.0).**
+- **Finder discovery is now best-effort-to-N across providers (issue #8).**
   `_discover` accumulates deduped results up to the limit across the provider
   chain (Apify → Serper) — asking each lane only for the shortfall — instead of
   returning the first non-empty lane. **No silent caps:** provider failures and
@@ -25,6 +41,30 @@ Versioning: [Semantic Versioning](https://semver.org/)
   query). Location is a first-class campaign filter (one company + location/day),
   so contacts are now geo-targeted, not just company-matched. **Completes #8 —
   Finder discovery improvements.**
+- **Hooks are specific and grounded across all input shapes (issue #9,
+  FINDER_AUDIT D6/D7/D11).** Imported contacts with persona + focus pre-set
+  (Apollo/Cowork rows) now still mine a rich `about`/snippet for a Tier-0 hook
+  instead of dropping to a title bucket (**D7**, the central fix); the news-shape
+  hook gate rejects only true pasted headlines (a `·` separator or two
+  co-occurring markers), so real signals like "reports to VP Structures" are no
+  longer demoted (**D6**); the shared-employer hook tier also matches the company
+  slug, so a current employee with a bare title still trips it (**D11**).
+
+### Fixed
+- **Finder correctness pass (issue #27, FINDER_AUDIT D5/D8/D9/D10/D12).**
+  **D5:** re-running the Finder/importer no longer inserts duplicate contacts —
+  new partial unique index on `(company_id, linkedin_url)` for non-null URLs
+  (migration **005**) plus `INSERT OR IGNORE`. **D8:** one shared
+  `src.core.slug.slugify` replaces three divergent copies, so `"Joby Aviation,
+  Inc."` no longer cross-links to two company rows. **D9:** a NULL company domain
+  now logs a WARNING with the inferred value instead of failing every email in
+  the batch silently. **D10:** a new `APOLLO_EXHAUSTED` sentinel replaces the
+  mislabeled `apollo` source when Apollo is capped without running. **D12:** the
+  company-news query uses the current year instead of a hardcoded one.
+
+### Coverage
+- Coverage gate (`fail_under`) ratcheted 95 → 96; repo at ~97% combined
+  line+branch (831 tests).
 
 ## [0.5.5] - 2026-06-27
 

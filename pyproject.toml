@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "networking-agent"
-version = "0.5.5"
+version = "0.6.0"
 description = "Autonomous 3-agent outreach pipeline Claude Code plugin"
 requires-python = ">=3.11"
 authors = [{name = "Siddardth Pathipaka"}]
@@ -44,8 +44,10 @@ omit = ["tests/*"]
 
 [tool.coverage.report]
 # Ratchet only upward (issue #2). 95 reached at the v0.5.5 close (#7) after the
-# coverage push (#21/#25/#23) took the repo to ~96.6% line+branch.
-fail_under = 95
+# coverage push (#21/#25/#23) took the repo to ~96.6% line+branch. Bumped to 96
+# at the v0.6.0 close — the Finder discovery/hook/correctness work + trial
+# scorecard landed the repo at ~97% combined line+branch.
+fail_under = 96
 show_missing = true
 
 [tool.setuptools.packages.find]
