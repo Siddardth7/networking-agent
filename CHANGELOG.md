@@ -15,6 +15,9 @@ Versioning: [Semantic Versioning](https://semver.org/)
   records an outcome (`/network-outcome <id> <OUTCOME> [--notes ...]`) and lists
   all recorded outcomes (`--list`). This is the data that later tunes the
   referral-ranking weights (#12) once real results accumulate.
+- **Outcome rollup report (issue #16).** `/network-outcome --report` summarizes
+  the response rate overall and per company (responded/total + an outcome
+  breakdown), backed by a pure `aggregate_outcomes` aggregator.
 
 ## [0.7.0] - 2026-06-28
 

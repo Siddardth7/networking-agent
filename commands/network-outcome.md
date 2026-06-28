@@ -14,6 +14,7 @@ that later tunes the referral-ranking weights.
 ```
 /network-outcome <contact-id> <OUTCOME> [--notes "..."]
 /network-outcome --list
+/network-outcome --report
 ```
 
 **Examples:**
