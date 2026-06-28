@@ -147,3 +147,52 @@ def test_location_appended_to_search_query(qm: QuotaManager) -> None:
         company="Joby", role_keywords=["stress engineer"], limit=5, location="Dayton, OH"
     )
     assert "Dayton, OH" in captured["body"]["searchQuery"]
+
+
+def test_parse_item_no_name_returns_none() -> None:
+    # #22: an item with no first/last/full name is dropped, not parsed.
+    from src.providers.apify import _parse_item
+
+    assert _parse_item({"headline": "Engineer"}, "acme") is None
+
+
+def test_no_quota_manager_skips_increment() -> None:
+    # #22: quota_manager=None → increment branch skipped, search still parses.
+    provider = ApifyProvider(api_key="k", quota_manager=None, http_client=_client(APIFY_FULL))
+    out = provider.search_linkedin_profiles(company="X", role_keywords=["eng"], limit=5)
+    assert out  # parsed without a quota manager
+
+
+def test_non_dict_items_skipped(qm: QuotaManager) -> None:
+    # #22: a non-dict element in the payload list is skipped (not crashed on).
+    provider = ApifyProvider(
+        api_key="k", quota_manager=qm, http_client=_client([*APIFY_FULL, "garbage", 42])
+    )
+    out = provider.search_linkedin_profiles(company="X", role_keywords=["eng"], limit=10)
+    assert all(c.full_name for c in out)
+    assert len(out) == len([i for i in APIFY_FULL if isinstance(i, dict)])
+
+
+def test_close_releases_client() -> None:
+    client = _client(APIFY_FULL)
+    provider = ApifyProvider(api_key="k", http_client=client)
+    provider.close()
+    assert client.is_closed
+
+
+def test_limit_breaks_early_before_parsing_all(qm: QuotaManager) -> None:
+    # #22: with more results than the limit, parsing stops at the limit.
+    provider = ApifyProvider(api_key="k", quota_manager=qm, http_client=_client(APIFY_FULL))
+    out = provider.search_linkedin_profiles(company="X", role_keywords=["eng"], limit=1)
+    assert len(out) == 1
+
+
+def test_unparseable_dict_item_skipped(qm: QuotaManager) -> None:
+    # #22: a dict with no name parses to None and is skipped (candidate-is-None
+    # branch), without crashing or counting toward results.
+    provider = ApifyProvider(
+        api_key="k", quota_manager=qm, http_client=_client([{"headline": "no name"}, *APIFY_FULL])
+    )
+    out = provider.search_linkedin_profiles(company="X", role_keywords=["eng"], limit=10)
+    assert all(c.full_name for c in out)
+    assert len(out) == len(APIFY_FULL)

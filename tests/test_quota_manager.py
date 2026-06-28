@@ -174,3 +174,51 @@ def test_quota_exhausted_does_not_increment_counter(qm: QuotaManager) -> None:
     # used must still be 100, not 101
     assert qm.remaining("serper") == 0
     assert qm.get_limit("serper") == 100
+
+
+# ---------------------------------------------------------------------------
+# #22 — defensive branches: missing-row guards and write rollback
+# ---------------------------------------------------------------------------
+
+
+def test_can_query_false_when_row_missing(
+    qm: QuotaManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # If the row can't be ensured (here: ensure is a no-op), can_query reports
+    # no quota rather than crashing.
+    monkeypatch.setattr(qm, "_ensure_row", lambda *a, **k: None)
+    assert qm.can_query("serper") is False
+
+
+def test_increment_raises_when_row_disappears(
+    qm: QuotaManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Row missing at increment time → RuntimeError, surfaced through the
+    # rollback-and-reraise path.
+    monkeypatch.setattr(qm, "_ensure_row", lambda *a, **k: None)
+    with pytest.raises(RuntimeError, match="disappeared"):
+        qm.increment("serper")
+
+
+def test_ensure_row_rolls_back_on_db_error(
+    qm: QuotaManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A failure during the seed INSERT rolls back and re-raises (test path).
+    class _BoomConn:
+        def __init__(self) -> None:
+            self.rolled_back = False
+
+        def execute(self, *a, **k):
+            raise sqlite3.OperationalError("boom")
+
+        def rollback(self) -> None:
+            self.rolled_back = True
+
+        def close(self) -> None:
+            pass
+
+    boom = _BoomConn()
+    monkeypatch.setattr(qm, "_connect", lambda: boom)
+    with pytest.raises(sqlite3.OperationalError):
+        qm._ensure_row("serper", 0)
+    assert boom.rolled_back is True

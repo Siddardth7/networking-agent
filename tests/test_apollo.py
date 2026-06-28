@@ -67,3 +67,19 @@ def test_quota_exhaustion_raises(qm: QuotaManager) -> None:
     )
     with pytest.raises(QuotaExhausted):
         provider.find_email(full_name="Jane Doe", company_domain="acme.com")
+
+
+def test_no_quota_manager_skips_increment() -> None:
+    # #22: quota_manager=None → the increment branch is skipped, match still works.
+    provider = ApolloProvider(
+        api_key="k", quota_manager=None, http_client=_client({"person": {"email": "z@acme.com"}})
+    )
+    result = provider.find_email(full_name="Jane Doe", company_domain="acme.com")
+    assert result.email == "z@acme.com"
+
+
+def test_close_releases_client() -> None:
+    client = _client({})
+    provider = ApolloProvider(api_key="k", http_client=client)
+    provider.close()
+    assert client.is_closed
