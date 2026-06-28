@@ -45,6 +45,7 @@ class SearchProvider(ABC):
         company: str,
         role_keywords: list[str],
         limit: int,
+        location: str | None = None,
     ) -> list[ContactCandidate]:
         """Search for LinkedIn profiles matching the given criteria.
 
@@ -52,6 +53,8 @@ class SearchProvider(ABC):
             company: Target company name or slug.
             role_keywords: Keywords matched against job titles (e.g. ``["engineer", "materials"]``).
             limit: Maximum number of candidates to return.
+            location: Optional geographic filter (e.g. ``"Dayton, OH"``) — providers
+                fold it into their query (location is a first-class campaign filter).
 
         Returns:
             A list of :class:`~src.core.schemas.ContactCandidate` objects,

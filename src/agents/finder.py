@@ -385,6 +385,7 @@ def _discover(
     company: str,
     role_keywords: list[str],
     limit: int,
+    location: str | None = None,
 ) -> list[ContactCandidate]:
     """Best-effort accumulation to *limit* across providers, in order, deduped.
 
@@ -411,7 +412,10 @@ def _discover(
         name = type(provider).__name__
         try:
             candidates = provider.search_linkedin_profiles(
-                company=company, role_keywords=role_keywords, limit=limit - len(collected)
+                company=company,
+                role_keywords=role_keywords,
+                limit=limit - len(collected),
+                location=location,
             )
         except QuotaExhausted as exc:
             quota_exc = exc
@@ -642,6 +646,7 @@ def find_contacts(
     apify_provider: ApifyProvider | None = None,
     apollo_provider: ApolloProvider | None = None,
     anthropic_client=None,
+    location: str | None = None,
 ) -> list[ContactCandidate]:
     """Run the 5-phase Finder pipeline for *company_slug*.
 
@@ -703,6 +708,7 @@ def find_contacts(
         company=company_slug.replace("-", " "),
         role_keywords=cfg.finder_role_keywords,
         limit=limit,
+        location=location,
     )
 
     if not candidates:

@@ -116,6 +116,7 @@ class SerperProvider(SearchProvider):
         company: str,
         role_keywords: list[str],
         limit: int,
+        location: str | None = None,
     ) -> list[ContactCandidate]:
         """Search for LinkedIn profiles matching *company* and *role_keywords*.
 
@@ -157,6 +158,9 @@ class SerperProvider(SearchProvider):
 
         keywords_str = " OR ".join(role_keywords)
         query = f'site:linkedin.com/in "{company}" ({keywords_str})'
+        if location:
+            # Location is a first-class campaign filter — bias the Google query.
+            query = f'{query} "{location}"'
 
         candidates: list[ContactCandidate] = []
         seen_urls: set[str] = set()

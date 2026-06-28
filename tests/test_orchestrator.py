@@ -86,7 +86,7 @@ def test_new_state_full_pipeline_called_in_order(capsys):
         call_order.append("checks")
         return 0
 
-    def mock_find(company_slug, limit=None, anthropic_client=None):
+    def mock_find(company_slug, limit=None, anthropic_client=None, location=None):
         call_order.append("find")
         return []
 
@@ -367,7 +367,7 @@ def test_lazy_imports_resolved_when_none(monkeypatch):
 
     monkeypatch.setattr(nc_mod, "run_checks", lambda: 0)
     monkeypatch.setattr(finder_mod, "find_contacts",
-                        lambda slug, limit=None, anthropic_client=None: [])
+                        lambda slug, limit=None, anthropic_client=None, location=None: [])
     monkeypatch.setattr(gate_mod, "run_selection_gate", lambda company_id: [])
     monkeypatch.setattr(drafter_mod, "draft_for_contacts",
                         lambda ids, client: {})
@@ -376,3 +376,24 @@ def test_lazy_imports_resolved_when_none(monkeypatch):
 
     # Call with NO injection overrides — triggers all lazy imports
     run_pipeline(slug)  # should not raise
+
+
+def test_run_pipeline_threads_location_to_finder():
+    """Issue #8: run_pipeline forwards --location end-to-end to the Finder."""
+    from unittest.mock import Mock
+
+    slug = "mu-space"
+    _seed_company(slug, "NEW")
+    find = Mock(return_value=[])
+    run_pipeline(
+        slug,
+        location="Dayton, OH",
+        _run_checks=Mock(return_value=0),
+        _find_contacts=find,
+        _run_selection_gate=Mock(return_value=[]),
+        _draft_for_contacts=Mock(return_value={}),
+        _run_approval_loop=Mock(return_value=None),
+        _write_artifact=Mock(return_value=None),
+    )
+    find.assert_called_once()
+    assert find.call_args.kwargs["location"] == "Dayton, OH"

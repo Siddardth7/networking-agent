@@ -18,8 +18,13 @@ Versioning: [Semantic Versioning](https://semver.org/)
   overridable via `pipeline.finder_role_keywords` in `config.yaml` — any user/
   field, no code edit. The Apify `searchQuery` now broadens across the top
   keywords (OR-joined) instead of only the first (D4), so a composites/stress
-  engineer isn't ranked below "quality engineer" and truncated. Remaining #8:
-  end-to-end location filtering.
+  engineer isn't ranked below "quality engineer" and truncated.
+- **End-to-end location filtering (issue #8).** `location` threads from
+  `run_pipeline` → `find_contacts` → `_discover` → every discovery provider,
+  which folds it into its query (Apify semantic `searchQuery`, Serper Google
+  query). Location is a first-class campaign filter (one company + location/day),
+  so contacts are now geo-targeted, not just company-matched. **Completes #8 —
+  Finder discovery improvements.**
 
 ## [0.5.5] - 2026-06-27
 

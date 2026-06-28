@@ -27,8 +27,9 @@ class _Search:
         self._raises = raises
         self.calls = 0
 
-    def search_linkedin_profiles(self, company, role_keywords, limit):
+    def search_linkedin_profiles(self, company, role_keywords, limit, location=None):
         self.calls += 1
+        self.last_location = location
         if self._raises is not None:
             raise self._raises
         return list(self._result)
@@ -187,3 +188,9 @@ def test_hunter_exhausted_no_apollo_yields_sentinel():
 def test_no_providers_email_disabled():
     r = _resolve_email(_cand(), None, None, "acme.com", _state())
     assert r.source == "EMAIL_DISABLED"
+
+
+def test_location_forwarded_to_provider():
+    apify = _Search(result=[_cand("A")])
+    _discover([apify], company="acme", role_keywords=[], limit=5, location="Dayton, OH")
+    assert apify.last_location == "Dayton, OH"

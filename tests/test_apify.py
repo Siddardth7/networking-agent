@@ -129,3 +129,21 @@ def test_search_query_broadens_across_keywords(qm: QuotaManager) -> None:
     assert "quality engineer" in sq
     assert "stress engineer" in sq  # not just the first keyword
     assert " OR " in sq
+
+
+def test_location_appended_to_search_query(qm: QuotaManager) -> None:
+    """Issue #8: a location filter is folded into the semantic query."""
+    import json as _json
+
+    captured: dict = {}
+
+    def handler(request):
+        captured["body"] = _json.loads(request.content)
+        return httpx.Response(200, json=APIFY_FULL, request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    provider = ApifyProvider(api_key="k", quota_manager=qm, http_client=client)
+    provider.search_linkedin_profiles(
+        company="Joby", role_keywords=["stress engineer"], limit=5, location="Dayton, OH"
+    )
+    assert "Dayton, OH" in captured["body"]["searchQuery"]

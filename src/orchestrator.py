@@ -116,6 +116,7 @@ def _batch_quality_checkpoint(company_id: int) -> None:
 def run_pipeline(
     company_slug: str,
     anthropic_client=None,
+    location: str | None = None,
     # Injectable dependencies — real modules resolved lazily; tests pass stubs
     _run_checks=None,
     _find_contacts=None,
@@ -225,7 +226,12 @@ def run_pipeline(
     from src.core.config import load_config  # noqa: PLC0415
 
     _cfg = load_config()
-    _find_contacts(company_slug, limit=_cfg.finder_limit, anthropic_client=anthropic_client)
+    _find_contacts(
+        company_slug,
+        limit=_cfg.finder_limit,
+        anthropic_client=anthropic_client,
+        location=location,
+    )
 
     # Re-fetch company_id after Finder (Finder may have created the row if slug
     # didn't exist yet; slug is UNIQUE so the same row is returned)

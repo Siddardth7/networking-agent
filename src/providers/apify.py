@@ -137,6 +137,7 @@ class ApifyProvider(SearchProvider):
         company: str,
         role_keywords: list[str],
         limit: int,
+        location: str | None = None,
     ) -> list[ContactCandidate]:
         """Search LinkedIn profiles at *company* matching *role_keywords*.
 
@@ -144,7 +145,8 @@ class ApifyProvider(SearchProvider):
         run-sync HTTP call; parses the returned dataset items into at most
         *limit* canonical candidates. Raises ``QuotaExhausted`` at the budget
         cap; ``AuthError`` on a bad token (both surface to the caller, which
-        falls back to the next discovery provider).
+        falls back to the next discovery provider). *location*, when given, is
+        appended to the semantic query to bias results geographically.
         """
         if self._quota_manager is not None:
             self._quota_manager.increment("apify", 1)
@@ -156,6 +158,8 @@ class ApifyProvider(SearchProvider):
         search_query = (
             f"{company} ({' OR '.join(role_keywords[:3])})" if role_keywords else company
         )
+        if location:
+            search_query = f"{search_query} {location}"
         body: dict = {
             "profileScraperMode": self._profile_mode,
             "searchQuery": search_query,

@@ -330,3 +330,21 @@ def test_title_pipe_separator_stripped() -> None:
     assert len(results) == 1
     assert results[0].full_name == "Carol Chen"
     assert results[0].title == "Staff Engineer"
+
+
+def test_location_added_to_query(qm: QuotaManager) -> None:
+    """Issue #8: a location filter is added to the Google query."""
+    import json as _json
+
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = _json.loads(request.content)
+        return httpx.Response(200, json={"organic": []}, request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    provider = SerperProvider(api_key="k", quota_manager=qm, http_client=client)
+    provider.search_linkedin_profiles(
+        company="Joby", role_keywords=["stress engineer"], limit=5, location="Dayton, OH"
+    )
+    assert "Dayton, OH" in captured["body"]["q"]
