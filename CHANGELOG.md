@@ -6,6 +6,13 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-28
+
+v0.7.0 = the uncapped cold-email channel. Hunter shifts from per-person lookups
+to org-pattern inference so email scales past the ~25/month finder cap, the
+end-to-end email path is hermetically validated, and the dormant PDL provider is
+removed.
+
 ### Added
 - **Hunter email-pattern inference — the uncapped cold-email channel (issue #13,
   A5).** Hunter now resolves emails via one quota-gated `domain-search` per
@@ -33,6 +40,10 @@ Versioning: [Semantic Versioning](https://semver.org/)
   close, non-dict/unparseable items, missing-row guards, write rollback); retry
   and serper at 95%. Hunter's coverage is owned by its #13 rewrite (coordinated
   per the audit) and is intentionally not back-filled here.
+
+### Coverage
+- Coverage gate (`fail_under`) ratcheted 97 → 98; repo at ~98% combined
+  line+branch (committed tree), 888 tests.
 
 ## [0.6.5] - 2026-06-28
 
