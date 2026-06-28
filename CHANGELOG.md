@@ -6,6 +6,19 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Removed
+- **Dormant PDL provider deleted (issue #22).** `pdl.py` was built but never
+  wired into the pipeline and is redundant with Apify (live + fresh vs PDL's
+  6–18-month-stale data); removed along with its quota entry. Recoverable from
+  git history if a structured backstop is ever needed.
+
+### Changed
+- **Providers hardened to the coverage bar (issue #22, audit).** apify, apollo,
+  and quota_manager brought to 100% line+branch (quota/fallback skips, client
+  close, non-dict/unparseable items, missing-row guards, write rollback); retry
+  and serper at 95%. Hunter's coverage is owned by its #13 rewrite (coordinated
+  per the audit) and is intentionally not back-filled here.
+
 ## [0.6.5] - 2026-06-28
 
 v0.6.5 = referral-likelihood ranking — operationalizes "5 to the right people >

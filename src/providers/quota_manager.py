@@ -18,7 +18,6 @@ Free-tier defaults (seeded on first use)
 -----------------------------------------
 - ``serper``:  100 queries / month
 - ``hunter``:   25 queries / month
-- ``pdl``:     100 person matches / month
 """
 
 from __future__ import annotations
@@ -36,7 +35,6 @@ __all__ = ["QuotaManager"]
 _DEFAULT_LIMITS: dict[str, int] = {
     "serper": 100,
     "hunter": 25,
-    "pdl": 100,
     # Apify: per-25-profile-page budget guard (~$8/mo). Apollo: free email credits.
     # Keep in sync with Config.apify_monthly_limit / apollo_monthly_limit.
     "apify": 40,
