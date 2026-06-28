@@ -12,11 +12,10 @@ the QuotaManager ("apify") is the coarse $-budget guard.
 
 from __future__ import annotations
 
-import re
-
 import httpx
 
 from src.core.schemas import ContactCandidate
+from src.core.slug import slugify
 from src.providers.base import SearchProvider, register_provider
 from src.providers.quota_manager import QuotaManager
 from src.providers.retry import with_retry
@@ -26,11 +25,6 @@ __all__ = ["ApifyProvider"]
 # Tilde form of the Actor id for the REST path (username~actor-name).
 _APIFY_ACTOR = "harvestapi~linkedin-profile-search"
 _APIFY_ENDPOINT = f"https://api.apify.com/v2/acts/{_APIFY_ACTOR}/run-sync-get-dataset-items"
-
-
-def _slugify(name: str) -> str:
-    s = re.sub(r"[^a-z0-9]+", "-", str(name).lower()).strip("-")
-    return s or "unknown"
 
 
 def _first(value):
@@ -181,7 +175,7 @@ class ApifyProvider(SearchProvider):
         if not isinstance(items, list):
             return []
 
-        company_slug = _slugify(company)
+        company_slug = slugify(company)
         candidates: list[ContactCandidate] = []
         for item in items:
             if not isinstance(item, dict):

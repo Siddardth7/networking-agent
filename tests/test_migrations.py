@@ -16,7 +16,7 @@ def _open_conn(db_path: Path) -> sqlite3.Connection:
 
 # Latest applied migration number. Update when adding a new
 # src/core/migrations/NNN_*.sql file.
-LATEST_VERSION = 4  # 004_search_cache (v0.2.1)
+LATEST_VERSION = 5  # 005_contacts_dedup (#27 / FINDER_AUDIT D5)
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +62,7 @@ def test_migration_creates_expected_indexes(tmp_path: Path) -> None:
             "idx_companies_slug",
             "idx_contacts_company",
             "idx_drafts_contact",
+            "idx_contacts_company_linkedin",
         }
         assert expected_indexes.issubset(indexes), (
             f"Missing indexes: {expected_indexes - indexes}.  Found: {indexes}"

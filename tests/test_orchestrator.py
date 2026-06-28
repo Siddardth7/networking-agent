@@ -44,13 +44,16 @@ def _seed_company(slug: str, state: str) -> int:
 
 def _seed_contact(company_id: int, state: str, name: str = "Test Contact") -> int:
     """Insert a contact row and return its id."""
+    # URL is unique per name so several contacts in one company don't collide on
+    # the (company_id, linkedin_url) unique index (migration 005).
+    url = f"https://linkedin.com/in/{name.lower().replace(' ', '-')}"
     with with_writer() as conn:
         cursor = conn.execute(
             "INSERT INTO contacts "
             "(company_id, full_name, title, persona, focus_area, linkedin_url, email, state) "
             "VALUES (?, ?, 'Engineer', 'PEER_ENGINEER', 'COMPOSITE_DESIGN', "
-            "'https://linkedin.com/test', 'test@co.com', ?)",
-            (company_id, name, state),
+            "?, 'test@co.com', ?)",
+            (company_id, name, url, state),
         )
         return cursor.lastrowid
 
