@@ -6,6 +6,16 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Per-contact outreach outcomes (issue #15, A6).** Capture the feedback signal —
+  whether a contact replied, yielded a point of contact, or gave a sponsorship
+  answer — as an `Outcome` enum (`REPLIED` / `POC` / `SPONSORSHIP_YES` /
+  `SPONSORSHIP_NO` / `DECLINED`, default `NONE`) stored on the contact (migration
+  007: `outcome`, `outcome_notes`, `outcome_at`). New `/network-outcome` verb
+  records an outcome (`/network-outcome <id> <OUTCOME> [--notes ...]`) and lists
+  all recorded outcomes (`--list`). This is the data that later tunes the
+  referral-ranking weights (#12) once real results accumulate.
+
 ## [0.7.0] - 2026-06-28
 
 v0.7.0 = the uncapped cold-email channel. Hunter shifts from per-person lookups
