@@ -42,6 +42,25 @@ _SHARED_EMPLOYERS = [
 
 _UIUC_SIGNALS = ["uiuc", "university of illinois", "urbana-champaign"]
 
+# The classifier is asked for a hook signal of at most this many characters.
+_MAX_HOOK_SIGNAL_LEN = 80
+
+
+def _trim_hook_signal(text: str) -> str:
+    """Trim a hook signal to ``_MAX_HOOK_SIGNAL_LEN`` chars on a word boundary.
+
+    The classifier is told to stay within the ceiling but sometimes overshoots;
+    a hard slice cut mid-word ("…large assembly stru" — Finder trial #10 residual).
+    Back up to the last space so the anchor reads as a clean phrase. A single
+    over-long token (no space) keeps the hard cut. No side effects.
+    """
+    if len(text) <= _MAX_HOOK_SIGNAL_LEN:
+        return text
+    cut = text[:_MAX_HOOK_SIGNAL_LEN].rstrip()
+    if " " in cut:
+        cut = cut[: cut.rfind(" ")].rstrip()
+    return cut
+
 
 def _classify_contact(
     candidate: ContactCandidate,
@@ -175,8 +194,8 @@ def _classify_contact(
         focus_area = FocusArea.PEER
 
     raw_signal = (data.get("hook_signal") or "").strip()
-    # Truncate at the 80-char ceiling and drop the empty-signal sentinel.
-    hook_signal = raw_signal[:80] if raw_signal else None
+    # Word-boundary trim at the ceiling; drop the empty-signal sentinel.
+    hook_signal = _trim_hook_signal(raw_signal) if raw_signal else None
 
     return persona, focus_area, hook_signal
 
