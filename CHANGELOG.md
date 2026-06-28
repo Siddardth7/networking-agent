@@ -6,6 +6,17 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Hunter email-pattern inference — the uncapped cold-email channel (issue #13,
+  A5).** Hunter now resolves emails via one quota-gated `domain-search` per
+  company, which returns the org's email pattern (e.g. `{first}.{last}`); that
+  pattern is cached and applied locally to *every* contact at the company, so the
+  channel is effectively uncapped (one credit per company, not one per contact)
+  — offsetting LinkedIn's ~100-invite/week ceiling. Inferred addresses are
+  best-effort (`verified=False`, `source="hunter_pattern"`); when a company has
+  no pattern the chain falls through to Apollo, and the `HUNTER_EXHAUSTED`
+  quota/fallback contract is preserved.
+
 ### Removed
 - **Dormant PDL provider deleted (issue #22).** `pdl.py` was built but never
   wired into the pipeline and is redundant with Apify (live + fresh vs PDL's
