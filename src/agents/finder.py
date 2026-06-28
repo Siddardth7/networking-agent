@@ -223,13 +223,23 @@ def is_acceptable_hook(hook: str | None) -> bool:
     Inputs: candidate hook string (may be None). Output: True only when
     the hook is usable as a personalization anchor: non-empty, not the
     GENERIC sentinel, single-line, within ``_MAX_HOOK_LEN`` characters,
-    and not a verbatim news headline. No side effects.
+    and not shaped like a pasted news headline (a "·" separator or two
+    co-occurring news markers — D6). No side effects.
     """
     if not hook or hook == "GENERIC":
         return False
     if "\n" in hook or len(hook) > _MAX_HOOK_LEN:
         return False
-    if looks_like_verbatim_news(hook):
+    # D6: the strict verbatim-news check (one marker trips it) was built for
+    # raw Serper snippets but false-positives on real personal signals
+    # ("reports to VP Structures", "led 787 stress team since May 5"). An LLM
+    # hook_signal is already ≤80 chars and grounded, so only reject the
+    # unambiguous pasted-headline shapes: a "·" separator, or two co-occurring
+    # news markers (a single one is normal phrasing, not a headline).
+    if "·" in hook:
+        return False
+    marker_hits = len(_NEWS_MARKER_RE.findall(hook)) + bool(_NEWS_DATE_RE.search(hook))
+    if marker_hits >= 2:
         return False
     return True
 
@@ -273,9 +283,14 @@ def _generate_hook(
         if sig in title_lower or sig in url_lower:
             return "we share a UIUC background"
 
-    # Tier 2: Shared employer — word-boundary match to avoid substring false positives
+    # Tier 2: Shared employer — word-boundary match on the title OR the company
+    # slug. D11: a current employee titled "Structures Engineer" (no employer in
+    # the title) still trips it via slug=boeing. Slug dashes → spaces so a
+    # multi-word employer ("general-electric") matches.
+    slug_words = (candidate.company_slug or "").lower().replace("-", " ")
     for emp in _SHARED_EMPLOYERS:
-        if re.search(r"\b" + re.escape(emp) + r"\b", title_lower):
+        pat = r"\b" + re.escape(emp) + r"\b"
+        if re.search(pat, title_lower) or re.search(pat, slug_words):
             label = emp.upper() if emp == "ge" else emp.title()
             return f"you also spent time at {label}"
 
@@ -565,7 +580,17 @@ def ingest_contacts(
             Persona.ALUMNI if candidate.alumni_confirmed else None
         )
         if forced_persona is not None and candidate.focus_area is not None:
-            persona, focus_area, hook_signal = forced_persona, candidate.focus_area, None
+            persona, focus_area = forced_persona, candidate.focus_area
+            # D7: persona/focus are settled, but a rich snippet still holds a
+            # Tier-0 hook. When no explicit hook was supplied, run the
+            # classifier purely to mine its hook_signal (its persona/focus
+            # guesses are discarded — the forced labels win).
+            if candidate.snippet and not candidate.hook:
+                _, _, hook_signal = _classify_contact(
+                    candidate, company_slug, anthropic_client
+                )
+            else:
+                hook_signal = None
         else:
             cls_persona, cls_focus, hook_signal = _classify_contact(
                 candidate, company_slug, anthropic_client

@@ -93,6 +93,26 @@ class TestAcceptableHookShapes:
         ):
             assert is_acceptable_hook(hook), hook
 
+    def test_single_marker_personal_signal_accepted(self):
+        # D6: the strict news check tripped on a single marker, demoting real
+        # signals. One marker (a "reports to…" or a lone "May 5") is normal
+        # phrasing and must now pass the gate.
+        for hook in (
+            "reports to the VP of Structures",
+            "led 787 stress team since May 5",
+        ):
+            assert is_acceptable_hook(hook), hook
+
+    def test_two_marker_headline_still_rejected(self):
+        # Two co-occurring markers ("Reports" + "Financial Results") is a
+        # pasted headline, not a personal signal — still rejected (D6).
+        assert not is_acceptable_hook(
+            "Acme Reports First Quarter 2026 Financial Results"
+        )
+
+    def test_separator_headline_still_rejected(self):
+        assert not is_acceptable_hook("Acme expands · Acme hires CFO")
+
 
 class TestHookGeneration:
     def test_news_never_returned_as_hook(self):
@@ -122,6 +142,28 @@ class TestHookGeneration:
     def test_specialty_bucket_still_preferred_over_title_echo(self):
         hook = _generate_hook(_candidate(title="Composites Engineer"))
         assert hook == "your composites work"
+
+    def test_shared_employer_matched_via_company_slug(self):
+        # D11: a current Boeing employee titled "Structures Engineer" (no
+        # employer in the title) trips Tier-2 via the company slug.
+        cand = ContactCandidate(
+            full_name="X",
+            title="Structures Engineer",
+            linkedin_url="https://linkedin.com/in/x",
+            company_slug="boeing",
+        )
+        assert _generate_hook(cand) == "you also spent time at Boeing"
+
+    def test_multiword_employer_slug_matched(self):
+        # Slug dashes become spaces so "general-electric" matches the "general
+        # electric" employer (D11).
+        cand = ContactCandidate(
+            full_name="X",
+            title="Reliability Engineer",
+            linkedin_url="https://linkedin.com/in/x",
+            company_slug="general-electric",
+        )
+        assert _generate_hook(cand) == "you also spent time at General Electric"
 
     def test_long_title_truncated_in_hook(self):
         long_title = "Senior Principal Staff " + "Program " * 20 + "Lead"

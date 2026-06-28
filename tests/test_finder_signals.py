@@ -389,3 +389,76 @@ class TestFindContactsPersistsSignals:
         assert row["hook"] == "your composites work"
         # No raw sources, so shared_signals is NULL.
         assert row["shared_signals"] is None
+
+
+class TestImportedContactTier0Hook:
+    """D7 (#9): an imported contact with persona + focus pre-set still mines
+    its snippet for a Tier-0 hook instead of dropping to a title bucket."""
+
+    def _company(self) -> int:
+        from src.core.db import with_writer
+
+        init_db()
+        with with_writer() as conn:
+            cur = conn.execute(
+                "INSERT INTO companies (slug, name, state) VALUES (?, ?, 'FOUND')",
+                ("acme-corp", "Acme Corp"),
+            )
+            return int(cur.lastrowid)
+
+    def _candidate(self, **over) -> ContactCandidate:
+        base = dict(
+            full_name="Imported Person",
+            title="Composites Engineer",
+            linkedin_url="https://linkedin.com/in/imported",
+            company_slug="acme-corp",
+            persona=Persona.PEER_ENGINEER,
+            focus_area=FocusArea.COMPOSITE_DESIGN,
+            snippet="Led the bonded composite repair certification at OEM X.",
+        )
+        base.update(over)
+        return ContactCandidate(**base)
+
+    def _hook_for(self, db_path, candidate, client) -> str:
+        from src.agents.finder import ingest_contacts
+
+        company_id = self._company()
+        ingest_contacts(
+            [candidate], company_id, "acme-corp", anthropic_client=client
+        )
+        conn = get_connection()
+        try:
+            return conn.execute(
+                "SELECT hook FROM contacts WHERE full_name = ?",
+                (candidate.full_name,),
+            ).fetchone()["hook"]
+        finally:
+            conn.close()
+
+    def test_snippet_mined_for_tier0_despite_forced_labels(self, db_path):
+        client = Mock()
+        client.messages.create.return_value = _make_classifier_response(
+            "PEER_ENGINEER",
+            "COMPOSITE_DESIGN",
+            hook_signal="led bonded composite repair certification",
+        )
+        hook = self._hook_for(db_path, self._candidate(), client)
+        # The classifier ran (purely to mine the signal) and Tier-0 landed.
+        assert client.messages.create.call_count == 1
+        assert hook == "led bonded composite repair certification"
+
+    def test_explicit_hook_skips_classifier(self, db_path):
+        client = Mock()
+        hook = self._hook_for(
+            db_path, self._candidate(hook="we met at SAMPE 2025"), client
+        )
+        # An explicit hook means no reason to call the model at all.
+        assert client.messages.create.call_count == 0
+        assert hook == "we met at SAMPE 2025"
+
+    def test_no_snippet_no_classifier_call(self, db_path):
+        client = Mock()
+        hook = self._hook_for(db_path, self._candidate(snippet=None), client)
+        # Nothing to mine → classifier skipped → deterministic title bucket.
+        assert client.messages.create.call_count == 0
+        assert hook == "your composites work"
