@@ -1,0 +1,121 @@
+[
+  {
+    "full_name": "Priya Alumna-Connected",
+    "expected_tier": "HIGH",
+    "note": "confirmed alumna + 1st-degree + reachable — the ideal referral target",
+    "persona": "PEER_ENGINEER",
+    "focus_area": "COMPOSITE_DESIGN",
+    "alumni_confirmed": true,
+    "connection_degree": "1st",
+    "email": "priya@example.com",
+    "linkedin_url": "https://linkedin.com/in/priya"
+  },
+  {
+    "full_name": "Marcus Hiring-Recruiter",
+    "expected_tier": "HIGH",
+    "note": "recruiter actively posting open roles + reachable — the literal hiring channel",
+    "persona": "RECRUITER",
+    "connection_degree": "3rd",
+    "snippet": "We're hiring quality engineers at AST — open roles on my team!",
+    "email": "marcus@example.com",
+    "linkedin_url": "https://linkedin.com/in/marcus"
+  },
+  {
+    "full_name": "Dana Recent-Joiner",
+    "expected_tier": "HIGH",
+    "note": "1st-degree peer who just joined — remembers the hunt, easy referral",
+    "persona": "PEER_ENGINEER",
+    "focus_area": "STRUCTURAL_ANALYSIS",
+    "connection_degree": "1st",
+    "snippet": "Recently joined AST SpaceMobile as a structures engineer.",
+    "email": "dana@example.com",
+    "linkedin_url": "https://linkedin.com/in/dana"
+  },
+  {
+    "full_name": "Sofia Alumna",
+    "expected_tier": "HIGH",
+    "note": "confirmed alumna — strong willingness even without a connection",
+    "persona": "PEER_ENGINEER",
+    "alumni_confirmed": true,
+    "linkedin_url": "https://linkedin.com/in/sofia"
+  },
+  {
+    "full_name": "Owen Alum-2nd",
+    "expected_tier": "HIGH",
+    "note": "confirmed alumnus + 2nd-degree — alumni signal dominates",
+    "persona": "PEER_ENGINEER",
+    "alumni_confirmed": true,
+    "connection_degree": "2nd",
+    "linkedin_url": "https://linkedin.com/in/owen"
+  },
+  {
+    "full_name": "Nina Second-Degree",
+    "expected_tier": "MED",
+    "note": "2nd-degree engineer, reachable — warm but not connected",
+    "persona": "PEER_ENGINEER",
+    "focus_area": "MANUFACTURING",
+    "connection_degree": "2nd",
+    "email": "nina@example.com",
+    "linkedin_url": "https://linkedin.com/in/nina"
+  },
+  {
+    "full_name": "Raj Classified-Alumni",
+    "expected_tier": "MED",
+    "note": "classified ALUMNI (no hard confirmation) — softer alumni signal",
+    "persona": "ALUMNI",
+    "focus_area": "ALUMNI_ACADEMIC",
+    "linkedin_url": "https://linkedin.com/in/raj"
+  },
+  {
+    "full_name": "Elena Recruiter-Quiet",
+    "expected_tier": "MED",
+    "note": "recruiter with no active hiring post — channel, but not signalling a req",
+    "persona": "RECRUITER",
+    "email": "elena@example.com",
+    "linkedin_url": "https://linkedin.com/in/elena"
+  },
+  {
+    "full_name": "Tom Senior-2nd",
+    "expected_tier": "MED",
+    "note": "senior manager, 2nd-degree — can refer but not connected/reachable off-platform",
+    "persona": "SENIOR_MANAGER",
+    "connection_degree": "2nd",
+    "linkedin_url": "https://linkedin.com/in/tom"
+  },
+  {
+    "full_name": "Iris Cold-Email",
+    "expected_tier": "LOW",
+    "note": "engineer with only an email, no connection/alumni signal",
+    "persona": "PEER_ENGINEER",
+    "focus_area": "MATERIALS",
+    "email": "iris@example.com"
+  },
+  {
+    "full_name": "Leo Cold-Peer",
+    "expected_tier": "LOW",
+    "note": "engineer, LinkedIn only, no referral signal",
+    "persona": "PEER_ENGINEER",
+    "linkedin_url": "https://linkedin.com/in/leo"
+  },
+  {
+    "full_name": "Hana Cold-Senior",
+    "expected_tier": "LOW",
+    "note": "senior manager, no connection, LinkedIn only",
+    "persona": "SENIOR_MANAGER",
+    "linkedin_url": "https://linkedin.com/in/hana"
+  },
+  {
+    "full_name": "Sam Third-Degree",
+    "expected_tier": "LOW",
+    "note": "3rd-degree peer — degree too distant to score",
+    "persona": "PEER_ENGINEER",
+    "connection_degree": "3rd",
+    "linkedin_url": "https://linkedin.com/in/sam"
+  },
+  {
+    "full_name": "Pat No-Signal",
+    "expected_tier": "LOW",
+    "note": "unclassified, LinkedIn only — reachable but nothing else",
+    "linkedin_url": "https://linkedin.com/in/pat"
+  }
+]
