@@ -105,3 +105,27 @@ def test_quota_exhaustion_raises_before_http(qm: QuotaManager) -> None:
 def test_non_list_payload_returns_empty(qm: QuotaManager) -> None:
     provider = ApifyProvider(api_key="k", quota_manager=qm, http_client=_client({"error": "x"}))
     assert provider.search_linkedin_profiles(company="ACME", role_keywords=[], limit=5) == []
+
+
+def test_search_query_broadens_across_keywords(qm: QuotaManager) -> None:
+    """FINDER_AUDIT D4: searchQuery uses the top keywords (OR-joined), not just
+    the first, so ranking isn't biased to a single role."""
+    import json as _json
+
+    captured: dict = {}
+
+    def handler(request):
+        captured["body"] = _json.loads(request.content)
+        return httpx.Response(200, json=APIFY_FULL, request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    provider = ApifyProvider(api_key="k", quota_manager=qm, http_client=client)
+    provider.search_linkedin_profiles(
+        company="Joby",
+        role_keywords=["quality engineer", "stress engineer", "composites engineer"],
+        limit=5,
+    )
+    sq = captured["body"]["searchQuery"]
+    assert "quality engineer" in sq
+    assert "stress engineer" in sq  # not just the first keyword
+    assert " OR " in sq

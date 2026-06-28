@@ -20,7 +20,7 @@ get_anthropic_client
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -41,6 +41,21 @@ HAIKU_MODEL = "claude-haiku-4-5-20251001"
 # Stronger model reserved for the critic pass (Layer 4). Worth the extra
 # tokens because it is the final automated gate before send.
 SONNET_MODEL = "claude-sonnet-4-6"
+
+# Default discovery role keywords (Finder). Domain-specific (aerospace) for Sid's
+# campaign; config-driven so any user can override via pipeline.finder_role_keywords
+# (issue #8 / FINDER_AUDIT D2). De-hardcoding the rest of the domain is roadmap B1.
+DEFAULT_ROLE_KEYWORDS = [
+    "quality engineer",
+    "supplier quality",
+    "MRB engineer",
+    "manufacturing engineer",
+    "stress engineer",
+    "structures engineer",
+    "composites engineer",
+    "materials engineer",
+    "additive manufacturing",
+]
 
 # Module-level path — tests monkeypatch this to use tmp_path. At runtime,
 # _resolve_config_path() may override it via NETWORKING_AGENT_CONFIG env var.
@@ -116,6 +131,9 @@ class Config:
 
     # Pipeline settings
     finder_limit: int = 5
+    # Discovery role keywords — config-driven (issue #8 / D2). Override via
+    # pipeline.finder_role_keywords; defaults to the aerospace set above.
+    finder_role_keywords: list[str] = field(default_factory=lambda: list(DEFAULT_ROLE_KEYWORDS))
 
     # Hunter email enrichment is OPT-IN (v0.2.1). The free tier is 25
     # lookups/month (~1.5 runs) and LinkedIn channels convert far better, so
@@ -315,6 +333,8 @@ def load_config() -> Config:
     apollo_monthly_limit = int(yaml_providers.get("apollo_monthly_limit", 50))
     search_cache_ttl_days = int(yaml_providers.get("search_cache_ttl_days", 14))
     finder_limit = int(yaml_pipeline.get("finder_limit", 5))
+    # A YAML list overrides the aerospace default; a missing/empty value keeps it.
+    finder_role_keywords = list(yaml_pipeline.get("finder_role_keywords") or DEFAULT_ROLE_KEYWORDS)
     enable_email_enrichment = bool(yaml_pipeline.get("enable_email_enrichment", False))
 
     linkedin_char_limit = int(yaml_quality.get("linkedin_char_limit", 280))
@@ -336,6 +356,7 @@ def load_config() -> Config:
         apollo_monthly_limit=apollo_monthly_limit,
         search_cache_ttl_days=search_cache_ttl_days,
         finder_limit=finder_limit,
+        finder_role_keywords=finder_role_keywords,
         enable_email_enrichment=enable_email_enrichment,
         linkedin_char_limit=linkedin_char_limit,
         email_word_limit=email_word_limit,

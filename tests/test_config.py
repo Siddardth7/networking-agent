@@ -393,3 +393,23 @@ def test_get_anthropic_client_with_explicit_key(
 
     mock_cls.assert_called_once_with(api_key="explicit-key", max_retries=8)
     assert result is mock_client
+
+
+def test_finder_role_keywords_default() -> None:
+    """Config defaults to the aerospace keyword set (issue #8 / D2)."""
+    cfg = config_module.Config()
+    assert cfg.finder_role_keywords == config_module.DEFAULT_ROLE_KEYWORDS
+    # default_factory yields a fresh copy — no shared-mutable-default leak
+    assert cfg.finder_role_keywords is not config_module.DEFAULT_ROLE_KEYWORDS
+
+
+def test_finder_role_keywords_yaml_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """pipeline.finder_role_keywords in YAML overrides the default (config-driven)."""
+    custom = tmp_path / "alt.yaml"
+    _write_yaml(custom, {"pipeline": {"finder_role_keywords": ["data scientist", "ml engineer"]}})
+    monkeypatch.setattr(config_module, "_config_path", tmp_path / "default.yaml")
+    monkeypatch.setenv("NETWORKING_AGENT_CONFIG", str(custom))
+    cfg = load_config()
+    assert cfg.finder_role_keywords == ["data scientist", "ml engineer"]

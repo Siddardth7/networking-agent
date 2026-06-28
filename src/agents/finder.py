@@ -29,18 +29,6 @@ __all__ = [
     "looks_like_verbatim_news",
 ]
 
-_ROLE_KEYWORDS = [
-    "quality engineer",
-    "supplier quality",
-    "MRB engineer",
-    "manufacturing engineer",
-    "stress engineer",
-    "structures engineer",
-    "composites engineer",
-    "materials engineer",
-    "additive manufacturing",
-]
-
 _SHARED_EMPLOYERS = [
     "tata",
     "ge",
@@ -713,7 +701,7 @@ def find_contacts(
     candidates = _discover(
         search_chain,
         company=company_slug.replace("-", " "),
-        role_keywords=_ROLE_KEYWORDS,
+        role_keywords=cfg.finder_role_keywords,
         limit=limit,
     )
 

@@ -12,8 +12,14 @@ Versioning: [Semantic Versioning](https://semver.org/)
   chain (Apify → Serper) — asking each lane only for the shortfall — instead of
   returning the first non-empty lane. **No silent caps:** provider failures and
   any final shortfall are logged at WARNING, fixing FINDER_AUDIT **D1** (a bad
-  Apify key no longer looks like "no contacts exist"). Remaining #8 work:
-  config-driven role keywords (D2/D4) and end-to-end location filtering.
+  Apify key no longer looks like "no contacts exist").
+- **Discovery role keywords are now config-driven (issue #8, D2).** Moved the
+  hardcoded aerospace list to `Config.finder_role_keywords` (default unchanged),
+  overridable via `pipeline.finder_role_keywords` in `config.yaml` — any user/
+  field, no code edit. The Apify `searchQuery` now broadens across the top
+  keywords (OR-joined) instead of only the first (D4), so a composites/stress
+  engineer isn't ranked below "quality engineer" and truncated. Remaining #8:
+  end-to-end location filtering.
 
 ## [0.5.5] - 2026-06-27
 

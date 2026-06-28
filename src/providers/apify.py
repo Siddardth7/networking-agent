@@ -149,7 +149,13 @@ class ApifyProvider(SearchProvider):
         if self._quota_manager is not None:
             self._quota_manager.increment("apify", 1)
 
-        search_query = f"{company} {role_keywords[0]}" if role_keywords else company
+        # Broaden semantic ranking across the top role keywords, not just the
+        # first (FINDER_AUDIT D4) — otherwise a composites/stress engineer can be
+        # ranked below "quality engineer" matches and truncated at the limit.
+        # `currentJobTitles` below still post-filters on the full keyword set.
+        search_query = (
+            f"{company} ({' OR '.join(role_keywords[:3])})" if role_keywords else company
+        )
         body: dict = {
             "profileScraperMode": self._profile_mode,
             "searchQuery": search_query,
