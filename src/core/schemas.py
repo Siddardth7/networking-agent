@@ -73,6 +73,19 @@ class ContactState(StrEnum):
     SENT = "SENT"
 
 
+class Outcome(StrEnum):
+    """Per-contact outreach feedback (issue #15, A6). The funnel from no response
+    through the goal-critical sponsorship answer — the signal that later tunes
+    the referral-ranking weights (#12). Orthogonal to pipeline/contact state."""
+
+    NONE = "NONE"  # default — nothing recorded yet
+    REPLIED = "REPLIED"  # responded, no stronger signal yet
+    POC = "POC"  # yielded a point of contact / referral / intro
+    SPONSORSHIP_YES = "SPONSORSHIP_YES"  # confirmed sponsorship available (the goal)
+    SPONSORSHIP_NO = "SPONSORSHIP_NO"  # answered: no sponsorship
+    DECLINED = "DECLINED"  # not interested / no
+
+
 class ProjectType(StrEnum):
     """Origin of a resume project. Provenance for fact-attribution rules.
 
