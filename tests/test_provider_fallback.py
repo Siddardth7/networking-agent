@@ -190,6 +190,30 @@ def test_no_providers_email_disabled():
     assert r.source == "EMAIL_DISABLED"
 
 
+def test_apollo_exhausted_no_hunter_yields_apollo_sentinel():
+    # D10: Hunter absent, Apollo hits its cap → APOLLO_EXHAUSTED, not "apollo"
+    # (which would imply Apollo searched and simply found nothing).
+    apollo = _Email(raises=QuotaExhausted("apollo", 0, 0))
+    state = _state()
+    r = _resolve_email(_cand(), None, apollo, "acme.com", state)
+    assert r.email is None
+    assert r.source == "APOLLO_EXHAUSTED"
+    assert state["apollo_exhausted"] is True
+    # Second candidate: Apollo is skipped, still APOLLO_EXHAUSTED.
+    r2 = _resolve_email(_cand(), None, apollo, "acme.com", state)
+    assert r2.source == "APOLLO_EXHAUSTED"
+    assert apollo.calls == 1  # not retried after exhaustion
+
+
+def test_apollo_ran_empty_still_labeled_apollo():
+    # Apollo actually searched and found nothing (not exhausted) → "apollo".
+    apollo = _Email(email=None)
+    r = _resolve_email(_cand(), None, apollo, "acme.com", _state())
+    assert r.email is None
+    assert r.source == "apollo"
+    assert apollo.calls == 1
+
+
 def test_location_forwarded_to_provider():
     apify = _Search(result=[_cand("A")])
     _discover([apify], company="acme", role_keywords=[], limit=5, location="Dayton, OH")

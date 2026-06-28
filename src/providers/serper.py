@@ -10,6 +10,7 @@ import httpx
 
 from src.core.schemas import ContactCandidate
 from src.core.search_cache import cache_get, cache_put
+from src.core.slug import slugify
 from src.providers.base import SearchProvider, register_provider
 from src.providers.quota_manager import QuotaManager
 from src.providers.retry import QuotaExhausted, with_retry
@@ -153,8 +154,10 @@ class SerperProvider(SearchProvider):
         # multiple queries with page offsets and deduplicate by LinkedIn URL.
         serper_max_num = 10
 
-        # Compute the company slug once (used for all ContactCandidate objects)
-        company_slug = company.lower().replace(" ", "-")
+        # Compute the company slug once (used for all ContactCandidate objects).
+        # D8: shared slugify so punctuation ("Joby Aviation, Inc.") slugs the
+        # same way the importer/Apify do — no cross-linked duplicate companies.
+        company_slug = slugify(company)
 
         keywords_str = " OR ".join(role_keywords)
         query = f'site:linkedin.com/in "{company}" ({keywords_str})'

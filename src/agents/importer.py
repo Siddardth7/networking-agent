@@ -18,6 +18,7 @@ from src.agents.finder import ingest_contacts
 from src.core.config import get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import ContactCandidate, FocusArea, Persona
+from src.core.slug import slugify
 
 __all__ = [
     "ContactImportError",
@@ -137,12 +138,6 @@ def _lift_apify_nested(raw: dict) -> dict:
 def _norm_header(h: str) -> str:
     """Lowercase, collapse non-alphanumerics to single spaces, strip."""
     return re.sub(r"[^a-z0-9]+", " ", str(h).lower()).strip()
-
-
-def _slugify(name: str) -> str:
-    """Company name → url-safe slug ('Joby Aviation' → 'joby-aviation')."""
-    s = re.sub(r"[^a-z0-9]+", "-", str(name).lower()).strip("-")
-    return s or "unknown"
 
 
 def _apply_aliases(raw: dict) -> dict:
@@ -271,7 +266,7 @@ def parse_contacts_file_with_report(
         if not company:
             dropped["no_company"] += 1
             continue
-        company_slug = _slugify(company)
+        company_slug = slugify(company)
 
         url = (canon.get("linkedin_url") or "").rstrip("/").lower()
         dedup_key = url or f"{full_name.lower()}|{company_slug}"

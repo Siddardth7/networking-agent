@@ -342,9 +342,8 @@ class TestAssignAskAngles:
                 c = conn.execute(
                     "INSERT INTO contacts (company_id, full_name, persona, focus_area, "
                     "linkedin_url, hook, state) "
-                    "VALUES (?, ?, 'ALUMNI', 'ALUMNI_ACADEMIC', "
-                    "'https://li.com/x', 'hook', 'SELECTED')",
-                    (company_id, name),
+                    "VALUES (?, ?, 'ALUMNI', 'ALUMNI_ACADEMIC', ?, 'hook', 'SELECTED')",
+                    (company_id, name, f"https://li.com/{name}"),
                 )
                 ids.append(c.lastrowid)
 

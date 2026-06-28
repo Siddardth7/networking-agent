@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 
 from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
@@ -323,7 +324,8 @@ def _fetch_company_news_signal(
     """
     company_name = company_slug.replace("-", " ")
     try:
-        snippet = serper_provider.search_general(f"{company_name} news 2026")
+        # D12: current year, not a hardcoded one that silently goes stale.
+        snippet = serper_provider.search_general(f"{company_name} news {datetime.now().year}")
     except Exception:
         return None
     # Defensive against mocks / unexpected return types: only proceed for
@@ -353,7 +355,19 @@ def _company_domain(company_id: int, company_slug: str) -> str:
     domain = row["domain"] if row is not None else None
     if domain:
         return str(domain)
-    return f"{company_slug.replace('-', '')}.com"
+    # D9: inference is a guess ("general-electric" → "generalelectric.com", but
+    # the real domain is "ge.com"). When it's wrong EVERY email in the batch
+    # fails — previously with no trace. Warn so the cause is visible; the fix is
+    # to store companies.domain. ponytail: add a --domain override the day a
+    # find CLI exists to pass it (today the orchestrator is the only caller).
+    inferred = f"{company_slug.replace('-', '')}.com"
+    _LOG.warning(
+        "no stored domain for '%s'; inferring '%s' — email lookups will fail if "
+        "this is wrong (set companies.domain to override)",
+        company_slug,
+        inferred,
+    )
+    return inferred
 
 
 def _get_or_create_company(company_slug: str) -> int:
@@ -504,11 +518,16 @@ def _resolve_email(
                 return apollo_result
 
     # Nothing found — pick the most informative empty sentinel.
-    apollo_unavailable = apollo_provider is None or state["apollo_exhausted"]
+    apollo_exhausted = apollo_provider is not None and state["apollo_exhausted"]
+    apollo_unavailable = apollo_provider is None or apollo_exhausted
     if hunter_provider is not None and state["hunter_exhausted"] and apollo_unavailable:
         return EmailResult(email=None, verified=False, confidence=0, source="HUNTER_EXHAUSTED")
     if hunter_result is not None:
         return hunter_result  # Hunter ran, found nothing (source="hunter")
+    # D10: Apollo hit its cap without running for this candidate — don't label it
+    # "apollo" as if it searched and came up empty.
+    if apollo_exhausted:
+        return EmailResult(email=None, verified=False, confidence=0, source="APOLLO_EXHAUSTED")
     if apollo_provider is not None:
         return EmailResult(email=None, verified=False, confidence=0, source="apollo")
     return EmailResult(email=None, verified=False, confidence=0, source="EMAIL_DISABLED")
@@ -595,8 +614,6 @@ def ingest_contacts(
             alumni_confirmed=candidate.alumni_confirmed,
             connection_degree=candidate.connection_degree,
         )
-        results.append(enriched_candidate)
-
         signal_parts: list[str] = []
         if candidate.snippet:
             signal_parts.append(f"profile: {candidate.snippet[:140]}")
@@ -612,9 +629,11 @@ def ingest_contacts(
         shared_signals = " | ".join(signal_parts) or None
 
         with with_writer() as conn:
-            conn.execute(
+            # D5: OR IGNORE + the partial unique index (migration 005) skip a
+            # re-insert of an already-saved (company_id, linkedin_url) on re-run.
+            cursor = conn.execute(
                 """
-                INSERT INTO contacts
+                INSERT OR IGNORE INTO contacts
                     (company_id, full_name, title, persona, focus_area,
                      linkedin_url, email, email_verified, source_provider,
                      hook, shared_signals)
@@ -634,6 +653,12 @@ def ingest_contacts(
                     shared_signals,
                 ),
             )
+            inserted = cursor.rowcount > 0
+
+        # Only report contacts that were actually written (a dup on re-run is
+        # ignored, so it isn't a "result" of this run).
+        if inserted:
+            results.append(enriched_candidate)
 
     return results
 
