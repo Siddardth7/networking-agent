@@ -140,3 +140,33 @@ def test_null_linkedin_url_contacts_not_deduped(db_path):
     )
     ingest_contacts([a, b], company_id, "acme-corp", anthropic_client=client)
     assert _count_contacts(company_id) == 2
+
+
+def test_ingest_persists_rank_score_and_reasons(db_path):
+    # #11: ingest scores each contact and stores the rank + explainable reasons.
+    init_db()
+    company_id = _get_or_create_company("acme-corp")
+    client = Mock()
+    strong = ContactCandidate(
+        full_name="Strong Lead",
+        title="Quality Engineer",
+        linkedin_url="https://linkedin.com/in/strong",
+        company_slug="acme-corp",
+        persona=Persona.PEER_ENGINEER,
+        focus_area=FocusArea.MANUFACTURING,
+        email="strong@acme.com",
+        alumni_confirmed=True,
+        connection_degree="1st",
+    )
+    ingest_contacts([strong], company_id, "acme-corp", anthropic_client=client)
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT rank_score, rank_reasons FROM contacts WHERE full_name = 'Strong Lead'"
+        ).fetchone()
+    finally:
+        conn.close()
+    # alumni_confirmed(40)+1st(30)+engineer(5)+email(5) = 80.
+    assert row["rank_score"] == 80
+    assert "confirmed alumnus" in row["rank_reasons"]
+    assert "1st-degree connection" in row["rank_reasons"]

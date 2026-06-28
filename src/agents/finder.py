@@ -10,6 +10,7 @@ import logging
 import re
 from datetime import datetime
 
+from src.agents.ranker import rank_contact
 from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import ContactCandidate, EmailResult, FocusArea, Persona
@@ -672,6 +673,14 @@ def ingest_contacts(
             signal_parts.append(f"degree: {candidate.connection_degree[:10]}")
         shared_signals = " | ".join(signal_parts) or None
 
+        # Referral-likelihood ranking (#11): deterministic, explainable. Score the
+        # enriched candidate, log the per-signal breakdown (acceptance: "per-signal
+        # contributions logged"), and persist score + reasons for the gate to order on.
+        rank = rank_contact(enriched_candidate)
+        _LOG.info(
+            "rank %s = %d (%s)", candidate.full_name, rank.total, rank.summary()
+        )
+
         with with_writer() as conn:
             # D5: OR IGNORE + the partial unique index (migration 005) skip a
             # re-insert of an already-saved (company_id, linkedin_url) on re-run.
@@ -680,8 +689,8 @@ def ingest_contacts(
                 INSERT OR IGNORE INTO contacts
                     (company_id, full_name, title, persona, focus_area,
                      linkedin_url, email, email_verified, source_provider,
-                     hook, shared_signals)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     hook, shared_signals, rank_score, rank_reasons)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     company_id,
@@ -695,6 +704,8 @@ def ingest_contacts(
                     email_result.source,
                     hook,
                     shared_signals,
+                    rank.total,
+                    rank.summary(),
                 ),
             )
             inserted = cursor.rowcount > 0

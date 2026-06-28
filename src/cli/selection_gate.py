@@ -18,10 +18,11 @@ def _get_contacts_for_company(company_id: int) -> list[dict]:
     try:
         rows = conn.execute(
             """
-            SELECT id, full_name, title, persona, focus_area, linkedin_url, hook
+            SELECT id, full_name, title, persona, focus_area, linkedin_url, hook,
+                   rank_score, rank_reasons
             FROM contacts
             WHERE company_id = ?
-            ORDER BY id ASC
+            ORDER BY rank_score DESC, id ASC
             """,
             (company_id,),
         ).fetchall()
@@ -31,12 +32,20 @@ def _get_contacts_for_company(company_id: int) -> list[dict]:
 
 
 def _print_contact_list(contacts: list[dict]) -> None:
+    # Contacts arrive pre-sorted by referral-likelihood rank (#11), best first,
+    # so "5 to the right people" are at the top. The score + reasons make the
+    # ordering explainable.
     for i, c in enumerate(contacts, start=1):
         name = c.get("full_name") or "Unknown"
         title = c.get("title") or "No title"
         url = c.get("linkedin_url") or ""
         hook = c.get("hook") or "GENERIC"
-        print(f"{i}. {name} — {title} (LinkedIn: {url}) [hook: {hook}]")
+        score = c.get("rank_score") or 0
+        reasons = c.get("rank_reasons") or "no referral signals"
+        print(
+            f"{i}. [{score}] {name} — {title} (LinkedIn: {url})\n"
+            f"     why: {reasons} | hook: {hook}"
+        )
 
 
 def _parse_selection(raw: str, max_index: int) -> list[int] | None:

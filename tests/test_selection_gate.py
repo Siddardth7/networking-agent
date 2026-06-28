@@ -83,6 +83,42 @@ class TestParseSelection:
     def test_with_extra_spaces(self):
         assert _parse_selection(" 1 , 2 ", 3) == [1, 2]
 
+
+class TestRankOrdering:
+    """#11: the gate presents contacts highest referral-likelihood first."""
+
+    def _seed_ranked(self, scores: list[int]) -> tuple[int, list[int]]:
+        init_db()
+        with with_writer() as conn:
+            cid = conn.execute(
+                "INSERT INTO companies (slug, name, state) VALUES ('rk', 'Rk', 'FOUND')"
+            ).lastrowid
+            ids = []
+            for i, sc in enumerate(scores):
+                r = conn.execute(
+                    "INSERT INTO contacts (company_id, full_name, rank_score, "
+                    "rank_reasons, linkedin_url, state) VALUES (?, ?, ?, ?, ?, 'NEW')",
+                    (cid, f"C{i}", sc, f"reasons {sc}", f"https://li/{i}"),
+                )
+                ids.append(r.lastrowid)
+        return cid, ids
+
+    def test_highest_rank_presented_first(self, db_path):
+        # Seeded in ascending score order; index 1 must be the score=50 contact.
+        cid, ids = self._seed_ranked([10, 50, 30])
+        selected = run_selection_gate(cid, _input_fn=lambda _: "1")
+        assert selected == [ids[1]]
+
+    def test_full_order_is_rank_desc(self, db_path):
+        cid, ids = self._seed_ranked([10, 50, 30])
+        selected = run_selection_gate(cid, _input_fn=lambda _: "all")
+        assert selected == [ids[1], ids[2], ids[0]]  # 50, 30, 10
+
+    def test_equal_rank_breaks_ties_by_id(self, db_path):
+        cid, ids = self._seed_ranked([20, 20])
+        selected = run_selection_gate(cid, _input_fn=lambda _: "all")
+        assert selected == [ids[0], ids[1]]  # stable by id when scores tie
+
     def test_partial_out_of_range(self):
         assert _parse_selection("1,5", 3) is None
 

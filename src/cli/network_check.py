@@ -22,7 +22,7 @@ from src.providers.hunter import scrubbed_hunter_call
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-LATEST_MIGRATION = 5  # 005_contacts_dedup (#27 / FINDER_AUDIT D5)
+LATEST_MIGRATION = 6  # 006_contact_rank (#11)
 
 # ---------------------------------------------------------------------------
 # Test injection hook — set before calling run_checks()

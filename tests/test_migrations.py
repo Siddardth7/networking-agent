@@ -16,7 +16,7 @@ def _open_conn(db_path: Path) -> sqlite3.Connection:
 
 # Latest applied migration number. Update when adding a new
 # src/core/migrations/NNN_*.sql file.
-LATEST_VERSION = 5  # 005_contacts_dedup (#27 / FINDER_AUDIT D5)
+LATEST_VERSION = 6  # 006_contact_rank (#11)
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +142,22 @@ def test_migration_002_adds_quality_code_column(tmp_path: Path) -> None:
         )
         row = conn.execute("SELECT quality_code FROM drafts").fetchone()
         assert row["quality_code"] == "OK"
+    finally:
+        conn.close()
+
+
+def test_migration_006_adds_rank_columns(tmp_path: Path) -> None:
+    conn = _open_conn(tmp_path / "test.db")
+    try:
+        run_migrations(conn)
+        cols = {c["name"] for c in conn.execute("PRAGMA table_info(contacts)").fetchall()}
+        assert {"rank_score", "rank_reasons"} <= cols
+        # rank_score defaults to 0 so pre-#11 rows sort last, stable by id.
+        conn.execute("INSERT INTO companies (slug, name) VALUES ('x', 'X')")
+        conn.execute("INSERT INTO contacts (company_id, full_name) VALUES (1, 'A')")
+        row = conn.execute("SELECT rank_score, rank_reasons FROM contacts").fetchone()
+        assert row["rank_score"] == 0
+        assert row["rank_reasons"] is None
     finally:
         conn.close()
 
