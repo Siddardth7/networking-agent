@@ -6,6 +6,40 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-06-28
+
+v0.6.5 = referral-likelihood ranking — operationalizes "5 to the right people >
+50 generic" so the contacts most likely to actually help surface first, with the
+ranking proven by a validation scorecard.
+
+### Added
+- **Referral-likelihood ranking model (issue #11, ROADMAP A4).** New
+  `src/agents/ranker.py` scores each captured contact by how likely they are to
+  help, from deterministic signals already on the contact — alumni (confirmed >
+  classified), 1st/2nd-degree connection, recruiter-for-req, posts-about-hiring,
+  recent joiner, team-matches-target-role, plus reachability. Returns a total
+  plus per-signal contributions; **no LLM**, so the score is reproducible and
+  every point is explainable. The Finder/importer score each contact at ingest,
+  log the breakdown, and persist `rank_score` + `rank_reasons` (migration 006);
+  the selection gate now lists contacts highest-likelihood first and shows the
+  score and the reasons.
+- **Ranking validation scorecard (issue #12).** New `src/eval/rank_scorecard.py`
+  (pure, offline, runs keyless in CI) grades the ranker's ordering against a
+  gold-tiered labeled set with pairwise concordance, tier inversions, and top-K
+  precision. Documented result (`docs/RANK_SCORECARD_2026-06-28.md`): **PASS —
+  100% concordance, 100% top-5 precision, 0 inversions**, tiers cleanly separated.
+
+### Fixed
+- **Hook signals trim on a word boundary (issue #32).** An overshooting
+  classifier `hook_signal` was hard-sliced at 80 chars mid-word ("…large
+  assembly stru" — surfaced by the v0.6.0 Finder trial); it now backs up to the
+  last space so the anchor reads as a clean phrase (a single over-long token
+  keeps the hard cut).
+
+### Coverage
+- Coverage gate (`fail_under`) ratcheted 96 → 97; repo at ~97% combined
+  line+branch (committed tree), 870 tests.
+
 ## [0.6.0] - 2026-06-28
 
 v0.6.0 = "develop the Finder like the Drafter" (Sid's stated focus). Finder
