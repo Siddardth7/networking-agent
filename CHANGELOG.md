@@ -6,6 +6,19 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Host-token drafting seam (issue #50, first slice).** Toward running the
+  plugin's LLM work on the *host* Claude's tokens (no separate `ANTHROPIC_API_KEY`
+  topup) when it runs inside Claude Code / desktop / app. Two deterministic
+  helpers in the drafter — `build_draft_context(contact_id, channel)` assembles
+  the full grounding (contact facts, persona template, voice doc, approved facts,
+  fact discipline, channel constraints) with **no LLM call**, and
+  `save_host_draft(...)` runs the same humanize → `hard_check` safety gate on
+  host-produced text before persisting — plus a `model: sonnet`
+  `networking-drafter` subagent that does the writing on host tokens. The
+  existing API path is unchanged (kept as the headless fallback). Seam fully
+  covered; the inversion + command rewiring tracks under #50 (v0.9.0).
+
 ### Changed
 - **Import-layer hardening (issue #24, audit + tech-debt).** Two findings from
   auditing the source-agnostic ingest, both fixed: (1) **cross-source dedup** —

@@ -40,10 +40,12 @@ __all__ = [
     "NextMoveDraft",
     "OpenerRegistry",
     "assign_ask_angles",
+    "build_draft_context",
     "classify_next_move",
     "draft_for_contacts",
     "draft_next_move",
     "normalize_opener",
+    "save_host_draft",
 ]
 
 logger = logging.getLogger(__name__)
@@ -1217,3 +1219,105 @@ def draft_next_move(
                 quality_code = critic_result.quality_code
 
     return NextMoveDraft(contact_id, chosen_move, body, subject, quality_code, critic_trace)
+
+
+# ---------------------------------------------------------------------------
+# Host-token drafting seam (issue #50): run the writing step on the HOST Claude's
+# tokens instead of a separate API key. `build_draft_context` is the
+# deterministic handoff — everything the host model (or a `model: sonnet`
+# drafter subagent) needs to write a draft, with NO LLM call — and
+# `save_host_draft` runs the same deterministic guardrails on the host-produced
+# text before persisting. The host model does the writing; Python keeps the
+# facts, the voice, and the safety gate. Both are pure of the Anthropic client.
+# ---------------------------------------------------------------------------
+
+
+def build_draft_context(
+    contact_id: int,
+    channel: Channel,
+    *,
+    library_path: str | None = None,
+) -> dict | None:
+    """Assemble the structured inputs a host model needs to draft. No LLM call.
+
+    Returns None for an unknown contact. The dict carries the contact facts, the
+    persona template, the voice doc, the matched achievement bullets ("approved
+    facts"), the fact-discipline rules, and the channel constraints — the exact
+    grounding the API path feeds into its prompt, exposed as data so the host
+    model (or the drafter subagent) can do the writing on host tokens.
+    """
+    contact = _load_contact(contact_id)
+    if contact is None:
+        return None
+    try:
+        persona = Persona(contact["persona"])
+    except (ValueError, TypeError):
+        persona = Persona.PEER_ENGINEER
+    try:
+        focus_area = FocusArea(contact["focus_area"])
+    except (ValueError, TypeError):
+        focus_area = FocusArea.PEER
+
+    library = load_resume_library(library_path)
+    bullets = match_achievements(focus_area, contact.get("title") or "", library, top_n=3)
+
+    return {
+        "contact": {
+            "full_name": contact["full_name"],
+            "title": contact.get("title"),
+            "company": contact.get("company_name"),
+            "linkedin_url": contact.get("linkedin_url"),
+            "email": contact.get("email"),
+            "hook": contact.get("hook") or "GENERIC",
+            "persona": persona.value,
+            "focus_area": focus_area.value,
+        },
+        "persona_template": _load_persona_template(persona),
+        "voice_doc": _load_voice_doc(),
+        "approved_facts": [b.text for b in bullets],
+        "fact_discipline": _FACT_DISCIPLINE,
+        "channel": channel.value,
+        "channel_constraints": _CHANNEL_CONSTRAINTS[channel],
+    }
+
+
+def save_host_draft(
+    contact_id: int,
+    channel: Channel,
+    body: str,
+    subject: str | None = None,
+    *,
+    source_facts: str | None = None,
+) -> dict:
+    """Persist a host-model-written draft after the deterministic gate. No LLM call.
+
+    Runs the same humanize → hard_check (placeholder / fabrication / length) as
+    the API path, redacts any leaked placeholder on HARD_FAIL, inserts the draft,
+    and marks the contact DRAFTED. The critic (a judgment step) is intentionally
+    left to the host model / a critic subagent — this keeps the *safety* gate in
+    tested Python. Returns ``{"draft_id", "quality_code", "body", "subject"}``.
+    """
+    cfg = load_config()
+    body = humanize(body)
+    hc = hard_check(
+        body,
+        source_facts=source_facts,
+        channel=channel.value,
+        linkedin_char_limit=cfg.linkedin_char_limit,
+        email_word_limit=cfg.email_word_limit,
+    )
+    quality_code = "OK" if hc.passed else hc.quality_code
+    critic_trace = None
+    if not hc.passed:
+        critic_trace = hard_fail_trace(hc.reason)
+        if find_placeholder(body) is not None:
+            body = redact_placeholders(body)
+
+    with with_writer() as conn:
+        draft_id = _insert_draft(
+            contact_id, channel, body, subject, quality_code != "OK", conn,
+            quality_code=quality_code, critic_trace=critic_trace,
+        )
+        _mark_contact_drafted(contact_id, conn)
+
+    return {"draft_id": draft_id, "quality_code": quality_code, "body": body, "subject": subject}
