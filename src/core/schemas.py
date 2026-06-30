@@ -86,6 +86,20 @@ class Outcome(StrEnum):
     DECLINED = "DECLINED"  # not interested / no
 
 
+class NextMove(StrEnum):
+    """The reply-aware next move (issue #19, A8 — 'they replied, now what?').
+
+    Picked from the reply text + recorded outcome by `drafter.classify_next_move`,
+    then drafted in voice. Ordered by goal-advancing precedence: a concrete intro
+    offer beats answering a sponsorship mention beats scheduling beats asking for
+    a referral; an unread warm reply defaults to proposing a short call."""
+
+    THANK_INTRO = "THANK_INTRO"  # they offered an intro / POC → thank + take it
+    SPONSORSHIP_QUESTION = "SPONSORSHIP_QUESTION"  # they raised visa/sponsorship → ask it
+    SCHEDULE_CALL = "SCHEDULE_CALL"  # warm/open reply → propose a brief chat (default)
+    REFERRAL_ASK = "REFERRAL_ASK"  # they mention hiring/roles → ask for the referral
+
+
 class ProjectType(StrEnum):
     """Origin of a resume project. Provenance for fact-attribution rules.
 

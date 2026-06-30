@@ -6,6 +6,19 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Reply-aware next-move drafting (issue #19, A8).** The hardest moment —
+  "they replied, now what?" — now has a drafter. `/network-nextmove <id>
+  "<their reply>"` classifies the next move from the reply text + recorded
+  outcome (deterministic, goal-advancing precedence: take the intro →
+  `THANK_INTRO`, sponsorship mention → `SPONSORSHIP_QUESTION`, open to talk →
+  `SCHEDULE_CALL`, hiring/roles → `REFERRAL_ASK`; warm reply defaults to a call)
+  and drafts it in voice through the same humanize → `hard_check` → critic gates
+  as a cold message. `--move` / `--channel` override the heuristic; the printed
+  `[QUALITY_CODE]` flags anything not `OK`. Pure `classify_next_move` +
+  `draft_next_move` in the drafter; CLI at 100%, drafter additions fully
+  branch-covered.
+
 ## [0.8.0] - 2026-06-29
 
 v0.8.0 = sequencing + timing — the outreach pipeline now decides *when* to

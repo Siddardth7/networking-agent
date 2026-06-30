@@ -32,14 +32,17 @@ from src.agents.shared import (
 )
 from src.core.config import HAIKU_MODEL, load_config, voice_doc_path
 from src.core.db import get_connection, with_writer
-from src.core.schemas import Channel, FocusArea, Persona
+from src.core.schemas import Channel, FocusArea, NextMove, Outcome, Persona
 
 __all__ = [
     "Draft",
     "DrafterPartialFailure",
+    "NextMoveDraft",
     "OpenerRegistry",
     "assign_ask_angles",
+    "classify_next_move",
     "draft_for_contacts",
+    "draft_next_move",
     "normalize_opener",
 ]
 
@@ -1004,3 +1007,213 @@ def draft_for_contacts(
         raise DrafterPartialFailure(partial_results=results, errors=errors)
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Reply-aware next-move drafting (issue #19, A8 — "they replied, now what?")
+# ---------------------------------------------------------------------------
+#
+# When a contact replies, the hardest moment is the next message: take the
+# offered intro, answer the sponsorship question, propose a chat, or ask for a
+# referral. We classify the move DETERMINISTICALLY from the reply text + the
+# recorded outcome (same deterministic-over-LLM lesson as #5/#6/#18 — the model
+# is great at phrasing, not at being auditable), then draft it through the SAME
+# voice + gate machinery as a cold draft (humanize → hard_check → critic).
+
+# ponytail: keyword cue heuristic, not intent NLU. Checked in goal-advancing
+# precedence order (intro > sponsorship > schedule > referral). The CLI's
+# --move flag overrides it when the human reads the reply differently. Extend
+# the cue lists as real replies show what language people actually use.
+_INTRO_CUES: tuple[str, ...] = (
+    "introduce you", "connect you", "i'll connect", "let me connect",
+    "put you in touch", "happy to refer", "can refer", "i'll refer",
+    "loop you in", "loop in", "you should talk to", "reach out to",
+)
+_SPONSORSHIP_CUES: tuple[str, ...] = (
+    "sponsor", "sponsorship", "visa", "h-1b", "h1b",
+    "work authorization", "work auth", "green card",
+)
+_CALL_CUES: tuple[str, ...] = (
+    "call", "chat", "talk", "speak", "meet", "schedule", "calendar",
+    "zoom", "phone", "hop on", "catch up", "grab time", "coffee",
+)
+_REFERRAL_CUES: tuple[str, ...] = (
+    "refer", "referral", "hiring", "opening", "open role", "position",
+    "apply", "recruiter", "we're looking", "job",
+)
+
+
+def _matches_any(text: str, cues: tuple[str, ...]) -> bool:
+    """True if any cue appears in *text* as a whole word/phrase (boundary-safe).
+
+    Word boundaries stop short cues like "call" firing inside "recall".
+    """
+    return any(re.search(rf"\b{re.escape(cue)}\b", text) for cue in cues)
+
+
+def classify_next_move(reply_text: str, outcome: str | None = None) -> NextMove:
+    """Pick the next move from a reply + recorded outcome. Pure, deterministic.
+
+    Precedence: a concrete intro/POC offer (or recorded ``POC`` outcome) →
+    THANK_INTRO; an explicit sponsorship/visa mention → SPONSORSHIP_QUESTION; an
+    invitation to talk → SCHEDULE_CALL; a hiring/role mention → REFERRAL_ASK; any
+    other warm reply → SCHEDULE_CALL (advance to a conversation).
+    """
+    text = (reply_text or "").lower()
+    if outcome == Outcome.POC.value or _matches_any(text, _INTRO_CUES):
+        return NextMove.THANK_INTRO
+    if _matches_any(text, _SPONSORSHIP_CUES):
+        return NextMove.SPONSORSHIP_QUESTION
+    if _matches_any(text, _CALL_CUES):
+        return NextMove.SCHEDULE_CALL
+    if _matches_any(text, _REFERRAL_CUES):
+        return NextMove.REFERRAL_ASK
+    return NextMove.SCHEDULE_CALL
+
+
+_MOVE_INSTRUCTIONS: dict[NextMove, str] = {
+    NextMove.SCHEDULE_CALL: (
+        "They're open to engaging. Propose a brief (15-minute) call to talk. "
+        "Offer to work around their schedule. Make exactly ONE ask: the call."
+    ),
+    NextMove.SPONSORSHIP_QUESTION: (
+        "They touched on work authorization / sponsorship. Warmly and directly "
+        "ask whether the team or company sponsors work visas for a role like "
+        "this. Ask exactly ONE clear question."
+    ),
+    NextMove.REFERRAL_ASK: (
+        "They're warm and mentioned roles or hiring. Ask — low-friction — "
+        "whether they'd be open to referring you or pointing you to the right "
+        "person on the hiring side. Make exactly ONE specific ask."
+    ),
+    NextMove.THANK_INTRO: (
+        "They offered an introduction or a point of contact. Thank them "
+        "genuinely and confirm the next step (that you'd welcome the intro / who "
+        "you'll reach out to). Warm, gracious, ONE clear close — no new ask "
+        "piled on."
+    ),
+}
+
+
+def _build_next_move_prompt(
+    contact: dict,
+    channel: Channel,
+    move: NextMove,
+    reply_text: str,
+    voice_doc: str,
+) -> str:
+    """Compose the reply-aware next-move prompt. No side effects."""
+    voice_section = f"\n\n## Voice & Style Rules\n{voice_doc}" if voice_doc else ""
+    hook = contact.get("hook") or "GENERIC"
+    return f"""You are drafting the NEXT message in an ongoing outreach \
+conversation. The contact replied to your earlier message; write the single \
+best next move toward building a warm, useful connection.{voice_section}
+
+## Conversation context
+- Contact: {contact["full_name"]}
+- Company: {contact.get("company_name") or "Unknown"}
+- Title: {contact.get("title") or "Unknown"}
+- Why you first reached out: {hook}
+
+## Their reply (verbatim)
+\"\"\"
+{reply_text}
+\"\"\"
+
+## Your next move: {move.value}
+{_MOVE_INSTRUCTIONS[move]}
+
+{_FACT_DISCIPLINE}
+
+## Channel Constraints
+{_CHANNEL_CONSTRAINTS[channel]}
+
+Write ONLY the reply message (and a subject line if it's an email) — no \
+preamble, no explanation, and do not quote these instructions."""
+
+
+@dataclass
+class NextMoveDraft:
+    """A gated reply-aware next move (issue #19)."""
+
+    contact_id: int
+    move: NextMove
+    body: str
+    subject: str | None
+    quality_code: str  # "OK" / "HARD_FAIL" / "CRITIC_HOLD"
+    critic_trace: str | None
+
+
+def draft_next_move(
+    contact_id: int,
+    reply_text: str,
+    *,
+    anthropic_client,
+    channel: Channel | None = None,
+    outcome: str | None = None,
+    move: NextMove | None = None,
+    enable_critic: bool | None = None,
+) -> NextMoveDraft | None:
+    """Draft the gated next move for a contact who replied.
+
+    Returns None if the contact is unknown. *move* forces the next-move type
+    (else it's classified from *reply_text*/*outcome*); *channel* defaults to
+    email when an address is on file, else the post-connection LinkedIn thread.
+    Runs the same humanize → hard_check → critic gates as a cold draft; a
+    HARD_FAIL short-circuits the critic and redacts any leaked placeholder.
+    """
+    contact = _load_contact(contact_id)
+    if contact is None:
+        return None
+
+    if channel is None:
+        channel = Channel.COLD_EMAIL if contact.get("email") else Channel.LINKEDIN_POST_CONNECTION
+    chosen_move = move or classify_next_move(reply_text, outcome)
+
+    cfg = load_config()
+    if enable_critic is None:
+        enable_critic = cfg.enable_critic
+
+    voice_doc = _load_voice_doc()
+    prompt = _build_next_move_prompt(contact, channel, chosen_move, reply_text, voice_doc)
+    text = humanize(_call_claude(prompt, anthropic_client))
+    body, subject = (
+        _parse_email_body_subject(text) if channel == Channel.COLD_EMAIL else (text, None)
+    )
+
+    # The next move makes no new metric claims, so source_facts=None (skips the
+    # numeric-provenance check); placeholder + length gates still apply.
+    hc = hard_check(
+        body,
+        source_facts=None,
+        channel=channel.value,
+        linkedin_char_limit=cfg.linkedin_char_limit,
+        email_word_limit=cfg.email_word_limit,
+    )
+    if not hc.passed:
+        if find_placeholder(body) is not None:
+            body = redact_placeholders(body)
+        return NextMoveDraft(
+            contact_id, chosen_move, body, subject, hc.quality_code, hard_fail_trace(hc.reason)
+        )
+
+    quality_code = "OK"
+    critic_trace: str | None = None
+    if enable_critic:
+        try:
+            critic_result = critique_draft(
+                body=body,
+                contact=contact,
+                channel=channel.value,
+                source_facts=None,
+                anthropic_client=anthropic_client,
+                subject=subject,
+            )
+        except Exception:
+            critic_result = None  # critic is fail-open; hard_check is the safety net
+        if critic_result is not None:
+            critic_trace = critic_result.to_json()
+            if not critic_result.passed:
+                quality_code = critic_result.quality_code
+
+    return NextMoveDraft(contact_id, chosen_move, body, subject, quality_code, critic_trace)
