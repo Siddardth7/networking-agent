@@ -694,8 +694,8 @@ def ingest_contacts(
                 INSERT OR IGNORE INTO contacts
                     (company_id, full_name, title, persona, focus_area,
                      linkedin_url, email, email_verified, source_provider,
-                     hook, shared_signals, rank_score, rank_reasons)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     hook, shared_signals, rank_score, rank_reasons, location)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     company_id,
@@ -711,6 +711,7 @@ def ingest_contacts(
                     shared_signals,
                     rank.total,
                     rank.summary(),
+                    candidate.location,  # #18: persisted for timing intelligence
                 ),
             )
             inserted = cursor.rowcount > 0

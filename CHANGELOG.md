@@ -7,6 +7,15 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Timing intelligence (issue #18, A7).** Recommends a per-contact send window —
+  the next Tue/Wed/Thu at 09:00 in the *recipient's* local timezone (~+8% over a
+  random send). Each contact's location is now persisted (migration 008:
+  `contacts.location`; the finder writes the value the providers already
+  extract), and a stdlib-`zoneinfo` keyword heuristic maps location → IANA zone
+  (city/country names beat 2-letter state codes; unknown → UTC). New
+  `/network-timing` verb lists the recommended send time for every contact.
+  Pure `location_to_timezone` + `recommend_send_time` at 100% line+branch,
+  verified across US and international zones.
 - **Timed multi-touch follow-ups (issue #17, A7).** A sent outreach that draws no
   reply now earns a value-add follow-up scheduled `followup_gap_days` (default 5,
   inside the 4-7 day window) after the last touch, capped at
