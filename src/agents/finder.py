@@ -28,6 +28,8 @@ _LOG = logging.getLogger("networking_agent.finder")
 __all__ = [
     "apply_classification",
     "build_classify_context",
+    "build_discovery_chain",
+    "build_email_providers",
     "find_contacts",
     "ingest_contacts",
     "is_acceptable_hook",
@@ -791,6 +793,55 @@ def ingest_contacts(
     return results
 
 
+def build_discovery_chain(
+    cfg,
+    serper_provider: SerperProvider | None = None,
+    apify_provider: ApifyProvider | None = None,
+) -> tuple[list[SearchProvider], SerperProvider | None]:
+    """Apify (primary) → Serper (fallback) discovery chain from config keys.
+
+    Returns ``(chain, serper_provider)``; the serper reference is handed back
+    separately because find_contacts also uses it for the Tier-4 company-news
+    search. Injected providers (tests) win over key-built ones. Raises
+    ``ValueError`` when no discovery key is configured. Shared by find_contacts
+    and the host-token ``discover`` verb (#50) so both build the chain the same way.
+    """
+    if serper_provider is None and cfg.serper_api_key:
+        serper_provider = SerperProvider(
+            api_key=cfg.serper_api_key,
+            quota_manager=QuotaManager(),
+            cache_ttl_days=cfg.search_cache_ttl_days,
+        )
+    if apify_provider is None and cfg.apify_api_key:
+        apify_provider = ApifyProvider(api_key=cfg.apify_api_key, quota_manager=QuotaManager())
+
+    chain = [p for p in (apify_provider, serper_provider) if p is not None]
+    if not chain:
+        raise ValueError("No discovery provider configured (set APIFY_API_KEY or SERPER_API_KEY)")
+    return chain, serper_provider
+
+
+def build_email_providers(
+    cfg,
+    hunter_provider: HunterProvider | None = None,
+    apollo_provider: ApolloProvider | None = None,
+) -> tuple[HunterProvider | None, ApolloProvider | None]:
+    """Hunter (primary) + Apollo (fallback) email providers, gated on config.
+
+    Mirrors find_contacts: enrichment must be enabled. Raises ``ValueError``
+    when enabled but ``HUNTER_API_KEY`` is missing (existing contract). Both
+    None means email is disabled (contacts saved as ``EMAIL_DISABLED``). Shared
+    by find_contacts and the host-token ``ingest`` verb (#50).
+    """
+    if hunter_provider is None and cfg.enable_email_enrichment:
+        if not cfg.hunter_api_key:
+            raise ValueError("HUNTER_API_KEY not configured")
+        hunter_provider = HunterProvider(api_key=cfg.hunter_api_key, quota_manager=QuotaManager())
+    if apollo_provider is None and cfg.enable_email_enrichment and cfg.apollo_api_key:
+        apollo_provider = ApolloProvider(api_key=cfg.apollo_api_key, quota_manager=QuotaManager())
+    return hunter_provider, apollo_provider
+
+
 def find_contacts(
     company_slug: str,
     limit: int = 5,
@@ -817,30 +868,11 @@ def find_contacts(
     init_db()
     cfg = load_config()
 
-    # Discovery providers: Apify (primary) → Serper (fallback). Build whichever
-    # keys are present; at least one is required. An injected serper_provider
-    # (tests) is honored as-is. Serper also powers the Tier-4 company-news hook.
-    if serper_provider is None and cfg.serper_api_key:
-        serper_provider = SerperProvider(
-            api_key=cfg.serper_api_key,
-            quota_manager=QuotaManager(),
-            cache_ttl_days=cfg.search_cache_ttl_days,
-        )
-    if apify_provider is None and cfg.apify_api_key:
-        apify_provider = ApifyProvider(api_key=cfg.apify_api_key, quota_manager=QuotaManager())
-
-    search_chain = [p for p in (apify_provider, serper_provider) if p is not None]
-    if not search_chain:
-        raise ValueError("No discovery provider configured (set APIFY_API_KEY or SERPER_API_KEY)")
-
-    if hunter_provider is None and cfg.enable_email_enrichment:
-        if not cfg.hunter_api_key:
-            raise ValueError("HUNTER_API_KEY not configured")
-        hunter_provider = HunterProvider(api_key=cfg.hunter_api_key, quota_manager=QuotaManager())
-    # Apollo email fallback: only when enrichment is on and a key exists. Hunter
-    # stays primary; Apollo fills the gaps it misses (input-stack decision).
-    if apollo_provider is None and cfg.enable_email_enrichment and cfg.apollo_api_key:
-        apollo_provider = ApolloProvider(api_key=cfg.apollo_api_key, quota_manager=QuotaManager())
+    # Discovery providers: Apify (primary) → Serper (fallback); at least one
+    # key required. Serper also powers the Tier-4 company-news hook, so it's
+    # handed back. Email providers (Hunter → Apollo) are gated on enrichment.
+    search_chain, serper_provider = build_discovery_chain(cfg, serper_provider, apify_provider)
+    hunter_provider, apollo_provider = build_email_providers(cfg, hunter_provider, apollo_provider)
 
     if anthropic_client is None:
         anthropic_client = get_anthropic_client(cfg.anthropic_api_key)
