@@ -16,7 +16,7 @@ def _open_conn(db_path: Path) -> sqlite3.Connection:
 
 # Latest applied migration number. Update when adding a new
 # src/core/migrations/NNN_*.sql file.
-LATEST_VERSION = 7  # 007_contact_outcome (#15)
+LATEST_VERSION = 8  # 008_contact_location (#18)
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +175,21 @@ def test_migration_007_adds_outcome_columns(tmp_path: Path) -> None:
         assert row["outcome"] == "NONE"
         assert row["outcome_notes"] is None
         assert row["outcome_at"] is None
+    finally:
+        conn.close()
+
+
+def test_migration_008_adds_location_column(tmp_path: Path) -> None:
+    conn = _open_conn(tmp_path / "test.db")
+    try:
+        run_migrations(conn)
+        cols = {c["name"] for c in conn.execute("PRAGMA table_info(contacts)").fetchall()}
+        assert "location" in cols
+        # location defaults to NULL → recommender falls back to UTC (#18).
+        conn.execute("INSERT INTO companies (slug, name) VALUES ('x', 'X')")
+        conn.execute("INSERT INTO contacts (company_id, full_name) VALUES (1, 'A')")
+        row = conn.execute("SELECT location FROM contacts").fetchone()
+        assert row["location"] is None
     finally:
         conn.close()
 
