@@ -41,9 +41,11 @@ __all__ = [
     "OpenerRegistry",
     "assign_ask_angles",
     "build_draft_context",
+    "build_next_move_context",
     "classify_next_move",
     "draft_for_contacts",
     "draft_next_move",
+    "gate_host_text",
     "normalize_opener",
     "save_host_draft",
 ]
@@ -1281,21 +1283,19 @@ def build_draft_context(
     }
 
 
-def save_host_draft(
-    contact_id: int,
-    channel: Channel,
+def gate_host_text(
     body: str,
-    subject: str | None = None,
+    channel: Channel,
     *,
     source_facts: str | None = None,
 ) -> dict:
-    """Persist a host-model-written draft after the deterministic gate. No LLM call.
+    """Run the deterministic safety gate on host-written text. No LLM, no persist.
 
-    Runs the same humanize → hard_check (placeholder / fabrication / length) as
-    the API path, redacts any leaked placeholder on HARD_FAIL, inserts the draft,
-    and marks the contact DRAFTED. The critic (a judgment step) is intentionally
-    left to the host model / a critic subagent — this keeps the *safety* gate in
-    tested Python. Returns ``{"draft_id", "quality_code", "body", "subject"}``.
+    Humanize → hard_check (placeholder / fabrication / length), redacting any
+    leaked placeholder on HARD_FAIL. Returns ``{"quality_code", "body",
+    "critic_trace"}`` where ``critic_trace`` is the hard-fail reason (or None).
+    Shared by ``save_host_draft`` (draft path) and the next-move path so the
+    gate is one source of truth.
     """
     cfg = load_config()
     body = humanize(body)
@@ -1312,12 +1312,70 @@ def save_host_draft(
         critic_trace = hard_fail_trace(hc.reason)
         if find_placeholder(body) is not None:
             body = redact_placeholders(body)
+    return {"quality_code": quality_code, "body": body, "critic_trace": critic_trace}
 
+
+def save_host_draft(
+    contact_id: int,
+    channel: Channel,
+    body: str,
+    subject: str | None = None,
+    *,
+    source_facts: str | None = None,
+) -> dict:
+    """Persist a host-model-written draft after the deterministic gate. No LLM call.
+
+    Runs the shared :func:`gate_host_text` safety gate, inserts the draft, and
+    marks the contact DRAFTED. The critic (a judgment step) is intentionally left
+    to the host model / a critic subagent — this keeps the *safety* gate in
+    tested Python. Returns ``{"draft_id", "quality_code", "body", "subject"}``.
+    """
+    gated = gate_host_text(body, channel, source_facts=source_facts)
+    body, quality_code = gated["body"], gated["quality_code"]
     with with_writer() as conn:
         draft_id = _insert_draft(
             contact_id, channel, body, subject, quality_code != "OK", conn,
-            quality_code=quality_code, critic_trace=critic_trace,
+            quality_code=quality_code, critic_trace=gated["critic_trace"],
         )
         _mark_contact_drafted(contact_id, conn)
 
     return {"draft_id": draft_id, "quality_code": quality_code, "body": body, "subject": subject}
+
+
+def build_next_move_context(
+    contact_id: int,
+    reply_text: str,
+    *,
+    channel: Channel | None = None,
+    outcome: str | None = None,
+    move: NextMove | None = None,
+) -> dict | None:
+    """Assemble the structured inputs a host model needs to draft the next move.
+
+    No LLM call. The move is classified deterministically (``classify_next_move``)
+    unless *move* overrides it; the dict carries the contact facts, the reply, the
+    chosen move + its instruction, the voice doc, fact discipline, and channel
+    constraints — the same grounding the API path's prompt uses. Returns None for
+    an unknown contact. Channel defaults to email when an address is on file.
+    """
+    contact = _load_contact(contact_id)
+    if contact is None:
+        return None
+    if channel is None:
+        channel = Channel.COLD_EMAIL if contact.get("email") else Channel.LINKEDIN_POST_CONNECTION
+    chosen = move or classify_next_move(reply_text, outcome)
+    return {
+        "contact": {
+            "full_name": contact["full_name"],
+            "title": contact.get("title"),
+            "company": contact.get("company_name"),
+            "hook": contact.get("hook") or "GENERIC",
+        },
+        "reply": reply_text,
+        "move": chosen.value,
+        "move_instruction": _MOVE_INSTRUCTIONS[chosen],
+        "voice_doc": _load_voice_doc(),
+        "fact_discipline": _FACT_DISCIPLINE,
+        "channel": channel.value,
+        "channel_constraints": _CHANNEL_CONSTRAINTS[channel],
+    }

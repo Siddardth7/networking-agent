@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Host-token next-move drafting (issue #50).** The reply-aware next move now
+  has a host-token path too: `build_next_move_context` (deterministic — classifies
+  the move, assembles voice + reply + channel constraints, no LLM), a shared
+  `gate_host_text` safety gate (extracted from `save_host_draft` so the
+  humanize→`hard_check` gate is one source of truth), the `networking-nextmove`
+  `model: sonnet` subagent, a `network_nextmove_host` CLI bridge (`context` |
+  `gate`), and the `/network-nextmove-here` command. Writes the reply on host
+  tokens; the gate flags placeholders/fabrication/length. Bridge CLI 100%.
 - **Host-token drafting — usable vertical slice (issue #50).** A JSON-in/out CLI
   bridge (`src/cli/network_draft_host.py`: `context <id> <CHANNEL>` →
   grounding JSON, `save <id> <CHANNEL>` ← body on stdin → gated-draft JSON) plus
