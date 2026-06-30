@@ -7,6 +7,15 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Phase A exit-gate harness (issue #20, P0 — partial).** New
+  `src/eval/exit_gate.py` measures whether the *whole* Phase A loop connects on
+  live data: Gate 1 = the Finder quality bar (the #10 scorecard PASS + contacts
+  ranked); Gate 2 = loop completeness (reach → follow-up → continue → outcome
+  each produced its artifact). Pure `evaluate_exit_gate` aggregator +
+  `ExitGateReport.render_markdown` (100% covered) + a `run_exit_gate_trial` live
+  entrypoint (isolated DB, real APIs — production state untouched). The
+  *documented live run* that finalizes #20's acceptance is pending (blocked on
+  Anthropic API credit at build time); #20 stays open until it lands.
 - **Reply-aware next-move drafting (issue #19, A8).** The hardest moment —
   "they replied, now what?" — now has a drafter. `/network-nextmove <id>
   "<their reply>"` classifies the next move from the reply text + recorded
