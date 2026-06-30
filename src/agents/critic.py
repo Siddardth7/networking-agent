@@ -24,6 +24,8 @@ from src.core.config import SONNET_MODEL
 
 __all__ = [
     "CriticResult",
+    "apply_critique",
+    "build_critique_context",
     "critique_draft",
     "evaluate_scores",
     "hard_fail_trace",
@@ -355,7 +357,22 @@ def critique_draft(
             reason="critic returned no structured output",
         )
 
-    data = tool_block.input or {}
+    return apply_critique(tool_block.input or {}, body, subject)
+
+
+def apply_critique(data: dict, body: str, subject: str | None = None) -> CriticResult:
+    """Deterministic verdict over a raw critic score map. Pure, no LLM.
+
+    Shared by the API path (``critique_draft``, over the tool_use input) and the
+    host-token path (#50, over the ``networking-critic`` subagent's JSON): coerce
+    each dimension to 0–5 (unparseable → 0 = hold), apply the recalibrated hold
+    rule (``evaluate_scores``), and run the deterministic AI-tell backstop over
+    body + subject (any tell forces a hold). Both paths land on the same verdict.
+    *data* is ``{<dimension>: 0..5, …, "issues": [...]}``; a non-dict degrades to
+    all-defaults (a clean pass) rather than raising mid-pipeline.
+    """
+    if not isinstance(data, dict):
+        data = {}
     scores: dict[str, int] = {}
     for dim in RUBRIC_DIMENSIONS:
         raw = data.get(dim, MIN_SCORE)
@@ -404,6 +421,51 @@ def critique_draft(
         issues=issues,
         reason=None,
     )
+
+
+def build_critique_context(
+    body: str,
+    contact: dict,
+    channel: str,
+    source_facts: str | None,
+    subject: str | None = None,
+) -> dict:
+    """Structured grounding for host-model critique of one draft. No LLM.
+
+    The host model (or the ``networking-critic`` subagent) reads this and returns
+    ``{<dimension>: 0..5, …, "issues": [...]}``, which ``apply_critique`` then
+    folds into the canonical ``CriticResult`` — so the host path lands on exactly
+    the same verdict as the API path. This is the data form of
+    ``_build_critique_prompt`` plus the rubric descriptions and the hold rule.
+    """
+    return {
+        "recipient": {
+            "full_name": contact.get("full_name", "Unknown"),
+            "title": contact.get("title") or "Unknown",
+            "persona": contact.get("persona") or "Unknown",
+            "hook": contact.get("hook") or "GENERIC",
+        },
+        "channel": channel,
+        "approved_facts": source_facts or "(no APPROVED FACTS were available to the drafter)",
+        "draft": {"subject": subject, "body": body},
+        "rubric": dict(_DIMENSION_DESCRIPTIONS),
+        "hold_rule": {
+            "min_score": MIN_SCORE,
+            "severe_score": SEVERE_SCORE,
+            "max_weak_dims": MAX_WEAK_DIMS,
+            "summary": (
+                f"Score each dimension 0–5; default 3, a draft must EARN a 4–5. "
+                f"A draft is held when any dimension ≤ {SEVERE_SCORE}, or when more "
+                f"than {MAX_WEAK_DIMS} dimensions fall below {MIN_SCORE}."
+            ),
+        },
+        "instruction": (
+            "Score each rubric dimension 0–5 (strict: the default is 3; a draft "
+            "must EARN a 4 or 5) and list concrete issues (one per problem, naming "
+            "the failing dimension). Return {"
+            + ", ".join(RUBRIC_DIMENSIONS) + ", issues}."
+        ),
+    }
 
 
 def _build_critique_prompt(
