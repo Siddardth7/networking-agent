@@ -7,6 +7,19 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Host-token find — end-to-end discover/ingest wiring (issue #50).** Makes the
+  classify seam end-to-end on host tokens. Added two verbs to `network_classify_host`:
+  `discover <slug> --limit N [--location L]` runs the Finder's Apify→Serper
+  discovery (HTTP, no LLM) and emits each raw candidate paired with its
+  `build_classify_context` grounding; `ingest <slug>` reads the host
+  classifications on stdin, canonicalizes each via `apply_classification`,
+  generates the hook deterministically, enriches emails (Hunter→Apollo), and saves
+  the contacts through `ingest_contacts` with **no Anthropic client** (already
+  LLM-free once persona+focus+hook are pre-set), then advances the company
+  NEW→FOUND. Factored provider-building out of `find_contacts` into shared
+  `build_discovery_chain` / `build_email_providers` so both paths build providers
+  identically. Added the `/network-find-here` command (discover → classify-per-
+  candidate via the `networking-classifier` subagent → ingest). Bridge CLI 100%.
 - **Host-token classification seam (issue #50, two-phase flow — option a).** Moves
   the Finder's persona/focus/hook classify judgment off the Anthropic API onto
   host tokens. Refactored the deterministic post-processing out of

@@ -7,10 +7,20 @@ Host-token classification seam (#50): apply_classification + build_classify_cont
 from __future__ import annotations
 
 import argparse
+import io
 import json
 
+import pytest
+
 from src.agents.finder import apply_classification, build_classify_context
-from src.cli.network_classify_host import run_apply, run_classify_host, run_context
+from src.cli.network_classify_host import (
+    run_apply,
+    run_classify_host,
+    run_context,
+    run_discover,
+    run_ingest,
+)
+from src.core.db import get_connection, init_db
 from src.core.schemas import ContactCandidate, FocusArea, Persona
 
 # --------------------------------------------------------------------------- #
@@ -128,3 +138,162 @@ class TestCLI:
     def test_dispatch_apply(self, capsys):
         run_classify_host(_apply_args())
         assert json.loads(capsys.readouterr().out)["persona"] == "PEER_ENGINEER"
+
+
+# --------------------------------------------------------------------------- #
+# discover verb (HTTP-only candidate emission)
+# --------------------------------------------------------------------------- #
+
+MOD = "src.cli.network_classify_host"
+
+
+class TestDiscover:
+    def test_emits_candidates_with_grounding(self, capsys, monkeypatch):
+        cand = ContactCandidate(
+            full_name="Alice Smith", title="Composites Engineer",
+            snippet="led 787 wing-box stress team", company_slug="acme",
+        )
+        monkeypatch.setattr(f"{MOD}.build_discovery_chain", lambda cfg: ([object()], None))
+        monkeypatch.setattr(f"{MOD}._discover", lambda *a, **k: [cand])
+        rc = run_discover(argparse.Namespace(verb="discover", slug="acme", limit=5, location=None))
+        assert rc == 0
+        out = json.loads(capsys.readouterr().out)
+        assert len(out) == 1
+        assert out[0]["candidate"]["full_name"] == "Alice Smith"
+        assert out[0]["context"]["snippet"] == "led 787 wing-box stress team"
+        assert "persona_options" in out[0]["context"]
+
+    def test_missing_slug(self, capsys):
+        rc = run_discover(argparse.Namespace(verb="discover", slug="  ", limit=5, location=None))
+        assert rc == 1
+        assert "missing slug" in json.loads(capsys.readouterr().out)["error"]
+
+    def test_no_provider_configured(self, capsys, monkeypatch):
+        def _raise(cfg):
+            raise ValueError("No discovery provider configured")
+        monkeypatch.setattr(f"{MOD}.build_discovery_chain", _raise)
+        rc = run_discover(argparse.Namespace(verb="discover", slug="acme", limit=5, location=None))
+        assert rc == 1
+        assert "No discovery provider" in json.loads(capsys.readouterr().out)["error"]
+
+
+# --------------------------------------------------------------------------- #
+# ingest verb (save host-classified candidates, no LLM)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def tmp_db(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.core.db._DB_PATH", tmp_path / "state.db")
+    monkeypatch.setattr("src.providers.quota_manager._DB_PATH", tmp_path / "state.db")
+    init_db()
+    return tmp_path
+
+
+def _payload(**cls):
+    cand = ContactCandidate(
+        full_name="Alice Smith", title="Composites Engineer",
+        snippet="led 787 wing-box stress team", company_slug="ignored-on-read",
+    )
+    base = {"persona": "PEER_ENGINEER", "focus_area": "COMPOSITE_DESIGN",
+            "hook_signal": "led 787 wing-box stress team"}
+    base.update(cls)
+    return [{"candidate": cand.model_dump(mode="json"), "classification": base}]
+
+
+def _stdin(monkeypatch, text):
+    monkeypatch.setattr("sys.stdin", io.StringIO(text))
+
+
+def _ingest(slug="acme"):
+    return argparse.Namespace(verb="ingest", slug=slug)
+
+
+class TestIngest:
+    def test_saves_with_host_classification_no_llm(self, capsys, monkeypatch, tmp_db):
+        # anthropic_client is None inside ingest; if any LLM path fired it would
+        # raise AttributeError. A clean save proves the path is LLM-free.
+        _stdin(monkeypatch, json.dumps(_payload()))
+        rc = run_ingest(_ingest())
+        assert rc == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["ingested"] == 1
+        assert out["contacts"] == ["Alice Smith"]
+
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                "SELECT persona, focus_area, hook FROM contacts WHERE full_name = 'Alice Smith'"
+            ).fetchone()
+            company = conn.execute(
+                "SELECT state FROM companies WHERE slug = 'acme'"
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row["persona"] == "PEER_ENGINEER"
+        assert row["focus_area"] == "COMPOSITE_DESIGN"
+        # Tier-0 hook_signal becomes the hook deterministically (no LLM).
+        assert row["hook"] == "led 787 wing-box stress team"
+        assert company["state"] == "FOUND"
+
+    def test_company_slug_overridden_from_arg(self, capsys, monkeypatch, tmp_db):
+        # The candidate carried "ignored-on-read"; ingest reslugs it to the arg.
+        _stdin(monkeypatch, json.dumps(_payload()))
+        run_ingest(_ingest(slug="boeing"))
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                "SELECT c.slug FROM companies c JOIN contacts k ON k.company_id = c.id "
+                "WHERE k.full_name = 'Alice Smith'"
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row["slug"] == "boeing"
+
+    def test_alumni_focus_override_applied(self, capsys, monkeypatch, tmp_db):
+        _stdin(monkeypatch, json.dumps(_payload(persona="ALUMNI")))
+        run_ingest(_ingest())
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                "SELECT persona, focus_area FROM contacts WHERE full_name = 'Alice Smith'"
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row["persona"] == "ALUMNI"
+        assert row["focus_area"] == "ALUMNI_ACADEMIC"
+
+    def test_missing_slug(self, capsys):
+        assert run_ingest(argparse.Namespace(verb="ingest", slug="")) == 1
+        assert "missing slug" in json.loads(capsys.readouterr().out)["error"]
+
+    def test_bad_json(self, capsys, monkeypatch):
+        _stdin(monkeypatch, "{not json")
+        assert run_ingest(_ingest()) == 1
+        assert "invalid JSON" in json.loads(capsys.readouterr().out)["error"]
+
+    def test_not_a_list(self, capsys, monkeypatch):
+        _stdin(monkeypatch, json.dumps({"candidate": {}}))
+        assert run_ingest(_ingest()) == 1
+        assert "must be a JSON list" in json.loads(capsys.readouterr().out)["error"]
+
+    def test_item_missing_candidate(self, capsys, monkeypatch):
+        _stdin(monkeypatch, json.dumps([{"classification": {}}]))
+        assert run_ingest(_ingest()) == 1
+        assert "'candidate'" in json.loads(capsys.readouterr().out)["error"]
+
+    def test_empty_list_ingests_nothing(self, capsys, monkeypatch, tmp_db):
+        _stdin(monkeypatch, json.dumps([]))
+        assert run_ingest(_ingest()) == 0
+        assert json.loads(capsys.readouterr().out)["ingested"] == 0
+
+    def test_dispatch_discover(self, capsys, monkeypatch):
+        monkeypatch.setattr(f"{MOD}.build_discovery_chain", lambda cfg: ([object()], None))
+        monkeypatch.setattr(f"{MOD}._discover", lambda *a, **k: [])
+        run_classify_host(argparse.Namespace(verb="discover", slug="acme", limit=5, location=None))
+        assert json.loads(capsys.readouterr().out) == []
+
+    def test_dispatch_ingest(self, capsys, monkeypatch, tmp_db):
+        _stdin(monkeypatch, json.dumps(_payload()))
+        run_classify_host(_ingest())
+        assert json.loads(capsys.readouterr().out)["ingested"] == 1

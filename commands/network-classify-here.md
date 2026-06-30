@@ -11,14 +11,16 @@ the `networking-classifier` subagent (`model: sonnet`).
 
 ## The two-phase flow
 
-1. **Discover (deterministic, no LLM)** — get the raw candidates. For now this
-   means an imported leads file (the importer parses any Apollo/Apify/manual file
-   without an LLM), or the existing discovery providers:
+1. **Discover (deterministic, no LLM)** — get the raw candidates. Either an
+   imported leads file (the importer parses any Apollo/Apify/manual file without an
+   LLM), or the wired `discover` verb that runs Apify/Serper and emits each
+   candidate with its grounding (see `/network-find-here` for the full
+   discover→classify→ingest loop):
    ```
    python -m src.cli.network_import <file> --company "<Company>" --validate
+   # or, run discovery directly:
+   python -m src.cli.network_classify_host discover <slug> --limit <N>
    ```
-   *(The fully-wired `discover` verb that runs Apify/Serper and emits candidates
-   for host classification is the next slice under #50.)*
 
 2. **Classify each (host tokens)** — for each candidate, build the grounding and
    delegate the judgment to the `networking-classifier` subagent:
@@ -46,6 +48,6 @@ only the judgment moves to the host model.
 
 ## Status
 
-The classify **seam** (grounding + canonicalize + subagent) is in place. The
-remaining wiring under #50 — a `discover` verb that emits candidates and an
-`ingest` verb that saves host-classified contacts end-to-end — is the next slice.
+The classify **seam** (grounding + canonicalize + subagent) is in place, and the
+`discover`/`ingest` verbs now wire it end-to-end — see `/network-find-here` for
+the full discover → classify-per-candidate → ingest loop on host tokens.

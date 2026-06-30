@@ -6,14 +6,56 @@ HUNTER_EXHAUSTED path, and empty-result handling.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from src.agents.finder import _generate_hook, find_contacts
+from src.agents.finder import (
+    _generate_hook,
+    build_discovery_chain,
+    build_email_providers,
+    find_contacts,
+)
 from src.core.db import get_connection, init_db
 from src.core.schemas import ContactCandidate, EmailResult, FocusArea, Persona
 from src.providers.retry import QuotaExhausted
+
+# ---------------------------------------------------------------------------
+# Provider-building helpers (shared by find_contacts + host-token CLI, #50)
+# ---------------------------------------------------------------------------
+
+
+def _cfg(**kw):
+    base = {
+        "serper_api_key": None, "apify_api_key": None, "search_cache_ttl_days": 7,
+        "enable_email_enrichment": False, "hunter_api_key": None, "apollo_api_key": None,
+    }
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+class TestProviderHelpers:
+    def test_discovery_chain_passes_injected_providers(self):
+        serper = Mock()
+        chain, returned = build_discovery_chain(_cfg(), serper_provider=serper)
+        assert chain == [serper]
+        assert returned is serper
+
+    def test_discovery_chain_raises_without_keys(self):
+        with pytest.raises(ValueError, match="No discovery provider"):
+            build_discovery_chain(_cfg())
+
+    def test_email_providers_disabled_returns_none(self):
+        assert build_email_providers(_cfg()) == (None, None)
+
+    def test_email_providers_enabled_without_hunter_key_raises(self):
+        with pytest.raises(ValueError, match="HUNTER_API_KEY"):
+            build_email_providers(_cfg(enable_email_enrichment=True))
+
+    def test_email_providers_keep_injected(self):
+        hunter, apollo = Mock(), Mock()
+        assert build_email_providers(_cfg(), hunter, apollo) == (hunter, apollo)
 
 # ---------------------------------------------------------------------------
 # Helpers
