@@ -7,6 +7,17 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Host-token classification seam (issue #50, two-phase flow — option a).** Moves
+  the Finder's persona/focus/hook classify judgment off the Anthropic API onto
+  host tokens. Refactored the deterministic post-processing out of
+  `_classify_contact` into a shared, pure `apply_classification(raw_persona,
+  raw_focus, raw_hook_signal)` (enum coercion + the #5 non-engineer focus override
+  + hook trim — same labels for both the API and host paths); added
+  `build_classify_context(candidate, company_slug)` (grounding, no LLM), a
+  `networking-classifier` `model: sonnet` subagent, a `network_classify_host` CLI
+  bridge (`context` | `apply`), and the `/network-classify-here` command. Seam
+  fully covered (bridge 100%); the `discover`/`ingest` auto-wiring that makes it
+  end-to-end is the next slice under #50.
 - **Host-token next-move drafting (issue #50).** The reply-aware next move now
   has a host-token path too: `build_next_move_context` (deterministic — classifies
   the move, assembles voice + reply + channel constraints, no LLM), a shared
