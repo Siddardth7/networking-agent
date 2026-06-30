@@ -14,6 +14,7 @@ from src.agents.ranker import rank_contact
 from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import ContactCandidate, EmailResult, FocusArea, Persona
+from src.core.slug import canonical_linkedin_url
 from src.providers.apify import ApifyProvider
 from src.providers.apollo import ApolloProvider
 from src.providers.base import SearchProvider
@@ -425,8 +426,14 @@ def _get_or_create_company(company_slug: str) -> int:
 
 
 def _dedup_key(candidate: ContactCandidate) -> str:
-    """Stable identity for cross-provider dedup: LinkedIn URL, else name."""
-    return (candidate.linkedin_url or candidate.full_name or "").strip().lower()
+    """Stable identity for cross-provider dedup: canonical LinkedIn URL, else name.
+
+    Shares ``canonical_linkedin_url`` with the importer (#24) so the same person
+    arriving from two providers collapses regardless of scheme/www/query.
+    """
+    return canonical_linkedin_url(candidate.linkedin_url) or (
+        candidate.full_name or ""
+    ).strip().lower()
 
 
 def _discover(

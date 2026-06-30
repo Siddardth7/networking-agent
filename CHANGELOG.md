@@ -6,6 +6,21 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed
+- **Import-layer hardening (issue #24, audit + tech-debt).** Two findings from
+  auditing the source-agnostic ingest, both fixed: (1) **cross-source dedup** —
+  the importer and the Finder each normalized LinkedIn URLs differently and
+  neither stripped scheme/`www.`/query, so the *same* person from two sources
+  (`https://www.linkedin.com/in/jane/` vs `http://linkedin.com/in/jane?utm=x`)
+  slipped through as two contacts; both now share one `canonical_linkedin_url`
+  (in `src.core.slug`, the same "one canonical X" home as the D8 slug fix). (2)
+  **malformed JSON** — `_read_rows` now wraps a `JSONDecodeError` in a clean
+  `ContactImportError` so the import path fails the way the validator already
+  reports, instead of leaking a raw decode error. `importer.py` 93% → **100%**
+  line+branch (alias-map null/blank values, bare-object and scalar JSON,
+  existing-company reuse, client build, draft-on-import all now covered);
+  acceptance "import layer at 95% branch incl. malformed-input paths" met.
+
 ### Added
 - **Phase A exit-gate harness (issue #20, P0 — partial).** New
   `src/eval/exit_gate.py` measures whether the *whole* Phase A loop connects on

@@ -18,7 +18,7 @@ from src.agents.finder import ingest_contacts
 from src.core.config import get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import ContactCandidate, FocusArea, Persona
-from src.core.slug import slugify
+from src.core.slug import canonical_linkedin_url, slugify
 
 __all__ = [
     "ContactImportError",
@@ -207,7 +207,13 @@ def _read_rows(path: Path, source: str) -> tuple[list[dict], dict]:
         with path.open(newline="", encoding="utf-8-sig") as fh:
             return list(csv.DictReader(fh)), {}
     if source in ("serper", "apify", "chrome") or (source == "auto" and suffix == ".json"):
-        data = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            # Surface malformed JSON as a clean ContactImportError so the import
+            # path fails the same way the validator already reports it, instead
+            # of leaking a raw JSONDecodeError to callers.
+            raise ContactImportError(f"Malformed JSON in {path.name}: {exc}") from exc
         if isinstance(data, list):
             return [r for r in data if isinstance(r, dict)], {}
         if isinstance(data, dict):
@@ -268,7 +274,7 @@ def parse_contacts_file_with_report(
             continue
         company_slug = slugify(company)
 
-        url = (canon.get("linkedin_url") or "").rstrip("/").lower()
+        url = canonical_linkedin_url(canon.get("linkedin_url"))
         dedup_key = url or f"{full_name.lower()}|{company_slug}"
         if dedup_key in seen:
             dropped["duplicate"] += 1
@@ -341,7 +347,9 @@ def validate_contacts_file(
     warnings: list[str] = []
     try:
         raw_rows, meta = _read_rows(path, source)
-    except (ContactImportError, json.JSONDecodeError, OSError) as exc:
+    except (ContactImportError, OSError) as exc:
+        # _read_rows now wraps malformed JSON in ContactImportError, so a raw
+        # JSONDecodeError no longer escapes it — only ContactImportError / OSError.
         return {"ok": False, "count": 0, "errors": [f"parse failed: {exc}"], "warnings": []}
 
     meta_company = meta.get("company") or meta.get("company_slug") or default_company
