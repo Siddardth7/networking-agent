@@ -26,6 +26,8 @@ from src.providers.serper import SerperProvider
 _LOG = logging.getLogger("networking_agent.finder")
 
 __all__ = [
+    "apply_classification",
+    "build_classify_context",
     "find_contacts",
     "ingest_contacts",
     "is_acceptable_hook",
@@ -177,29 +179,87 @@ def _classify_contact(
     # instead of raising AttributeError mid-pipeline (AUDIT-A20).
     if not isinstance(data, dict):
         return Persona.PEER_ENGINEER, FocusArea.PEER, None
+    return apply_classification(
+        data.get("persona"), data.get("focus_area"), data.get("hook_signal")
+    )
+
+
+# Persona / focus enum semantics for the host-token `build_classify_context`
+# (#50) — a compact echo of the API classify tool schema's descriptions above.
+# (Kept separate, not refactored into the tool schema, because that schema's
+# exact prompt wording is accuracy-validated at persona 100% / focus 100% (#5)
+# and not worth perturbing; if either drifts, reconcile them here.)
+_PERSONA_OPTIONS: dict[str, str] = {
+    "RECRUITER": "HR / recruiting",
+    "SENIOR_MANAGER": "Director/VP/Manager — AND Senior/Staff/Principal ICs (senior tone)",
+    "PEER_ENGINEER": "junior / mid-level Engineer / Analyst IC",
+    "ALUMNI": "Student / PhD / Research / University",
+}
+_FOCUS_OPTIONS: dict[str, str] = {
+    "COMPOSITE_DESIGN": "composites / carbon fiber",
+    "STRUCTURAL_ANALYSIS": "stress / loads / FEA / airframe",
+    "MANUFACTURING": "production / quality / MRB / supplier",
+    "MATERIALS": "metallurgy / alloys",
+    "ADDITIVE": "3D printing",
+    "PEER": "generalist engineer, NO clear specialty — use this, do NOT guess one",
+    "ALUMNI_ACADEMIC": "academic / PhD / research / student",
+}
+
+
+def apply_classification(
+    raw_persona: str | None,
+    raw_focus: str | None,
+    raw_hook_signal: str | None,
+) -> tuple[Persona, FocusArea, str | None]:
+    """Deterministic post-processing of a raw classification. Pure, no LLM.
+
+    Shared by the API tool-call path (`_classify_contact`) and the host-token
+    path (#50): enum-coerce with safe defaults, enforce the non-engineer focus
+    convention (ALUMNI→ALUMNI_ACADEMIC, RECRUITER→PEER; issue #5 / FINDER_AUDIT
+    D3 — done in code because the model ignored the prompt rule on strong topic
+    signals), and trim the hook signal to the ceiling (dropping an empty one).
+    """
     try:
-        persona = Persona(data.get("persona", "PEER_ENGINEER"))
+        persona = Persona(raw_persona or "PEER_ENGINEER")
     except ValueError:
         persona = Persona.PEER_ENGINEER
     try:
-        focus_area = FocusArea(data.get("focus_area", "PEER"))
+        focus_area = FocusArea(raw_focus or "PEER")
     except ValueError:
         focus_area = FocusArea.PEER
 
-    # focus_area is only meaningful for engineers. For the two non-engineer
-    # personas the convention is deterministic, so enforce it in code rather than
-    # the prompt — the model ignored the prompt rule when the topic signal was
-    # strong (e.g. a composites grad student). Issue #5 / FINDER_AUDIT D3.
     if persona is Persona.ALUMNI:
         focus_area = FocusArea.ALUMNI_ACADEMIC
     elif persona is Persona.RECRUITER:
         focus_area = FocusArea.PEER
 
-    raw_signal = (data.get("hook_signal") or "").strip()
-    # Word-boundary trim at the ceiling; drop the empty-signal sentinel.
+    raw_signal = (raw_hook_signal or "").strip()
     hook_signal = _trim_hook_signal(raw_signal) if raw_signal else None
-
     return persona, focus_area, hook_signal
+
+
+def build_classify_context(candidate: ContactCandidate, company_slug: str) -> dict:
+    """Structured grounding for host-model classification of one candidate. No LLM.
+
+    The host model (or the `networking-classifier` subagent) returns
+    ``{persona, focus_area, hook_signal}``, which `apply_classification` then
+    canonicalizes — so the host path lands on exactly the same labels as the API
+    path.
+    """
+    return {
+        "full_name": candidate.full_name,
+        "title": candidate.title or "Unknown",
+        "company": company_slug,
+        "snippet": candidate.snippet or "",
+        "persona_options": _PERSONA_OPTIONS,
+        "focus_options": _FOCUS_OPTIONS,
+        "instruction": (
+            "Classify persona + focus_area from the title and snippet, then "
+            "extract ONE specific hook_signal (≤ 80 chars) from the snippet — a "
+            "concrete detail like 'led 787 wing-box stress team' — or empty if "
+            "none. Return {persona, focus_area, hook_signal}."
+        ),
+    }
 
 
 # Verbatim-news detection (AUDIT-A4). The June-6 run pasted raw Serper
