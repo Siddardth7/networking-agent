@@ -6,6 +6,13 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-29
+
+v0.8.0 = sequencing + timing — the outreach pipeline now decides *when* to
+follow up and *when* to send. Timed, capped follow-ups keep no-reply contacts
+warm without spamming; timezone-aware send windows put each message in the
+recipient's Tue-Thu morning.
+
 ### Added
 - **Timing intelligence (issue #18, A7).** Recommends a per-contact send window —
   the next Tue/Wed/Thu at 09:00 in the *recipient's* local timezone (~+8% over a
