@@ -7,6 +7,20 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Host-token default-flow orchestration — `/network-run` (issue #50).** Makes
+  the host-token path the **default** for the full pipeline; the Anthropic-API
+  orchestrator (`run_pipeline`) becomes the explicit `--api` headless fallback.
+  Added `network_run_host` — a deterministic, read-only run **planner** (`plan
+  <slug>` → `{company, state, next, items}` mapping the company's pipeline state to
+  the next host action `discover | select | draft | approve | done` and the work
+  items it operates on; mirrors the `run_pipeline` state machine but advises the
+  host loop instead of executing it) plus a `select <slug> --ids 1,3,5` verb that
+  persists the selection (the one state write the host's select step needs, since
+  the interactive selection gate has no CLI entrypoint). Rewrote `/network-run` to
+  drive the loop on host tokens — `plan` → `/network-find-here` → `select` →
+  per-contact×channel `/network-draft-here` + inline `/network-critic-here` →
+  `/network-approve` — fully resumable from any state. Planner CLI 100%. The whole
+  LLM surface now runs on host tokens by default; no `ANTHROPIC_API_KEY` topup.
 - **Host-token critic (issue #50).** Moves the Layer-4 critic *judgment* (the
   six-dimension rubric scoring, previously a Sonnet `tool_use` call inside
   `critique_draft`) onto host tokens. Refactored the post-LLM decision out of
