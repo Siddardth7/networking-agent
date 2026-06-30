@@ -1,62 +1,65 @@
 ---
-description: Run the full networking pipeline for a company (Finder → Drafter → Marketer). Resumes automatically from current state if partially complete.
+description: Run the full networking pipeline for a company end-to-end on the HOST Claude's tokens (no API key) — discover → classify → ingest → select → draft → critic → approve → artifact. Resumes from current state. Use --api for the headless Anthropic-API fallback.
 ---
 
 # /network-run
 
-Run the end-to-end outreach pipeline for a target company. The pipeline discovers
-contacts, lets you select which to message, drafts personalized outreach in three
-channels, walks you through an approval loop, and writes a final Markdown artifact.
+Run the end-to-end outreach pipeline for a target company. **By default this runs
+on host tokens** (issue #50): the deterministic Python bridges do discovery, gating,
+and persistence; **you** (the host model) do the writing/judgment via the `model:
+sonnet` subagents. No `ANTHROPIC_API_KEY` topup needed. Pass `--api` to fall back to
+the headless Python orchestrator (`run_pipeline`) that calls the Anthropic API —
+for CI / unattended runs.
 
 ## Usage
 
 ```
-/network-run <company-slug>
+/network-run <company-slug>          # host-token orchestration (default)
+/network-run <company-slug> --api    # headless Anthropic-API fallback
 ```
 
-| Argument | Description |
+## Host-token orchestration (default)
+
+The planner is the driver. After **every** step, re-run it to get the next action:
+
+```
+python -m src.cli.network_run_host plan <slug>
+```
+
+→ `{company, state, next, items}`. Dispatch on `next`:
+
+| `next` | What you do |
 |---|---|
-| `company-slug` | URL-friendly company identifier (e.g. `spacex`, `blue-origin`) |
+| `discover` | Preflight `/network-check`, then run `/network-find-here <slug>` (discover → classify each candidate via the `networking-classifier` subagent → ingest). Advances the company to `FOUND`. |
+| `select` | `items` is the rank-ordered contacts. Present them; ask which to draft for. Persist the choice: `network_run_host select <slug> --ids 1,3,5`. Advances to `SELECTED`. |
+| `draft` | `items` is the SELECTED contacts. For each, for each channel (`LINKEDIN_CONNECTION`, `LINKEDIN_POST_CONNECTION`, `COLD_EMAIL`): run `/network-draft-here` (context → `networking-drafter` subagent → save) to get a `draft_id`, then **immediately** `/network-critic-here` on that `draft_id` (context → `networking-critic` subagent → apply). Critiquing inline avoids re-enumerating drafts. |
+| `approve` | Run `/network-approve <slug>` — the interactive marketer loop (`APPROVE` / `SKIP` / `REVISE`), which writes the `.md` artifact on full approval. |
+| `done` | Nothing to do; outreach_log entries are pending manual send. |
 
-## What It Does
+The loop is fully **resumable**: the planner reads persisted state, so a run
+interrupted at any step picks up exactly where it left off — same state machine as
+the API path, just host-driven.
 
-### Full Run (new company)
+### Resume map
 
-1. **Preflight** — runs `/network-check` and halts on any ✗ error
-2. **Finder** — discovers contacts via Serper + Hunter, classifies persona + focus area, generates hooks
-3. **Selection gate** — numbered list; choose contacts to draft for (`1,3`, `all`, `none`)
-4. **Drafter** — parallel fan-out generates 3 channels per contact (LinkedIn connection, post-connection, cold email)
-5. **Marketer** — interactive approval loop; `APPROVE`, `SKIP`, or `REVISE "<feedback>"`
-6. **Artifact** — writes `~/.networking-agent/drafts/<slug>/YYYY-MM-DD-run.md`
-
-### Resume (partially complete company)
-
-The pipeline resumes from wherever it was interrupted:
-
-| Stored State | Resumes At |
+| Stored company state | `next` |
 |---|---|
-| `FOUND` | Selection gate |
-| `SELECTED` | Drafter (only contacts not yet drafted) |
-| `DRAFTED` | Marketer approval loop |
-| `APPROVED` | Prints "Nothing to do; outreach_log entries pending send." |
+| `NEW` (or unknown slug) | `discover` |
+| `FOUND` | `select` |
+| `SELECTED` | `draft` |
+| `DRAFTED` | `approve` |
+| `APPROVED` | `done` |
 
-## Examples
+## Headless fallback (`--api`)
 
-```
-/network-run spacex
-/network-run blue-origin
-/network-run northrop-grumman
-```
+`/network-run <slug> --api` calls `run_pipeline(company_slug)` in
+`src/orchestrator.py` — the original single-entrypoint orchestrator that runs the
+Finder/Drafter/Critic/Marketer on the Anthropic API (Haiku/Sonnet). Use it for
+unattended/CI runs where no host model is driving. It costs ~$0.10–0.30 per run at
+Claude rates (see `docs/COSTS.md`); the default host path costs no API credit.
 
-## Implementation
+## Notes
 
-Calls `run_pipeline(company_slug)` in `src/orchestrator.py`.
-
-State is persisted in `~/.networking-agent/state.db`. Run `/network-status`
-to inspect current pipeline state for any company.
-
-## Costs
-
-Each full run costs approximately $0.10–0.30 at Claude Haiku rates (depends on
-number of contacts selected and revision rounds). See `docs/COSTS.md` for a
-detailed breakdown.
+- State lives in `~/.networking-agent/state.db`; run `/network-status` to inspect.
+- The agent never touches LinkedIn — discovery is off-platform and the human sends.
+- Both paths converge on the same DB rows and the same Markdown artifact.
