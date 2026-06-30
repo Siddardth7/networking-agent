@@ -7,6 +7,13 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Host-token drafting — usable vertical slice (issue #50).** A JSON-in/out CLI
+  bridge (`src/cli/network_draft_host.py`: `context <id> <CHANNEL>` →
+  grounding JSON, `save <id> <CHANNEL>` ← body on stdin → gated-draft JSON) plus
+  the `/network-draft-here` command let the host model drive drafting on its own
+  tokens: get grounding → write via the `networking-drafter` sonnet subagent →
+  deterministic gate persists it. No `ANTHROPIC_API_KEY` needed for this path.
+  Bridge CLI 100% line+branch.
 - **Host-token drafting seam (issue #50, first slice).** Toward running the
   plugin's LLM work on the *host* Claude's tokens (no separate `ANTHROPIC_API_KEY`
   topup) when it runs inside Claude Code / desktop / app. Two deterministic
