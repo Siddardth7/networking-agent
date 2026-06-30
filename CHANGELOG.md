@@ -7,6 +7,22 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Host-token critic (issue #50).** Moves the Layer-4 critic *judgment* (the
+  six-dimension rubric scoring, previously a Sonnet `tool_use` call inside
+  `critique_draft`) onto host tokens. Refactored the post-LLM decision out of
+  `critique_draft` into a shared pure `apply_critique(data, body, subject)` (score
+  coercion + the recalibrated `evaluate_scores` hold rule + the deterministic
+  AI-tell backstop — same verdict for the API and host paths); added
+  `build_critique_context(body, contact, channel, source_facts, subject)`
+  (grounding: recipient, channel, approved facts, the draft, the rubric, and the
+  hold rule — no LLM), a `networking-critic` `model: sonnet` subagent, a
+  `network_critic_host` CLI bridge (`context <draft_id>` | `apply <draft_id>`,
+  scores on stdin), and the `/network-critic-here` command. `apply` persists the
+  trace and downgrades a saved draft OK/SOFT_FLAG → `CRITIC_HOLD` when held (never
+  touching a HARD_FAIL), matching the inline drafter precedence. The grounding
+  reconstructs the approved facts the drafter saw via `build_draft_context` (no
+  duplicate fact assembly). `critic.py` 100%, bridge CLI 100%. API path unchanged
+  as the headless fallback.
 - **Host-token find — end-to-end discover/ingest wiring (issue #50).** Makes the
   classify seam end-to-end on host tokens. Added two verbs to `network_classify_host`:
   `discover <slug> --limit N [--location L]` runs the Finder's Apify→Serper
