@@ -16,6 +16,8 @@ pipeline:
   finder_limit: 5             # contacts discovered per company
   enable_email_enrichment: false  # Hunter is OPT-IN (free tier = 25 lookups/mo);
                                   # LinkedIn channels work without it
+  followup_max_touches: 2     # #17: max value-add follow-ups per no-reply outreach
+  followup_gap_days: 5        # #17: days after last touch to schedule a follow-up (4-7 window)
 
 quality:
   linkedin_char_limit: 280    # safe cutoff under LinkedIn's 300-char note cap

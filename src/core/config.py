@@ -177,6 +177,14 @@ class Config:
     # picking the single most useful angle per contact independently.
     enable_ask_rotation: bool = True
 
+    # Issue #17 (A7 — timed multi-touch follow-ups): a no-reply outreach earns a
+    # value-add follow-up scheduled `followup_gap_days` after the last touch,
+    # capped at `followup_max_touches` follow-ups so the cadence stays
+    # non-spammy. Research: 2-3 touches lift reply rate 20-30%+ over a single
+    # send; the gap default sits inside the 4-7 day sweet spot.
+    followup_max_touches: int = 2
+    followup_gap_days: int = 5
+
 
 def _check_permissions(path: Path) -> None:
     """Raise ConfigSecurityError if path mode is not 0o600."""
@@ -343,6 +351,8 @@ def load_config() -> Config:
     enable_critic = bool(yaml_quality.get("enable_critic", True))
     opener_max_repeats = int(yaml_quality.get("opener_max_repeats", 2))
     enable_ask_rotation = bool(yaml_quality.get("enable_ask_rotation", True))
+    followup_max_touches = int(yaml_pipeline.get("followup_max_touches", 2))
+    followup_gap_days = int(yaml_pipeline.get("followup_gap_days", 5))
 
     return Config(
         anthropic_api_key=anthropic_api_key,
@@ -364,6 +374,8 @@ def load_config() -> Config:
         enable_critic=enable_critic,
         opener_max_repeats=opener_max_repeats,
         enable_ask_rotation=enable_ask_rotation,
+        followup_max_touches=followup_max_touches,
+        followup_gap_days=followup_gap_days,
     )
 
 
