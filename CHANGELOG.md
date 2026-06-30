@@ -6,6 +6,18 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Timed multi-touch follow-ups (issue #17, A7).** A sent outreach that draws no
+  reply now earns a value-add follow-up scheduled `followup_gap_days` (default 5,
+  inside the 4-7 day window) after the last touch, capped at
+  `followup_max_touches` (default 2) so the cadence stays non-spammy — research
+  puts 2-3 touches at a 20-30%+ reply-rate lift over a single send. Scheduling is
+  gated by the marketer artifact (company `APPROVED`), enforces the cap at
+  schedule time (never past it), and never double-books an already-pending
+  follow-up. New `/network-followups` verb schedules every due follow-up into the
+  `followups` table; `--list` shows pending and sent touches. Backed by a pure
+  `plan_followups` planner (100% line+branch covered).
+
 ## [0.7.5] - 2026-06-28
 
 v0.7.5 = outcome tracking — record and report what actually happens to sent
