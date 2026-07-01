@@ -77,6 +77,24 @@ class TestBuildRunPlan:
         assert plan["next"] == "draft"
         assert [c["full_name"] for c in plan["items"]] == ["Picked"]
 
+    def test_selected_but_all_drafted_plans_approve(self):
+        # No company SELECTED→DRAFTED transition exists; once every selected
+        # contact has been drafted (contact state DRAFTED, none left SELECTED),
+        # the planner must advance to approve instead of stalling on draft/[].
+        cid = _company("acme", "SELECTED")
+        _contact(cid, "Done", state="DRAFTED")
+        plan = build_run_plan("acme")
+        assert plan["next"] == "approve"
+        assert plan["items"] == []
+
+    def test_selected_partial_draft_still_drafts_remainder(self):
+        cid = _company("acme", "SELECTED")
+        _contact(cid, "Drafted", state="DRAFTED")
+        _contact(cid, "Pending", state="SELECTED")
+        plan = build_run_plan("acme")
+        assert plan["next"] == "draft"
+        assert [c["full_name"] for c in plan["items"]] == ["Pending"]
+
     def test_drafted_plans_approve(self):
         _company("acme", "DRAFTED")
         plan = build_run_plan("acme")

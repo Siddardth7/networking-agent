@@ -125,8 +125,21 @@ Versioning: [Semantic Versioning](https://semver.org/)
   existing-company reuse, client build, draft-on-import all now covered);
   acceptance "import layer at 95% branch incl. malformed-input paths" met.
 
+### Fixed
+- **Host-token run loop stalled at draft→approve (issue #50, found in
+  validation).** The `network_run_host plan` state machine keyed the `draft` step
+  solely off the company being `SELECTED`, but nothing advances a company
+  `SELECTED → DRAFTED` (`save_host_draft` marks the *contact* DRAFTED, not the
+  company — and no code path ever wrote the company `DRAFTED` state, a latent dead
+  branch even on the API side). So once every selected contact was drafted, `plan`
+  returned `next=draft, items=[]` forever and the host `/network-run` loop could
+  never reach approval. The planner now derives `approve` when no `SELECTED`
+  contacts remain to draft (read-only, and it still plans `draft` for the
+  remainder during partial progress). Surfaced by the in-Claude end-to-end
+  validation of the host-token pipeline.
+
 ### Coverage
-- Repo at **98.85%** line+branch (gate `fail_under=98`); **1135 tests** green,
+- Repo at **98.85%** line+branch (gate `fail_under=98`); **1137 tests** green,
   ruff clean. The whole host-token surface — find→classify→ingest, drafting,
   next-move, critic, and the default `/network-run` orchestration — plus the
   folded-in #24/#20/#19 work all land at ≥98% per the Definition of Done (#1).
