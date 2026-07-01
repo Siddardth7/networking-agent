@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.core.schemas import (
+    Application,
     Channel,
     ContactCandidate,
     DraftDispatchRequest,
@@ -26,6 +27,7 @@ def test_star_import_succeeds():
         "PipelineState",
         "ContactState",
         "ContactCandidate",
+        "Application",
         "EmailResult",
         "RetryDecision",
         "DraftDispatchRequest",
@@ -68,3 +70,48 @@ def test_invalid_enum_rejected():
         ContactCandidate.model_validate(
             {"full_name": "X", "company_slug": "y", "persona": "INVALID"}
         )
+
+
+# ---------------------------------------------------------------------------
+# Application (Phase B, #58)
+# ---------------------------------------------------------------------------
+
+
+def test_application_minimal_derives_slug():
+    """Required fields only → company_slug derived from company via slugify."""
+    app = Application(job_id="ja-1", company="Joby Aviation, Inc.", role_title="Quality Engineer")
+    assert app.company_slug == "joby-aviation-inc"
+    assert app.function is None
+    assert app.target_keywords == []
+    assert app.contacts == []
+
+
+def test_application_explicit_slug_preserved():
+    """An explicit company_slug is honored (not overwritten by the deriver)."""
+    app = Application(
+        job_id="ja-2", company="Joby Aviation", company_slug="joby", role_title="QE"
+    )
+    assert app.company_slug == "joby"
+
+
+def test_application_blank_slug_is_derived():
+    """A blank/whitespace company_slug is trimmed to '' then derived."""
+    app = Application(job_id="ja-3", company="Acme Corp", company_slug="   ", role_title="QE")
+    assert app.company_slug == "acme-corp"
+
+
+def test_application_reuses_contact_candidate_verbatim():
+    """Pre-captured leads coerce to canonical ContactCandidate records."""
+    app = Application(
+        job_id="ja-4",
+        company="Acme",
+        role_title="QE",
+        contacts=[{"full_name": "Jane Doe", "company_slug": "acme", "persona": "RECRUITER"}],
+    )
+    assert isinstance(app.contacts[0], ContactCandidate)
+    assert app.contacts[0].persona == Persona.RECRUITER
+
+
+def test_application_missing_required_field_rejected():
+    with pytest.raises(ValidationError):
+        Application(company="Acme", role_title="QE")  # no job_id
