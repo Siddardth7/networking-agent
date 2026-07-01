@@ -16,7 +16,7 @@ def _open_conn(db_path: Path) -> sqlite3.Connection:
 
 # Latest applied migration number. Update when adding a new
 # src/core/migrations/NNN_*.sql file.
-LATEST_VERSION = 8  # 008_contact_location (#18)
+LATEST_VERSION = 9  # 009_applications (#58)
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,8 @@ def test_migration_creates_expected_tables(tmp_path: Path) -> None:
             "outreach_log",
             "quota",
             "followups",
+            "applications",
+            "application_contacts",
         }
         assert expected.issubset(names), f"Missing tables: {expected - names}"
     finally:
@@ -63,6 +65,8 @@ def test_migration_creates_expected_indexes(tmp_path: Path) -> None:
             "idx_contacts_company",
             "idx_drafts_contact",
             "idx_contacts_company_linkedin",
+            "idx_applications_company",
+            "idx_appcontacts_contact",
         }
         assert expected_indexes.issubset(indexes), (
             f"Missing indexes: {expected_indexes - indexes}.  Found: {indexes}"
@@ -190,6 +194,43 @@ def test_migration_008_adds_location_column(tmp_path: Path) -> None:
         conn.execute("INSERT INTO contacts (company_id, full_name) VALUES (1, 'A')")
         row = conn.execute("SELECT location FROM contacts").fetchone()
         assert row["location"] is None
+    finally:
+        conn.close()
+
+
+def test_migration_009_adds_application_tables(tmp_path: Path) -> None:
+    conn = _open_conn(tmp_path / "test.db")
+    try:
+        run_migrations(conn)
+        # applications: posting entity, job_id PK; status defaults to 'NEW'.
+        app_cols = {c["name"] for c in conn.execute("PRAGMA table_info(applications)").fetchall()}
+        assert {
+            "job_id", "company", "company_slug", "role_title", "function",
+            "job_url", "score", "deadline", "status", "created_at",
+        } <= app_cols
+        conn.execute(
+            "INSERT INTO applications (job_id, company, role_title) "
+            "VALUES ('ja-1', 'Joby Aviation', 'Quality Engineer')"
+        )
+        row = conn.execute("SELECT status FROM applications WHERE job_id = 'ja-1'").fetchone()
+        assert row["status"] == "NEW"
+
+        # application_contacts: many-to-many join, (job_id, contact_id) PK →
+        # re-linking is idempotent (INSERT OR IGNORE succeeds on the dupe).
+        link_cols = {
+            c["name"] for c in conn.execute("PRAGMA table_info(application_contacts)").fetchall()
+        }
+        assert {"job_id", "contact_id", "created_at"} <= link_cols
+        conn.execute("INSERT INTO companies (slug, name) VALUES ('joby-aviation', 'Joby')")
+        conn.execute("INSERT INTO contacts (company_id, full_name) VALUES (1, 'Jane')")
+        conn.execute("INSERT INTO application_contacts (job_id, contact_id) VALUES ('ja-1', 1)")
+        conn.execute(
+            "INSERT OR IGNORE INTO application_contacts (job_id, contact_id) VALUES ('ja-1', 1)"
+        )
+        count = conn.execute(
+            "SELECT COUNT(*) AS n FROM application_contacts WHERE job_id = 'ja-1'"
+        ).fetchone()["n"]
+        assert count == 1
     finally:
         conn.close()
 

@@ -6,6 +6,23 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Application-mode data + parser (Phase B P1, issue #58) — ships dark.** The
+  first slice of the per-job-posting referral front-door (epic #57), additive and
+  with **no behavior change**. Migration `009_applications.sql` adds an
+  `applications` posting table (`job_id` PK) and an `application_contacts` join
+  table linking postings ↔ contacts many-to-many (a contact can serve more than
+  one req at a company, so a join table, not a `contacts.job_id` FK). New
+  `Application` Pydantic model in `src/core/schemas.py` (required
+  `job_id`/`company`/`role_title`; reuses `ContactCandidate` verbatim for
+  pre-captured leads; derives `company_slug` from `company` via the canonical
+  `slugify`). New `src/agents/application_feed.py` — `parse_application_feed` +
+  `validate_application_feed`, mirroring the importer's shape (an
+  `ApplicationFeedError` wrapping malformed JSON cleanly, per-posting required-field
+  validation, and drop/error accounting so bad postings are surfaced, never
+  silently dropped). No `/network-jobs` command, discovery, drafting, or DB writes
+  yet (P2–P4). `LATEST_MIGRATION` bumped 8→9.
+
 ## [0.9.0] - 2026-06-30
 
 ### Added

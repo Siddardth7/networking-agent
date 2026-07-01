@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
+
+from src.core.slug import slugify
 
 __all__ = [
     # Enums
@@ -20,6 +22,7 @@ __all__ = [
     "ProjectType",
     # Models
     "ContactCandidate",
+    "Application",
     "EmailResult",
     "RetryDecision",
     "DraftDispatchRequest",
@@ -154,6 +157,48 @@ class ContactCandidate(BaseModel):
     school: str | None = None
     alumni_confirmed: bool | None = None
     connection_degree: str | None = None
+
+
+class Application(BaseModel):
+    """A single job posting from an application-feed (Phase B, #58).
+
+    The Application-mode unit of work: a per-posting referral target. `job_id`
+    is the linkage key that ties discovered contacts, drafts, and outcomes back
+    to *this* posting so the consumer can ask "referral for this req yet?".
+    `contacts` reuses :class:`ContactCandidate` verbatim for any pre-captured
+    leads (usually empty — the agent finds them). `company_slug` is derived from
+    `company` via the canonical :func:`src.core.slug.slugify` when the feed omits
+    it, so Campaign and Application modes cross-link to the same `companies` row.
+
+    Traceability: docs/APPLICATION_FEED_INPUT_DESIGN_2026-06-30.md §4.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    # Required per posting (feed §4 field rules).
+    job_id: str
+    company: str
+    role_title: str
+    # Optional — derived / provenance / targeting. `function` + `target_keywords`
+    # are free-form (they resolve against the active profile's taxonomy in P4),
+    # not a fixed enum, to keep the feed field-agnostic.
+    company_slug: str = ""  # derived from company when absent (see validator)
+    function: str | None = None
+    job_url: str | None = None
+    location: str | None = None
+    target_keywords: list[str] = []
+    score: int | None = None
+    deadline: str | None = None
+    source: str | None = None
+    contacts: list[ContactCandidate] = []
+
+    @model_validator(mode="after")
+    def _derive_company_slug(self) -> Application:
+        """Fill `company_slug` from `company` when the feed omits it (or gives
+        blank/whitespace, which str_strip_whitespace has already trimmed to "")."""
+        if not self.company_slug:
+            self.company_slug = slugify(self.company)
+        return self
 
 
 class EmailResult(BaseModel):
