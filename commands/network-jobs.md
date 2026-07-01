@@ -1,5 +1,5 @@
 ---
-description: Application mode (#59) — from a scored job feed, find per-posting referral candidates on the HOST Claude's tokens. Parse feed → per posting: persist the posting → role-biased discover (HTTP) → classify each (host tokens) → ingest → link contacts to the job_id.
+description: Application mode (#59/#60) — from a scored job feed, find per-posting referral candidates on the HOST Claude's tokens, optionally draft role-aware notes, and read back a per-job_id referral status. Parse feed → per posting: persist the posting → role-biased discover (HTTP) → classify each (host tokens) → ingest → link → (optional) draft naming the role → status rollup.
 ---
 
 # /network-jobs
@@ -61,7 +61,37 @@ Feed path (git-ignored, mirrors the Chrome producer contract):
       ```
       → `{"job_id": "…", "linked": <N>, "unresolved": <M>}`.
 
-3. **Report** the per-posting counts (linked / unresolved) back to the user.
+3. **(Optional) Draft, role-aware (#60)** — for a posting's linked contacts,
+   draft on host tokens as usual (`/network-draft-here` flow), but pass the
+   posting's `job_id` so the note names the specific role (a named-role ask
+   out-converts a generic company ask):
+   ```
+   python -m src.cli.network_draft_host context <contact_id> <CHANNEL> --job-id <job_id>
+   ```
+   → the grounding gains a `posting` block (`role_title`, `job_url`); the
+   `networking-drafter` subagent names the role. **Ask-rotation groups by
+   posting**: pass only *this posting's* contact ids to the drafter run so
+   same-req contacts get distinct ask angles (`assign_ask_angles` already takes an
+   arbitrary id list — just scope the ids to the posting).
+
+4. **Report** the per-posting counts (linked / unresolved) back to the user.
+
+## Status rollup (`--status`, #60)
+
+Read the per-`job_id` referral state the consumer polls to decide apply vs drop —
+a derived **view** over each posting's linked contacts' outcomes (`searching →
+reached → conversation → referral_asked → referred`, plus contact count and any
+`SPONSORSHIP_YES/NO`); `none` means no candidates yet.
+
+```
+# all postings → the canonical status file
+python -m src.cli.network_jobs_host status > runs/applications/$(date +%F)-status.json
+# one posting
+python -m src.cli.network_jobs_host status --job-id <job_id>
+```
+→ `{"postings": [{job_id, company, role_title, status, contacts, sponsorship}, …]}`.
+It's a read-only rollup, not a new state machine — the per-contact outcome (`#15`,
+`/network-outcome`) remains the source of truth.
 
 ## Why role-biased, not role-ranked (yet)
 

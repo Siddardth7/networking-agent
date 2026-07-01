@@ -20,7 +20,25 @@ from src.core.db import get_connection, with_writer
 from src.core.schemas import Application, ContactCandidate
 from src.core.slug import canonical_linkedin_url
 
-__all__ = ["upsert_application", "link_contacts"]
+__all__ = [
+    "upsert_application",
+    "link_contacts",
+    "aggregate_referral_status",
+    "posting_status",
+    "all_statuses",
+]
+
+# Per-posting referral progression (P3, #60) — a derived VIEW over linked
+# contacts' #15 outcomes, ordered worst→best. `none` (0 candidates) is orthogonal
+# to the ladder, so it's not listed here; it's returned when a posting has no
+# linked contacts. ponytail: `referral_asked` has no #15 outcome to map to (our
+# outreach IS the ask, and the post-reply REFERRAL_ASK next-move #19 isn't
+# persisted) — it stays in the vocab for ordering but is unreachable until a
+# per-message ask-type record exists (a P3+ follow-up). Not fabricating a signal.
+REFERRAL_STATES = ["searching", "reached", "conversation", "referral_asked", "referred"]
+
+# #15 outcomes that mean "they replied" → at least a conversation.
+_REPLIED_OUTCOMES = frozenset({"REPLIED", "DECLINED", "SPONSORSHIP_YES", "SPONSORSHIP_NO"})
 
 
 def upsert_application(app: Application) -> None:
@@ -113,3 +131,83 @@ def link_contacts(
             )
 
     return {"linked": len(pairs), "unresolved": unresolved}
+
+
+def _contact_referral_state(state: str | None, outcome: str | None) -> str:
+    """Map one contact's (pipeline state, #15 outcome) to a referral-ladder rung.
+
+    POC (a referral / intro / point-of-contact) is the goal → ``referred``. Any
+    reply-bearing outcome → ``conversation``. Otherwise the contact has been
+    ``reached`` once outreach was SENT, else we're still ``searching``.
+    """
+    if outcome == "POC":
+        return "referred"
+    if outcome in _REPLIED_OUTCOMES:
+        return "conversation"
+    return "reached" if state == "SENT" else "searching"
+
+
+def aggregate_referral_status(rows: list[dict]) -> dict:
+    """Roll a posting's linked contacts up to one referral state (P3, #60).
+
+    *rows* are ``{"state", "outcome"}`` dicts (one per linked contact). Returns
+    ``{"status", "contacts", "sponsorship"}`` where ``status`` is the FURTHEST
+    rung any contact reached (best-across-contacts), ``contacts`` the count, and
+    ``sponsorship`` the strongest sponsorship answer seen (``"YES"`` > ``"NO"`` >
+    None). An empty list → ``{"status": "none", "contacts": 0, ...}`` — "none" is
+    "no candidates yet", not a progression rung.
+    """
+    if not rows:
+        return {"status": "none", "contacts": 0, "sponsorship": None}
+    best = max(
+        REFERRAL_STATES.index(_contact_referral_state(r.get("state"), r.get("outcome")))
+        for r in rows
+    )
+    outcomes = {r.get("outcome") for r in rows}
+    sponsorship = "YES" if "SPONSORSHIP_YES" in outcomes else (
+        "NO" if "SPONSORSHIP_NO" in outcomes else None
+    )
+    return {"status": REFERRAL_STATES[best], "contacts": len(rows), "sponsorship": sponsorship}
+
+
+def posting_status(job_id: str) -> dict | None:
+    """Per-`job_id` referral rollup (a read-only view), or None for an unknown id.
+
+    Reads the posting's linked contacts through `application_contacts` and folds
+    their outcomes via :func:`aggregate_referral_status`. Returns
+    ``{job_id, company, role_title, status, contacts, sponsorship}``.
+    """
+    conn = get_connection()
+    try:
+        app = conn.execute(
+            "SELECT job_id, company, role_title FROM applications WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        if app is None:
+            return None
+        rows = conn.execute(
+            "SELECT c.state AS state, c.outcome AS outcome "
+            "FROM application_contacts ac JOIN contacts c ON c.id = ac.contact_id "
+            "WHERE ac.job_id = ?",
+            (job_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    agg = aggregate_referral_status([{"state": r["state"], "outcome": r["outcome"]} for r in rows])
+    return {
+        "job_id": app["job_id"],
+        "company": app["company"],
+        "role_title": app["role_title"],
+        **agg,
+    }
+
+
+def all_statuses() -> list[dict]:
+    """Referral rollup for every posting, ordered by job_id (the consumer's poll)."""
+    conn = get_connection()
+    try:
+        job_ids = [r["job_id"] for r in conn.execute(
+            "SELECT job_id FROM applications ORDER BY job_id"
+        ).fetchall()]
+    finally:
+        conn.close()
+    return [s for jid in job_ids if (s := posting_status(jid)) is not None]

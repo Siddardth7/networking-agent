@@ -1234,11 +1234,26 @@ def draft_next_move(
 # ---------------------------------------------------------------------------
 
 
+def _load_posting(job_id: str) -> dict | None:
+    """Return a posting's role_title + job_url for role-aware drafting (#60), or None."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT role_title, job_url FROM applications WHERE job_id = ?", (job_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    return {"job_id": job_id, "role_title": row["role_title"], "job_url": row["job_url"]}
+
+
 def build_draft_context(
     contact_id: int,
     channel: Channel,
     *,
     library_path: str | None = None,
+    job_id: str | None = None,
 ) -> dict | None:
     """Assemble the structured inputs a host model needs to draft. No LLM call.
 
@@ -1247,6 +1262,11 @@ def build_draft_context(
     facts"), the fact-discipline rules, and the channel constraints — the exact
     grounding the API path feeds into its prompt, exposed as data so the host
     model (or the drafter subagent) can do the writing on host tokens.
+
+    Application mode (#60): when *job_id* names a posting, the context gains a
+    ``posting`` block (role_title + job_url) so the note can name the specific
+    role — a named-role ask out-converts a generic company ask. ``posting`` is
+    None in Campaign mode (or for an unknown job_id), leaving behavior unchanged.
     """
     contact = _load_contact(contact_id)
     if contact is None:
@@ -1280,6 +1300,7 @@ def build_draft_context(
         "fact_discipline": _FACT_DISCIPLINE,
         "channel": channel.value,
         "channel_constraints": _CHANNEL_CONSTRAINTS[channel],
+        "posting": _load_posting(job_id) if job_id else None,
     }
 
 
