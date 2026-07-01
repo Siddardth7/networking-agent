@@ -92,12 +92,20 @@ def build_run_plan(slug: str) -> dict:
 
     state = company["state"]
     next_action = _NEXT_BY_STATE.get(state, "unknown")
+    items: list[dict] = []
     if next_action == "select":
-        items: list[dict] = _selectable_contacts(company["id"])
+        items = _selectable_contacts(company["id"])
     elif next_action == "draft":
         items = _selected_contacts(company["id"])
-    else:
-        items = []
+        if not items:
+            # Every selected contact has been drafted (contact state → DRAFTED).
+            # There is no company SELECTED→DRAFTED transition — `save_host_draft`
+            # marks the contact, not the company — so once nothing is left to
+            # draft, the phase is approval. Deriving it here (instead of writing
+            # company state) keeps the planner read-only and handles partial
+            # drafting: a mix of SELECTED + DRAFTED contacts still plans `draft`
+            # for the remainder, then flips to `approve` when the queue is empty.
+            next_action = "approve"
     return {"company": company, "state": state, "next": next_action, "items": items}
 
 
