@@ -49,6 +49,13 @@ from src.core.schemas import ContactCandidate
 __all__ = ["run_classify_host"]
 
 
+def _split_keywords(raw: str | None) -> list[str]:
+    """Parse a comma-separated ``--keywords`` value into a clean list (or [])."""
+    if not raw:
+        return []
+    return [k.strip() for k in raw.split(",") if k.strip()]
+
+
 def run_context(args: argparse.Namespace) -> int:
     """Print the classification grounding for one candidate as JSON."""
     if not (args.name or "").strip():
@@ -94,10 +101,13 @@ def run_discover(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(json.dumps({"error": str(exc)}))
         return 1
+    # Application mode (#59): --keywords biases discovery toward a posting's role
+    # team; falls back to the config-global role keywords (Campaign default).
+    keywords = _split_keywords(getattr(args, "keywords", None)) or cfg.finder_role_keywords
     candidates = _discover(
         chain,
         company=slug.replace("-", " "),
-        role_keywords=cfg.finder_role_keywords,
+        role_keywords=keywords,
         limit=args.limit,
         location=args.location,
     )
@@ -195,6 +205,10 @@ if __name__ == "__main__":  # pragma: no cover
     p_disc.add_argument("slug", help="Company slug")
     p_disc.add_argument("--limit", type=int, default=5)
     p_disc.add_argument("--location", default=None)
+    p_disc.add_argument(
+        "--keywords", default=None,
+        help="Comma-separated role keywords to bias discovery (#59); defaults to config",
+    )
 
     p_ing = sub.add_parser("ingest", help="Save host-classified candidates (stdin JSON)")
     p_ing.add_argument("slug", help="Company slug")

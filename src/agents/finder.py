@@ -851,12 +851,18 @@ def find_contacts(
     apollo_provider: ApolloProvider | None = None,
     anthropic_client=None,
     location: str | None = None,
+    role_keywords: list[str] | None = None,
 ) -> list[ContactCandidate]:
     """Run the 5-phase Finder pipeline for *company_slug*.
 
     Returns the list of enriched ContactCandidate objects written to DB.
     Raises QuotaExhausted (from Serper) when the search quota is exhausted.
     On Hunter quota exhaustion, marks remaining contacts HUNTER_EXHAUSTED and continues.
+
+    *role_keywords* overrides the config-global ``finder_role_keywords`` for this
+    call — Application mode (#59) passes a posting's free-form ``target_keywords``
+    to bias discovery toward the role's team. When None, the config default is
+    used (Campaign mode's behavior, unchanged).
 
     Email enrichment is opt-in (v0.2.1): when
     ``pipeline.enable_email_enrichment`` is false (the default) and no
@@ -891,7 +897,7 @@ def find_contacts(
     candidates = _discover(
         search_chain,
         company=company_slug.replace("-", " "),
-        role_keywords=cfg.finder_role_keywords,
+        role_keywords=role_keywords or cfg.finder_role_keywords,
         limit=limit,
         location=location,
     )
