@@ -168,6 +168,35 @@ class TestDiscover:
         assert rc == 1
         assert "missing slug" in json.loads(capsys.readouterr().out)["error"]
 
+    def test_keywords_bias_discovery(self, capsys, monkeypatch):
+        """--keywords (#59) threads a posting's role keywords into _discover."""
+        captured = {}
+        monkeypatch.setattr(f"{MOD}.build_discovery_chain", lambda cfg: ([object()], None))
+
+        def _capture(chain, *, company, role_keywords, limit, location):
+            captured["role_keywords"] = role_keywords
+            return []
+
+        monkeypatch.setattr(f"{MOD}._discover", _capture)
+        run_discover(argparse.Namespace(
+            verb="discover", slug="joby-aviation", limit=5, location=None,
+            keywords="quality, MRB ,AS9100",
+        ))
+        assert captured["role_keywords"] == ["quality", "MRB", "AS9100"]
+
+    def test_no_keywords_falls_back_to_config(self, capsys, monkeypatch):
+        captured = {}
+        monkeypatch.setattr(f"{MOD}.build_discovery_chain", lambda cfg: ([object()], None))
+
+        def _capture(chain, *, company, role_keywords, limit, location):
+            captured["role_keywords"] = role_keywords
+            return []
+
+        monkeypatch.setattr(f"{MOD}._discover", _capture)
+        # keywords attr absent entirely (getattr default None path) → config default
+        run_discover(argparse.Namespace(verb="discover", slug="acme", limit=5, location=None))
+        assert captured["role_keywords"]  # non-empty config default (DEFAULT_ROLE_KEYWORDS)
+
     def test_no_provider_configured(self, capsys, monkeypatch):
         def _raise(cfg):
             raise ValueError("No discovery provider configured")

@@ -7,6 +7,30 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Application mode `/network-jobs` + role-biased discovery (Phase B P2, issue
+  #59).** Per-posting referral find, end to end on host tokens. New
+  `/network-jobs <feed.json>` command drives the loop: parse feed → per posting
+  persist the `applications` row → **role-biased** discover → classify (host
+  subagent) → ingest → link contacts to the `job_id`. New
+  `src/agents/applications.py` (`upsert_application` — INSERT…ON CONFLICT keyed on
+  `job_id`, never resetting the pipeline `status`; `link_contacts` — resolves each
+  discovered contact to an existing `contacts` row by canonical LinkedIn URL then
+  name and writes `application_contacts`, giving **cross-mode dedup for free** —
+  a contact already found via Campaign mode is linked, not duplicated). New
+  `src/cli/network_jobs_host.py` bridge (`plan` = parse + persist + emit work
+  items with the parser's drop report; `link` = stdin candidates → join,
+  idempotent). Discovery is now **role-biased**: `find_contacts` takes an optional
+  per-call `role_keywords` override, and the host-token `discover` verb takes
+  `--keywords` (a posting's free-form `target_keywords`), both falling back to the
+  config-global `finder_role_keywords`. **Deferred to P4 (documented):** the
+  ranker's `target_focus` enum signal stays unwired — resolving free-form keywords
+  → the fixed `FocusArea` enum needs the profile taxonomy; P2 biases discovery
+  only, no hardcoded function→FocusArea map.
+
+### Changed
+- `finder.find_contacts` gains an optional `role_keywords` parameter (Campaign
+  mode behavior unchanged when omitted).
+
 - **Application-mode data + parser (Phase B P1, issue #58) — ships dark.** The
   first slice of the per-job-posting referral front-door (epic #57), additive and
   with **no behavior change**. Migration `009_applications.sql` adds an

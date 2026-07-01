@@ -151,6 +151,22 @@ class TestFindContacts:
         for r in results:
             assert isinstance(r, ContactCandidate)
 
+    def test_role_keywords_override_reaches_discovery(
+        self, db_path, mock_serper, mock_hunter, mock_anthropic
+    ):
+        """#59: a per-call role_keywords list biases discovery (vs config default)."""
+        init_db()
+        find_contacts(
+            "acme-corp",
+            limit=3,
+            serper_provider=mock_serper,
+            hunter_provider=mock_hunter,
+            anthropic_client=mock_anthropic,
+            role_keywords=["quality", "MRB", "AS9100"],
+        )
+        _, kwargs = mock_serper.search_linkedin_profiles.call_args
+        assert kwargs["role_keywords"] == ["quality", "MRB", "AS9100"]
+
     def test_persona_and_focus_area_classified_correctly(
         self, db_path, mock_serper, mock_hunter, mock_anthropic
     ):
