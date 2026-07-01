@@ -17,9 +17,13 @@ existing `network_classify_host` bridge; this adds the posting entity + linkage)
     → link the posting's discovered contacts (matched to existing `contacts`
       rows by canonical URL / name — cross-mode dedup, decision #3) into
       `application_contacts`. Idempotent.
+  - ``status [--job-id X]`` (P3, #60)
+    → the per-`job_id` referral rollup as JSON (a derived view over linked
+      contacts' outcomes) — the state the consumer polls to decide apply/drop.
+      The caller redirects it to ``runs/applications/<date>-status.json``.
 
 ``plan`` writes the `applications` rows and parses the feed; ``link`` writes the
-join table. Neither does any LLM or network work.
+join table; ``status`` is read-only. None does any LLM or network work.
 """
 
 from __future__ import annotations
@@ -29,7 +33,12 @@ import json
 import sys
 
 from src.agents.application_feed import ApplicationFeedError, parse_application_feed
-from src.agents.applications import link_contacts, upsert_application
+from src.agents.applications import (
+    all_statuses,
+    link_contacts,
+    posting_status,
+    upsert_application,
+)
 from src.agents.finder import _get_or_create_company
 from src.core.db import init_db
 from src.core.schemas import ContactCandidate
@@ -99,10 +108,33 @@ def run_link(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_status(args: argparse.Namespace) -> int:
+    """Print the per-`job_id` referral rollup as JSON (P3, #60).
+
+    ``--job-id`` scopes to one posting; without it, every posting is rolled up.
+    The output is the derived referral state the consumer polls to decide
+    apply/drop; the caller redirects it to
+    ``runs/applications/<date>-status.json``.
+    """
+    init_db()
+    job_id = (getattr(args, "job_id", None) or "").strip()
+    if job_id:
+        status = posting_status(job_id)
+        if status is None:
+            print(json.dumps({"error": f"unknown job_id: {job_id}"}))
+            return 1
+        print(json.dumps(status, indent=2))
+        return 0
+    print(json.dumps({"postings": all_statuses()}, indent=2))
+    return 0
+
+
 def run_jobs_host(args: argparse.Namespace) -> int:
-    """Dispatch the ``plan`` / ``link`` verbs."""
+    """Dispatch the ``plan`` / ``link`` / ``status`` verbs."""
     if args.verb == "plan":
         return run_plan(args)
+    if args.verb == "status":
+        return run_status(args)
     return run_link(args)
 
 
@@ -118,5 +150,9 @@ if __name__ == "__main__":  # pragma: no cover
     p_link = sub.add_parser("link", help="Link discovered contacts (stdin) to a posting")
     p_link.add_argument("job_id", help="The posting's job_id")
     p_link.add_argument("slug", help="Company slug the contacts were ingested under")
+
+    p_status = sub.add_parser("status", help="Per-job_id referral rollup as JSON")
+    p_status.add_argument("--job-id", dest="job_id", default=None,
+                          help="Scope to one posting (default: all postings)")
 
     sys.exit(run_jobs_host(parser.parse_args()))

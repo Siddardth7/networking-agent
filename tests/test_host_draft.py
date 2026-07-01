@@ -66,6 +66,29 @@ class TestBuildContext:
         em = build_draft_context(cid, Channel.COLD_EMAIL)
         assert li["channel_constraints"] != em["channel_constraints"]
 
+    def test_posting_none_without_job_id(self):
+        """#60: Campaign mode (no job_id) → posting is None, behavior unchanged."""
+        cid = _seed_contact()
+        assert build_draft_context(cid, Channel.COLD_EMAIL)["posting"] is None
+
+    def test_posting_block_added_for_job_id(self):
+        """#60: a job_id names the role → posting block with role_title + job_url."""
+        cid = _seed_contact()
+        with with_writer() as conn:
+            conn.execute(
+                "INSERT INTO applications (job_id, company, role_title, job_url) "
+                "VALUES ('ja-1', 'Acme Corp', 'Quality Engineer', 'https://x/req/1')"
+            )
+        ctx = build_draft_context(cid, Channel.COLD_EMAIL, job_id="ja-1")
+        assert ctx["posting"] == {
+            "job_id": "ja-1", "role_title": "Quality Engineer", "job_url": "https://x/req/1",
+        }
+
+    def test_unknown_job_id_posting_none(self):
+        cid = _seed_contact()
+        ctx = build_draft_context(cid, Channel.COLD_EMAIL, job_id="nope")
+        assert ctx["posting"] is None
+
     def test_invalid_persona_focus_defaults(self):
         cid = _seed_contact(persona="BOGUS", focus="NOPE")
         ctx = build_draft_context(cid, Channel.COLD_EMAIL)

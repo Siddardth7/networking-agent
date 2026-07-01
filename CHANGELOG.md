@@ -7,6 +7,25 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Application mode role-aware drafting + per-`job_id` status rollup (Phase B P3,
+  issue #60).** Drafts can now name the specific posting, and the consumer can
+  poll a per-req referral state. `build_draft_context` gains an optional `job_id`
+  that adds a `posting` block (`role_title` + `job_url`) to the grounding — a
+  named-role ask out-converts a generic company ask; the host `network_draft_host
+  context` verb gains `--job-id`. New status rollup in `src/agents/applications.py`
+  (`aggregate_referral_status` — pure fold of linked contacts' #15 outcomes to a
+  best-across-contacts referral state `searching → reached → conversation →
+  referral_asked → referred`, with contact count and any `SPONSORSHIP_YES/NO`;
+  `posting_status` / `all_statuses` read it through the join) surfaced via a
+  `network_jobs_host status [--job-id]` verb and documented `/network-jobs
+  --status` (redirect to `runs/applications/<date>-status.json`). The rollup is a
+  read-only **view**, not a new state machine — the per-contact outcome (#15)
+  stays the source of truth. Ask-rotation groups by posting (the `/network-jobs`
+  draft step scopes contact ids per req; `assign_ask_angles` already takes an id
+  list — no code change). **ponytail:** `referral_asked` has no #15 outcome to map
+  to (our outreach *is* the ask; the post-reply next-move #19 isn't persisted), so
+  it stays in the vocab for ordering but is unreachable until a per-message
+  ask-type record exists.
 - **Application mode `/network-jobs` + role-biased discovery (Phase B P2, issue
   #59).** Per-posting referral find, end to end on host tokens. New
   `/network-jobs <feed.json>` command drives the loop: parse feed → per posting

@@ -33,14 +33,18 @@ def _resolve_channel(name: str) -> Channel | None:
     return _CHANNELS.get(name.upper())
 
 
-def run_context(contact_id: int, channel_name: str) -> int:
-    """Print the build_draft_context grounding as JSON. 1 on bad channel/contact."""
+def run_context(contact_id: int, channel_name: str, job_id: str | None = None) -> int:
+    """Print the build_draft_context grounding as JSON. 1 on bad channel/contact.
+
+    *job_id* (Application mode, #60) adds the posting's role_title + job_url to the
+    grounding so the note names the specific role.
+    """
     channel = _resolve_channel(channel_name)
     if channel is None:
         print(json.dumps({"error": f"unknown channel: {channel_name}",
                           "valid": sorted(_CHANNELS)}))
         return 1
-    ctx = build_draft_context(contact_id, channel)
+    ctx = build_draft_context(contact_id, channel, job_id=job_id or None)
     if ctx is None:
         print(json.dumps({"error": f"contact not found: id={contact_id}"}))
         return 1
@@ -66,7 +70,7 @@ def run_save(contact_id: int, channel_name: str, body: str, subject: str | None)
 def run_draft_host(args: argparse.Namespace) -> int:
     """Dispatch the ``context`` / ``save`` verbs."""
     if args.verb == "context":
-        return run_context(args.contact_id, args.channel)
+        return run_context(args.contact_id, args.channel, getattr(args, "job_id", None))
     # save: body comes from --body or, by default, stdin (safe for newlines).
     body = args.body if args.body is not None else sys.stdin.read()
     return run_save(args.contact_id, args.channel, body, args.subject)
@@ -81,6 +85,8 @@ if __name__ == "__main__":  # pragma: no cover
     p_ctx = sub.add_parser("context", help="Print draft grounding as JSON")
     p_ctx.add_argument("contact_id", type=int)
     p_ctx.add_argument("channel", help="One of: " + ", ".join(sorted(_CHANNELS)))
+    p_ctx.add_argument("--job-id", dest="job_id", default=None,
+                       help="Application-mode posting id (#60): adds role_title + job_url")
 
     p_save = sub.add_parser("save", help="Gate + persist a host-written draft (body on stdin)")
     p_save.add_argument("contact_id", type=int)

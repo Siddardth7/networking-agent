@@ -69,6 +69,28 @@ class TestContext:
         assert run_context(999, "COLD_EMAIL") == 1
         assert "not found" in json.loads(capsys.readouterr().out)["error"]
 
+    def test_job_id_adds_posting_block(self, capsys):
+        """#60: --job-id threads role_title + job_url into the grounding."""
+        cid = _seed_contact()
+        with with_writer() as conn:
+            conn.execute(
+                "INSERT INTO applications (job_id, company, role_title, job_url) "
+                "VALUES ('ja-1', 'Acme Corp', 'Quality Engineer', 'https://x/1')"
+            )
+        rc = run_context(cid, "COLD_EMAIL", "ja-1")
+        assert rc == 0
+        assert json.loads(capsys.readouterr().out)["posting"]["role_title"] == "Quality Engineer"
+
+    def test_dispatch_context_passes_job_id(self, capsys):
+        cid = _seed_contact()
+        with with_writer() as conn:
+            conn.execute(
+                "INSERT INTO applications (job_id, company, role_title) "
+                "VALUES ('ja-1', 'Acme Corp', 'QE')"
+            )
+        run_draft_host(_args(verb="context", contact_id=cid, job_id="ja-1"))
+        assert json.loads(capsys.readouterr().out)["posting"]["job_id"] == "ja-1"
+
 
 # --------------------------------------------------------------------------- #
 # save

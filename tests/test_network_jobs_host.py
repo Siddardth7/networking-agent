@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from src.cli.network_jobs_host import run_jobs_host, run_link, run_plan
+from src.cli.network_jobs_host import run_jobs_host, run_link, run_plan, run_status
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import ContactCandidate
 
@@ -168,6 +168,56 @@ class TestLink:
         rc = run_link(argparse.Namespace(verb="link", job_id="ja-1", slug="joby"))
         assert rc == 1
         assert "invalid candidate" in json.loads(capsys.readouterr().out)["error"]
+
+
+# ---------------------------------------------------------------------------
+# status (#60)
+# ---------------------------------------------------------------------------
+
+
+def _seed_linked(job_id="ja-1", outcome="POC"):
+    with with_writer() as conn:
+        cid = conn.execute(
+            "INSERT INTO companies (slug, name, state) VALUES ('joby-aviation', 'Joby', 'FOUND')"
+        ).lastrowid
+        con = conn.execute(
+            "INSERT INTO contacts (company_id, full_name, linkedin_url, state, outcome) "
+            "VALUES (?, 'Jane', 'https://linkedin.com/in/jane', 'SENT', ?)",
+            (cid, outcome),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO applications (job_id, company, role_title) VALUES (?, 'Joby', 'QE')",
+            (job_id,),
+        )
+        conn.execute(
+            "INSERT INTO application_contacts (job_id, contact_id) VALUES (?, ?)", (job_id, con)
+        )
+
+
+class TestStatus:
+    def test_all_postings(self, tmp_db, capsys):
+        _seed_linked()
+        rc = run_status(argparse.Namespace(verb="status", job_id=None))
+        assert rc == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["postings"][0]["job_id"] == "ja-1"
+        assert out["postings"][0]["status"] == "referred"
+
+    def test_single_posting(self, tmp_db, capsys):
+        _seed_linked(outcome="REPLIED")
+        rc = run_status(argparse.Namespace(verb="status", job_id="ja-1"))
+        assert rc == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["status"] == "conversation"
+
+    def test_unknown_job_id(self, tmp_db, capsys):
+        rc = run_status(argparse.Namespace(verb="status", job_id="nope"))
+        assert rc == 1
+        assert "unknown job_id" in json.loads(capsys.readouterr().out)["error"]
+
+    def test_dispatch_status(self, tmp_db, capsys):
+        _seed_linked()
+        assert run_jobs_host(argparse.Namespace(verb="status", job_id=None)) == 0
 
 
 # ---------------------------------------------------------------------------
