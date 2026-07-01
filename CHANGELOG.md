@@ -147,17 +147,18 @@ Versioning: [Semantic Versioning](https://semver.org/)
   validation of the host-token pipeline.
 
 ### Coverage
-- Repo at **98.85%** line+branch (gate `fail_under=98`); **1137 tests** green,
+- Repo at **98.85%** line+branch (gate `fail_under=98`); **1139 tests** green,
   ruff clean. The whole host-token surface — find→classify→ingest, drafting,
   next-move, critic, and the default `/network-run` orchestration — plus the
   folded-in #24/#20/#19 work all land at ≥98% per the Definition of Done (#1).
 
 ### Notes
-- **Tag held pending validation.** The code for #50 (host-token architecture) is
-  complete and merged, but the git tag `v0.9.0` is deliberately not cut yet:
-  #50's manual in-Claude end-to-end validation (no API credit needed) and #20's
-  live exit-gate run (blocked on Anthropic credit) are still open. Tag once both
-  land.
+- **#50 validated in-Claude and closed.** The host-token pipeline was driven
+  end-to-end inside a Claude session with no API credit; the two bugs that
+  surfaced were fixed here (#64 loop-stall, #65 came-across contradiction).
+- **#20's live exit-gate run was waived for this release.** The exit-gate
+  *harness* ships here; the documented live run (blocked on Anthropic credit) is
+  deferred and does not gate the `v0.9.0` tag.
 
 ## [0.8.0] - 2026-06-29
 
