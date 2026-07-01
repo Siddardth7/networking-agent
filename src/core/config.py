@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from src.core.profile import Profile, load_profile
+
 if TYPE_CHECKING:
     from anthropic import Anthropic
 
@@ -42,20 +44,11 @@ HAIKU_MODEL = "claude-haiku-4-5-20251001"
 # tokens because it is the final automated gate before send.
 SONNET_MODEL = "claude-sonnet-4-6"
 
-# Default discovery role keywords (Finder). Domain-specific (aerospace) for Sid's
-# campaign; config-driven so any user can override via pipeline.finder_role_keywords
-# (issue #8 / FINDER_AUDIT D2). De-hardcoding the rest of the domain is roadmap B1.
-DEFAULT_ROLE_KEYWORDS = [
-    "quality engineer",
-    "supplier quality",
-    "MRB engineer",
-    "manufacturing engineer",
-    "stress engineer",
-    "structures engineer",
-    "composites engineer",
-    "materials engineer",
-    "additive manufacturing",
-]
+# Default discovery role keywords (Finder). Owned by the default profile since
+# #61 (Phase B P4); this alias keeps the historical import path. Precedence:
+# pipeline.finder_role_keywords (config.yaml) > profile.yaml role_keywords >
+# this built-in default (issue #8 / FINDER_AUDIT D2).
+DEFAULT_ROLE_KEYWORDS = list(Profile().role_keywords)
 
 # Module-level path — tests monkeypatch this to use tmp_path. At runtime,
 # _resolve_config_path() may override it via NETWORKING_AGENT_CONFIG env var.
@@ -341,8 +334,12 @@ def load_config() -> Config:
     apollo_monthly_limit = int(yaml_providers.get("apollo_monthly_limit", 50))
     search_cache_ttl_days = int(yaml_providers.get("search_cache_ttl_days", 14))
     finder_limit = int(yaml_pipeline.get("finder_limit", 5))
-    # A YAML list overrides the aerospace default; a missing/empty value keeps it.
-    finder_role_keywords = list(yaml_pipeline.get("finder_role_keywords") or DEFAULT_ROLE_KEYWORDS)
+    # A YAML list overrides the profile; a missing/empty value falls back to
+    # the active profile's role_keywords (#61) — which, absent a profile.yaml,
+    # is the built-in default (unchanged behavior).
+    finder_role_keywords = list(
+        yaml_pipeline.get("finder_role_keywords") or load_profile().role_keywords
+    )
     enable_email_enrichment = bool(yaml_pipeline.get("enable_email_enrichment", False))
 
     linkedin_char_limit = int(yaml_quality.get("linkedin_char_limit", 280))

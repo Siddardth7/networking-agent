@@ -41,17 +41,32 @@ from src.agents.applications import (
 )
 from src.agents.finder import _get_or_create_company
 from src.core.db import init_db
+from src.core.profile import load_profile, resolve_target_focus
 from src.core.schemas import ContactCandidate
 
 __all__ = ["run_jobs_host"]
 
 
 def run_plan(args: argparse.Namespace) -> int:
-    """Parse *feed*, persist each posting row, and emit host-loop work items."""
+    """Parse *feed*, persist each posting row, and emit host-loop work items.
+
+    The feed's ``profile_ref`` selects the active profile (#61); each posting's
+    free-form ``function``/``target_keywords`` are resolved against that
+    profile's taxonomy into ``target_focus`` — the label the host loop passes
+    to the ``ingest`` verb so role-matched contacts score the ranker's
+    team-match signal. A ``profile_ref`` naming no profile file is a hard
+    error: silently planning as the wrong person is worse than failing.
+    """
     try:
         apps, report = parse_application_feed(args.feed)
     except (ApplicationFeedError, OSError) as exc:
         print(json.dumps({"error": f"parse failed: {exc}"}))
+        return 1
+
+    try:
+        profile = load_profile(report.get("profile_ref"))
+    except FileNotFoundError as exc:
+        print(json.dumps({"error": str(exc)}))
         return 1
 
     init_db()
@@ -65,9 +80,10 @@ def run_plan(args: argparse.Namespace) -> int:
             "role_title": app.role_title,
             "location": app.location,
             "target_keywords": app.target_keywords,
+            "target_focus": resolve_target_focus(app.function, app.target_keywords, profile),
             "precaptured_contacts": len(app.contacts),
         })
-    print(json.dumps({"postings": postings, "report": report}, indent=2))
+    print(json.dumps({"profile": profile.name, "postings": postings, "report": report}, indent=2))
     return 0
 
 

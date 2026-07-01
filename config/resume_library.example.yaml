@@ -2,8 +2,11 @@
 # Copy this file to ~/.networking-agent/resume_library.yaml and replace bullets
 # with your own project achievements.
 #
-# focus_areas must be from: COMPOSITE_DESIGN, STRUCTURAL_ANALYSIS, MANUFACTURING,
-#                           MATERIALS, ADDITIVE, PEER, ALUMNI_ACADEMIC
+# focus_areas must be labels from your active profile's focus taxonomy (#61):
+# without a ~/.networking-agent/profile.yaml that is the default set —
+# COMPOSITE_DESIGN, STRUCTURAL_ANALYSIS, MANUFACTURING, MATERIALS, ADDITIVE,
+# PEER, ALUMNI_ACADEMIC. A custom profile's areas (e.g. BACKEND) work the same
+# way — see config/profile.example.yaml.
 # type must be from: COMPETITION, COURSEWORK, RESEARCH, INTERNSHIP, INDUSTRY
 #   The drafter uses `type` to forbid re-attribution: a COMPETITION project
 #   must NEVER be described as work for the contact's company. INTERNSHIP and

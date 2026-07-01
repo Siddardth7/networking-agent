@@ -78,7 +78,8 @@ def run_apply(args: argparse.Namespace) -> int:
     )
     print(json.dumps({
         "persona": persona.value,
-        "focus_area": focus_area.value,
+        # str() covers both a FocusArea member and a custom-profile label (#61).
+        "focus_area": str(focus_area),
         "hook_signal": hook_signal,
     }))
     return 0
@@ -173,6 +174,9 @@ def run_ingest(args: argparse.Namespace) -> int:
         anthropic_client=None,
         hunter_provider=hunter_provider,
         apollo_provider=apollo_provider,
+        # #61: role-targeted runs (Application mode) pass the posting's resolved
+        # focus so matching contacts score the ranker's team-match signal.
+        target_focus=(getattr(args, "target_focus", None) or None),
     )
     # Mirror find_contacts' terminal transition so the company advances NEW→FOUND.
     with with_writer() as conn:
@@ -212,6 +216,12 @@ if __name__ == "__main__":  # pragma: no cover
 
     p_ing = sub.add_parser("ingest", help="Save host-classified candidates (stdin JSON)")
     p_ing.add_argument("slug", help="Company slug")
+    p_ing.add_argument(
+        "--target-focus", dest="target_focus", default=None,
+        help="Focus-area label the run targets (#61); matching contacts score "
+             "the ranker's team-match signal (Application mode passes plan's "
+             "per-posting target_focus)",
+    )
 
     p_ctx = sub.add_parser("context", help="Print classification grounding as JSON")
     p_ctx.add_argument("--name", required=True)

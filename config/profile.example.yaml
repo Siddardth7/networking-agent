@@ -1,0 +1,91 @@
+# ~/.networking-agent/profile.yaml
+# Copy this file to ~/.networking-agent/profile.yaml and customize it.
+#
+# The profile is the identity/domain layer (Phase B, issue #61): who the agent
+# drafts as, which school/employers count as warm signals, what roles it hunts
+# by default, and the focus-area taxonomy the classifier and ranker use.
+# WITHOUT this file the agent uses the built-in default profile (the original
+# aerospace configuration) — every field here is optional; set only what
+# differs. The profile deliberately does NOT duplicate voice.md (tone/style)
+# or resume_library.yaml (achievements); those siblings are still loaded from
+# this same directory.
+#
+# An Application feed's `profile_ref` selects a NAMED profile instead:
+# `profile_ref: "default"` (or omitted) reads this file; any other ref reads
+# ~/.networking-agent/profiles/<ref>.yaml with the same schema.
+#
+# The example values below sketch a backend software engineer — the issue #61
+# exit-criteria user. A nurse or finance analyst works the same way: swap the
+# taxonomy and keywords.
+
+name: backend-swe
+
+# Used verbatim in the drafter's fallback instruction when a persona template
+# file is missing: "Write outreach messages as <fallback_identity>."
+fallback_identity: "Alex Rivera, MS Computer Science, Georgia Tech (May 2026)"
+
+# The shortest way to say who you are — quoted in the length-trim note when a
+# LinkedIn connection message runs over the character cap.
+identity_short: "MS CS at Georgia Tech, distributed systems"
+
+# Short school name. Appears in hook phrasing ("we share a <school_name>
+# background") and the alumni ask-rotation angle.
+school_name: "Georgia Tech"
+
+# Lowercase substrings that mark a shared-school contact (the warmest hook).
+school_signals:
+  - georgia tech
+  - georgia institute of technology
+  - gatech
+
+# Lowercase past-employer names — a shared employer is the second-warmest hook.
+shared_employers:
+  - stripe
+  - datadog
+
+# Identity phrases that should appear at most once per drafted message
+# (repeating your school/program in body AND signature reads as spam).
+identity_markers:
+  - georgia tech
+  - computer science
+  - ms cs
+
+# Default discovery role keywords: the job titles the Finder searches for when
+# a run doesn't supply its own (Application mode passes per-posting keywords).
+role_keywords:
+  - backend engineer
+  - software engineer
+  - distributed systems engineer
+  - platform engineer
+  - infrastructure engineer
+
+# The focus-area taxonomy. `name` is the label the classifier assigns and the
+# ranker matches; `description` tells the classifier what the label means;
+# `keywords` let a feed's free-form function/target_keywords resolve to an
+# area (they never reach a prompt). PEER and ALUMNI_ACADEMIC are added
+# automatically if you omit them. Your resume_library.yaml focus_areas must
+# use these same names.
+# Optional per-area: `hook` + `hook_keywords` give the Finder a deterministic
+# specialty hook ("your distributed-systems work") when a hook_keyword appears
+# in the contact's job title.
+focus_areas:
+  - name: BACKEND
+    description: "distributed systems / APIs / services / databases"
+    keywords: [backend, distributed systems, go, kafka, api, microservices]
+    hook: "your distributed-systems work"
+    hook_keywords: [backend, distributed, microservices]
+  - name: INFRA
+    description: "infrastructure / platform / SRE / cloud"
+    keywords: [infrastructure, platform, sre, kubernetes, cloud, devops]
+    hook: "your platform and infrastructure work"
+    hook_keywords: [infrastructure, platform, sre, devops]
+  - name: DATA
+    description: "data engineering / pipelines / streaming"
+    keywords: [data engineering, pipelines, streaming, spark, etl]
+    hook: "your data-engineering work"
+    hook_keywords: [data engineer, pipelines, streaming]
+
+# Optional: a directory of persona templates (recruiter.md, senior_manager.md,
+# peer_engineer.md, alumni.md) written for YOUR field, overriding the built-in
+# aerospace-voiced ones. Missing files fall back to the built-ins.
+# templates_dir: ~/.networking-agent/templates

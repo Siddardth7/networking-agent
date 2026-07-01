@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from src.core.schemas import ContactCandidate, FocusArea, Persona
+from src.core.schemas import ContactCandidate, Persona
 
 __all__ = ["SignalContribution", "RankScore", "rank_contact"]
 
@@ -77,14 +77,16 @@ def _norm_degree(value: str | None) -> int | None:
 
 
 def rank_contact(
-    candidate: ContactCandidate, *, target_focus: FocusArea | None = None
+    candidate: ContactCandidate, *, target_focus: str | None = None
 ) -> RankScore:
     """Score *candidate* by referral likelihood. Pure — no I/O, no network.
 
-    ``target_focus`` is the campaign's target role focus; when supplied, a
-    contact whose ``focus_area`` matches it scores the team-match signal. Pass
-    ``None`` to skip that signal (the live path until a campaign target-focus is
-    configured — ponytail: wire it the day that config field exists).
+    ``target_focus`` is the run's target role focus — a focus-area label from
+    the active profile's taxonomy (a FocusArea value for the default profile).
+    When supplied, a contact whose ``focus_area`` matches it scores the
+    team-match signal. Application mode resolves it from a posting's
+    function/target_keywords (#61); pass ``None`` to skip the signal
+    (Campaign mode's behavior, unchanged).
     """
     score = RankScore()
 

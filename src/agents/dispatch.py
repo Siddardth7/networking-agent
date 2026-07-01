@@ -16,7 +16,12 @@ from __future__ import annotations
 
 from src.agents.achievement_matcher import load_resume_library, match_achievements
 from src.agents.critic import critique_draft, hard_fail_trace
-from src.agents.drafter import _build_prompt, _load_persona_template, _load_voice_doc
+from src.agents.drafter import (
+    _build_prompt,
+    _coerce_focus_label,
+    _load_persona_template,
+    _load_voice_doc,
+)
 from src.agents.guardrails import (
     check_draft,
     find_placeholder,
@@ -35,7 +40,6 @@ from src.core.schemas import (
     Channel,
     DraftDispatchRequest,
     DraftDispatchResponse,
-    FocusArea,
     Persona,
 )
 
@@ -239,10 +243,7 @@ def dispatch_revision(
         persona = Persona(contact["persona"])
     except (ValueError, TypeError):
         persona = Persona.PEER_ENGINEER
-    try:
-        focus_area = FocusArea(contact["focus_area"])
-    except (ValueError, TypeError):
-        focus_area = FocusArea.PEER
+    focus_area = _coerce_focus_label(contact["focus_area"])
 
     library = load_resume_library(_library_path)
     bullets = match_achievements(

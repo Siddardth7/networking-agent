@@ -7,6 +7,47 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Profile-driven generalization — the agent drafts as a *profile*, not a
+  hardcoded person (Phase B P4, issue #61; closes the Application epic #57).**
+  New `src/core/profile.py`: a thin `Profile` (design decision #5 — it
+  *references* the existing `voice.md` + `resume_library.yaml`, never duplicates
+  them) supplying identity lines, school name + signals, shared employers,
+  identity markers, default discovery role keywords, an optional persona
+  `templates_dir`, and the **focus-area taxonomy** (label, classifier
+  descriptions, resolver keywords, Tier-3 hook + hook keywords per area).
+  `~/.networking-agent/profile.yaml` overrides any subset of fields (see
+  `config/profile.example.yaml` — a backend-SWE example); an Application feed's
+  `profile_ref` selects a named `profiles/<ref>.yaml` (a missing named ref is a
+  hard error — never silently draft as the wrong person). **The built-in default
+  profile IS the original aerospace configuration**: every replaced constant is
+  reproduced byte-for-byte (asserted in tests, including the accuracy-validated
+  classify prompt wording), so an install with no profile.yaml behaves exactly
+  as before. The ~8 hardcoded-to-one-user spots now read from the active
+  profile: Finder role keywords (precedence: `config.yaml
+  pipeline.finder_role_keywords` > profile > built-in), UIUC school signals +
+  shared-school hook phrase, shared-employer list, Tier-3 title-specialty
+  hooks, the classify tool schema's focus enum/descriptions (API + host paths),
+  guardrails' redundant-intro identity markers, the drafter's identity fallback
+  + length-trim identity example + alumni ask-rotation school angle, and
+  persona-template selection (custom `templates_dir` per profile; the built-in
+  aerospace templates remain the default profile's voice). `focus_area` is now
+  a profile-validated **string** across the pipeline (`ContactCandidate`,
+  resume-library `Project.focus_areas`, `match_achievements`, `rank_contact`)
+  — the `FocusArea` enum remains as the default taxonomy's labels, and unknown
+  labels still fall back to `PEER`.
+- **Free-form → taxonomy resolver + ranker `target_focus` wiring (the
+  P2-deferred role-rank signal, #61).** `resolve_target_focus(function,
+  target_keywords, profile)` resolves a posting's free-form targeting against
+  the active profile's taxonomy: an exact area-name match on `function` wins
+  (`function: "BACKEND"` → a SWE profile's `BACKEND` area), else best keyword
+  overlap; ties and zero overlap return `None` (skipping the +10 signal beats
+  guessing the wrong team). `network_jobs_host plan` now loads the feed's
+  `profile_ref` and emits a per-posting `target_focus` (plus the active
+  `profile` name); `network_classify_host ingest --target-focus` threads it
+  through `ingest_contacts` → `rank_contact`, so contacts on the role's team
+  score the team-match signal. Exit criteria met: a backend SWE, a nurse, or a
+  finance analyst use the same feed schema — only the profile + postings
+  differ.
 - **Application mode role-aware drafting + per-`job_id` status rollup (Phase B P3,
   issue #60).** Drafts can now name the specific posting, and the consumer can
   poll a per-req referral state. `build_draft_context` gains an optional `job_id`

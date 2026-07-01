@@ -112,15 +112,20 @@ measured on live data.
 
 Theme: **anyone can adopt it to their own profile.**
 
-### B1 · De-hardcode → config *(v0.9.0)*
+### B1 · De-hardcode → config *(v0.9.0)* ✅ SHIPPED (#61, Application-mode P4)
 Move the ~8 hardcoded spots from code to config: role keywords, shared employers,
 school signals, identity terms, the Drafter fallback name, persona template
-school-framing, ask-rotation school angle.
+school-framing, ask-rotation school angle. → `src/core/profile.py` +
+`~/.networking-agent/profile.yaml`; the built-in default profile reproduces the
+original aerospace configuration byte-for-byte.
 
-### B2 · Generic focus-area taxonomy *(v0.9.5)*
+### B2 · Generic focus-area taxonomy *(v0.9.5)* ✅ SHIPPED (#61, with B1)
 The hardest item — `FocusArea` spans the DB, the classifier schema, and the
 achievement matcher. Make it config-driven (the user declares their focus areas)
-so the classifier + matcher work for any field.
+so the classifier + matcher work for any field. → the profile's `focus_areas`
+taxonomy drives the classifier schema (API + host), the achievement matcher,
+Tier-3 hooks, and the ranker's `target_focus` (resolved from free-form
+`function`/`target_keywords` via `resolve_target_focus`).
 
 ### B3 · Guided onboarding + coaching *(v0.10.0)*
 - **Setup wizard** that builds *any* user's profile — voice.md, resume_library,
