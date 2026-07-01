@@ -132,7 +132,10 @@ class ContactCandidate(BaseModel):
     linkedin_url: str | None = None
     company_slug: str
     persona: Persona | None = None
-    focus_area: FocusArea | None = None
+    # A focus-area label from the active profile's taxonomy (#61). The default
+    # profile's labels are the FocusArea enum values; custom profiles define
+    # their own, so this is a string — validated at classification time.
+    focus_area: str | None = None
     email: str | None = None
     # Raw Serper search snippet (LinkedIn About / recent activity excerpt).
     # Used by the finder classifier to ground persona + extract a specific

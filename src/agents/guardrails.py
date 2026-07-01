@@ -202,15 +202,8 @@ def detect_multi_ask(text: str) -> bool:
 
 
 # Identity phrases that should appear at most once per message. The body
-# stating "MS Aerospace Engineering student at UIUC" AND the signature
-# repeating program + school is the AUDIT-A8 redundancy.
-_IDENTITY_MARKERS: tuple[str, ...] = (
-    "uiuc",
-    "university of illinois",
-    "urbana-champaign",
-    "aerospace engineering",
-    "ms aerospace",
-)
+# stating the school/program AND the signature repeating them is the AUDIT-A8
+# redundancy. Profile-driven since #61 (profile.identity_markers).
 
 
 def detect_redundant_intro(text: str) -> bool:
@@ -218,10 +211,13 @@ def detect_redundant_intro(text: str) -> bool:
 
     Inputs: draft body text (including any signature the model wrote).
     Output: bool — True when any single identity marker (school /
-    program) appears two or more times. No side effects.
+    program, from the active profile) appears two or more times.
+    Reads the profile file; no other side effects.
     """
+    from src.core.profile import load_profile
+
     lowered = text.lower()
-    return any(lowered.count(marker) >= 2 for marker in _IDENTITY_MARKERS)
+    return any(lowered.count(marker) >= 2 for marker in load_profile().identity_markers)
 
 
 @dataclass

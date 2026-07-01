@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel
 
-from src.core.schemas import FocusArea, ProjectType
+from src.core.schemas import ProjectType
 
 __all__ = [
     "Bullet",
@@ -41,7 +41,11 @@ class Project(BaseModel):
     # default to COURSEWORK (the safer assumption — never inflates to
     # INTERNSHIP/INDUSTRY).
     type: ProjectType = ProjectType.COURSEWORK
-    focus_areas: list[FocusArea]
+    # Focus-area labels from the active profile's taxonomy (#61) — the default
+    # profile's labels are the FocusArea enum values. Free strings so a custom
+    # profile's library ("BACKEND") validates; unknown labels simply never
+    # match a contact.
+    focus_areas: list[str]
     bullets: list[Bullet]
 
 
@@ -83,7 +87,7 @@ def load_resume_library(path: str | None = None) -> ResumeLibrary:
 
 
 def match_achievements(
-    contact_focus_area: FocusArea,
+    contact_focus_area: str,
     contact_title: str,
     library: ResumeLibrary,
     top_n: int = 3,

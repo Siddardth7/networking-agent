@@ -26,10 +26,14 @@ Feed path (git-ignored, mirrors the Chrome producer contract):
    ```
    python -m src.cli.network_jobs_host plan <feed.json>
    ```
-   → `{"postings": [{job_id, company, company_slug, role_title, location,
-   target_keywords, precaptured_contacts}, …], "report": {…}}`. The `report`
-   counts any postings the parser rejected (missing required fields, duplicate
-   `job_id`) — surface it; never treat a thin feed as full coverage.
+   → `{"profile": "<name>", "postings": [{job_id, company, company_slug,
+   role_title, location, target_keywords, target_focus, precaptured_contacts},
+   …], "report": {…}}`. The `report` counts any postings the parser rejected
+   (missing required fields, duplicate `job_id`) — surface it; never treat a
+   thin feed as full coverage. The feed's `profile_ref` selects the active
+   profile (#61); `target_focus` is the posting's `function`/`target_keywords`
+   resolved against that profile's focus taxonomy (`null` when ambiguous — the
+   rank signal is simply skipped).
 
 2. **For each posting** in `postings`:
 
@@ -47,9 +51,12 @@ Feed path (git-ignored, mirrors the Chrome producer contract):
       `networking-classifier` subagent; pair each `candidate` with its returned
       `{persona, focus_area, hook_signal}` into the ingest payload.
 
-   c. **Ingest (deterministic — no LLM)** — save the contacts under the company:
+   c. **Ingest (deterministic — no LLM)** — save the contacts under the
+      company; pass the posting's `target_focus` (when non-null) so contacts on
+      the role's team score the ranker's team-match signal (#61):
       ```
-      echo "<payload>" | python -m src.cli.network_classify_host ingest <company_slug>
+      echo "<payload>" | python -m src.cli.network_classify_host ingest <company_slug> \
+          --target-focus "<target_focus>"
       ```
 
    d. **Link to the posting (deterministic)** — pipe the discovered `candidate`
@@ -93,13 +100,15 @@ python -m src.cli.network_jobs_host status --job-id <job_id>
 It's a read-only rollup, not a new state machine — the per-contact outcome (`#15`,
 `/network-outcome`) remains the source of truth.
 
-## Why role-biased, not role-ranked (yet)
+## Role-biased AND role-ranked (P4, #61)
 
-P2 biases **discovery** with the posting's free-form `target_keywords`. It does
-**not** wire the ranker's `target_focus` signal: `target_focus` is a fixed
-`FocusArea` enum, and resolving free-form keywords → enum needs the profile
-taxonomy (P4). Ranking still runs (it just uses the generic company target), so
-candidates are ordered; the role signal sharpens in P4.
+P2 biased **discovery** with the posting's free-form `target_keywords`. P4 adds
+the **ranker** signal: `plan` resolves `function`/`target_keywords` against the
+active profile's focus taxonomy into `target_focus`, and `ingest
+--target-focus` scores matching contacts (+10 team-match). The whole pipeline
+is profile-driven — the feed's `profile_ref` picks the profile
+(`~/.networking-agent/profile.yaml`, or `profiles/<ref>.yaml` for a named ref);
+no profile file means the built-in default (the original aerospace user).
 
 ## Notes
 

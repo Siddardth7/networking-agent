@@ -32,7 +32,8 @@ from src.agents.shared import (
 )
 from src.core.config import HAIKU_MODEL, load_config, voice_doc_path
 from src.core.db import get_connection, with_writer
-from src.core.schemas import Channel, FocusArea, NextMove, Outcome, Persona
+from src.core.profile import Profile, load_profile
+from src.core.schemas import Channel, NextMove, Outcome, Persona
 
 __all__ = [
     "Draft",
@@ -130,12 +131,30 @@ class Draft:
     critic_trace: str | None = None
 
 
+def _coerce_focus_label(raw: object) -> str:
+    """Validate a stored focus_area against the active profile's taxonomy (#61).
+
+    Unknown/None labels fall back to "PEER" (the pre-#61 enum-coercion
+    behavior); a custom profile's own labels pass through so its resume
+    library matches on them.
+    """
+    from src.core.profile import focus_area_names
+
+    label = str(raw) if raw is not None else ""
+    return label if label in focus_area_names(load_profile()) else "PEER"
+
+
 def _load_persona_template(persona: Persona) -> str:
     """Return the persona template text for *persona*.
 
-    Inputs: a Persona enum value. Output: the template file content from
-    ``src/templates/personas/`` (utf-8), or a minimal identity line when
-    the file is missing. Reads the filesystem; no other side effects.
+    Inputs: a Persona enum value. Output: the template file content (utf-8),
+    or a minimal identity line (from the active profile, #61) when no file
+    exists. Reads the filesystem; no other side effects.
+
+    Resolution order: the active profile's ``templates_dir`` (a custom
+    profile's own persona voice) → the built-in ``src/templates/personas/``
+    (the default profile's aerospace-voiced templates, unchanged) → the
+    profile's ``fallback_identity`` line.
     """
     template_map = {
         Persona.RECRUITER: "recruiter.md",
@@ -144,10 +163,15 @@ def _load_persona_template(persona: Persona) -> str:
         Persona.ALUMNI: "alumni.md",
     }
     filename = template_map.get(persona, "peer_engineer.md")
+    profile = load_profile()
+    if profile.templates_dir:
+        custom = Path(profile.templates_dir).expanduser() / filename
+        if custom.exists():
+            return custom.read_text(encoding="utf-8")
     path = _PERSONA_TEMPLATE_DIR / filename
     if path.exists():
         return path.read_text(encoding="utf-8")
-    return "Write outreach messages as Siddardth Pathipaka, MS Aerospace UIUC (Dec 2025)."
+    return f"Write outreach messages as {profile.fallback_identity}."
 
 
 def _load_voice_doc() -> str:
@@ -233,7 +257,7 @@ _LENGTH_REGEN_NOTE = (
     "The note was {n} characters but the hard limit is {limit}. Cut it to "
     "under {target} characters. The biggest savings: drop any generic "
     "'exploring roles' preamble AND trim self-identity to at most "
-    "'MS AE at UIUC, composites' (or omit it — the profile carries it). "
+    "'{identity}' (or omit it — the profile carries it). "
     "Spend the budget on the one specific detail about this person plus a "
     "short close like 'Would value connecting.'"
 )
@@ -350,14 +374,22 @@ class OpenerRegistry:
 #
 # Pools are kept in sync with the Close section of the matching persona
 # template; the prose and the injected instruction must agree.
-_ALUMNI_ASK_ANGLES: tuple[str, str, str, str, str] = (
-    "the hiring climate on their team right now (are they growing, are reqs open)",
-    "whether the company sponsors or hires international students "
-    "(STEM OPT / H-1B) for technical roles",
-    "what the team and engineering culture are actually like day to day",
-    "how their own UIUC-to-industry transition went and what they'd do differently",
-    "who on the team would be the right person to talk to about the work",
-)
+def _alumni_ask_angles(school_name: str) -> tuple[str, str, str, str, str]:
+    """The alumni ask-angle pool, with the shared school from the profile (#61)."""
+    return (
+        "the hiring climate on their team right now (are they growing, are reqs open)",
+        "whether the company sponsors or hires international students "
+        "(STEM OPT / H-1B) for technical roles",
+        "what the team and engineering culture are actually like day to day",
+        f"how their own {school_name}-to-industry transition went "
+        "and what they'd do differently",
+        "who on the team would be the right person to talk to about the work",
+    )
+
+
+# The default profile's pool — kept as a module constant because the pool for a
+# run is rebuilt from the active profile inside assign_ask_angles.
+_ALUMNI_ASK_ANGLES: tuple[str, str, str, str, str] = _alumni_ask_angles(Profile().school_name)
 
 _PEER_ASK_ANGLES: tuple[str, str, str, str, str] = (
     "what the day-to-day engineering work on their team is actually like",
@@ -370,10 +402,13 @@ _PEER_ASK_ANGLES: tuple[str, str, str, str, str] = (
 # Personas whose one ask is worth rotating. Recruiters tie the ask to a
 # specific role (and are ~one per company); senior managers carry no hard ask
 # (low-obligation "stay connected"). Neither has anything to rotate.
-_ASK_ANGLE_POOLS: dict[Persona, tuple[str, ...]] = {
-    Persona.ALUMNI: _ALUMNI_ASK_ANGLES,
-    Persona.PEER_ENGINEER: _PEER_ASK_ANGLES,
-}
+
+
+def _ask_angle_pools(profile: Profile) -> dict[Persona, tuple[str, ...]]:
+    return {
+        Persona.ALUMNI: _alumni_ask_angles(profile.school_name),
+        Persona.PEER_ENGINEER: _PEER_ASK_ANGLES,
+    }
 
 
 def assign_ask_angles(contact_ids: list[int]) -> dict[int, str | None]:
@@ -404,6 +439,7 @@ def assign_ask_angles(contact_ids: list[int]) -> dict[int, str | None]:
         conn.close()
 
     # Group contact ids by (company_id, persona), preserving stable id order.
+    pools = _ask_angle_pools(load_profile())
     groups: dict[tuple, list[int]] = {}
     persona_by_group: dict[tuple, Persona] = {}
     for row in rows:
@@ -411,7 +447,7 @@ def assign_ask_angles(contact_ids: list[int]) -> dict[int, str | None]:
             persona = Persona(row["persona"])
         except (ValueError, TypeError):
             continue
-        if persona not in _ASK_ANGLE_POOLS:
+        if persona not in pools:
             continue
         key = (row["company_id"], persona)
         groups.setdefault(key, []).append(row["id"])
@@ -421,7 +457,7 @@ def assign_ask_angles(contact_ids: list[int]) -> dict[int, str | None]:
     for key, ids in groups.items():
         if len(ids) < 2:
             continue  # singleton → no rotation, model picks the best angle
-        pool = _ASK_ANGLE_POOLS[persona_by_group[key]]
+        pool = pools[persona_by_group[key]]
         for i, cid in enumerate(sorted(ids)):
             assignments[cid] = pool[i % len(pool)]
     return assignments
@@ -659,6 +695,7 @@ def _draft_one_channel(
                 n=len(check_body),
                 limit=linkedin_char_limit,
                 target=max(0, linkedin_char_limit - 25),
+                identity=load_profile().identity_short,
             )
         )
 
@@ -837,10 +874,7 @@ def _draft_all_channels_for_contact(
     except (ValueError, TypeError):
         persona = Persona.PEER_ENGINEER
 
-    try:
-        focus_area = FocusArea(contact["focus_area"])
-    except (ValueError, TypeError):
-        focus_area = FocusArea.PEER
+    focus_area = _coerce_focus_label(contact["focus_area"])
 
     library = load_resume_library(library_path)
     bullets = match_achievements(
@@ -1275,10 +1309,7 @@ def build_draft_context(
         persona = Persona(contact["persona"])
     except (ValueError, TypeError):
         persona = Persona.PEER_ENGINEER
-    try:
-        focus_area = FocusArea(contact["focus_area"])
-    except (ValueError, TypeError):
-        focus_area = FocusArea.PEER
+    focus_area = _coerce_focus_label(contact["focus_area"])
 
     library = load_resume_library(library_path)
     bullets = match_achievements(focus_area, contact.get("title") or "", library, top_n=3)
@@ -1292,7 +1323,7 @@ def build_draft_context(
             "email": contact.get("email"),
             "hook": contact.get("hook") or "GENERIC",
             "persona": persona.value,
-            "focus_area": focus_area.value,
+            "focus_area": str(focus_area),
         },
         "persona_template": _load_persona_template(persona),
         "voice_doc": _load_voice_doc(),

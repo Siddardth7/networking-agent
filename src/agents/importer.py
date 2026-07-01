@@ -17,7 +17,8 @@ from pathlib import Path
 from src.agents.finder import ingest_contacts
 from src.core.config import get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
-from src.core.schemas import ContactCandidate, FocusArea, Persona
+from src.core.profile import focus_area_names, load_profile
+from src.core.schemas import ContactCandidate, Persona
 from src.core.slug import canonical_linkedin_url, slugify
 
 __all__ = [
@@ -182,6 +183,18 @@ def _coerce_enum(value, enum_cls):
         return None
 
 
+def _coerce_focus(value, valid_names: tuple[str, ...]):
+    """Lenient focus-area parse against the active profile's taxonomy (#61).
+
+    Returns the canonical label or None (so the classifier runs) — the same
+    lenient contract as ``_coerce_enum`` had when focus was a fixed enum.
+    """
+    if value is None:
+        return None
+    label = str(value).strip().upper()
+    return label if label in valid_names else None
+
+
 def _coerce_bool(value):
     """Parse a truthy producer flag → True / False / None (absent)."""
     if value is None:
@@ -259,6 +272,8 @@ def parse_contacts_file_with_report(
     report_source = meta.get("source") or source
 
     dropped = {"no_name": 0, "no_company": 0, "duplicate": 0}
+    # Focus labels a pre-labeled file may carry — the active profile's taxonomy.
+    focus_names = focus_area_names(load_profile())
     candidates: list[ContactCandidate] = []
     seen: set[str] = set()
     for raw in raw_rows:
@@ -288,7 +303,7 @@ def parse_contacts_file_with_report(
                 linkedin_url=canon.get("linkedin_url"),
                 company_slug=company_slug,
                 persona=_coerce_enum(canon.get("persona"), Persona),
-                focus_area=_coerce_enum(canon.get("focus_area"), FocusArea),
+                focus_area=_coerce_focus(canon.get("focus_area"), focus_names),
                 email=canon.get("email"),
                 snippet=canon.get("about"),
                 hook=canon.get("hook"),

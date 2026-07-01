@@ -13,6 +13,7 @@ from datetime import datetime
 from src.agents.ranker import rank_contact
 from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
+from src.core.profile import Profile, focus_area_names, load_profile
 from src.core.schemas import ContactCandidate, EmailResult, FocusArea, Persona
 from src.core.slug import canonical_linkedin_url
 from src.providers.apify import ApifyProvider
@@ -36,17 +37,10 @@ __all__ = [
     "looks_like_verbatim_news",
 ]
 
-_SHARED_EMPLOYERS = [
-    "tata",
-    "ge",
-    "general electric",
-    "boeing",
-    "lockheed",
-    "airbus",
-    "honeywell",
-]
-
-_UIUC_SIGNALS = ["uiuc", "university of illinois", "urbana-champaign"]
+# School signals, shared employers, the focus taxonomy, and the Tier-3
+# specialty hooks are profile-driven since #61 — the active Profile supplies
+# what used to be hardcoded constants here (the built-in default reproduces
+# them exactly).
 
 # The classifier is asked for a hook signal of at most this many characters.
 _MAX_HOOK_SIGNAL_LEN = 80
@@ -72,7 +66,8 @@ def _classify_contact(
     candidate: ContactCandidate,
     company_slug: str,
     anthropic_client,
-) -> tuple[Persona, FocusArea, str | None]:
+    profile: Profile | None = None,
+) -> tuple[Persona, str, str | None]:
     """Persona + focus_area + hook_signal via a single Claude haiku call.
 
     Returns ``(persona, focus_area, hook_signal)`` where ``hook_signal`` is
@@ -80,7 +75,12 @@ def _classify_contact(
     — e.g. "led 787 wing-box stress team", "MS at Georgia Tech in composites".
     ``None`` when no specific signal is extractable. The hook generator
     promotes a non-None signal to Tier 0 so hooks are real, not categories.
+
+    The focus-area labels + descriptions come from *profile* (#61); the default
+    profile renders the exact accuracy-validated prompt wording this replaced.
     """
+    if profile is None:
+        profile = load_profile()
     tools = [
         {
             "name": "classify_contact",
@@ -106,25 +106,9 @@ def _classify_contact(
                     },
                     "focus_area": {
                         "type": "string",
-                        "enum": [
-                            "COMPOSITE_DESIGN",
-                            "STRUCTURAL_ANALYSIS",
-                            "MANUFACTURING",
-                            "MATERIALS",
-                            "ADDITIVE",
-                            "PEER",
-                            "ALUMNI_ACADEMIC",
-                        ],
-                        "description": (
-                            "COMPOSITE_DESIGN: composites/carbon fiber. "
-                            "STRUCTURAL_ANALYSIS: stress/loads/FEA/airframe. "
-                            "MANUFACTURING: production/quality/MRB/supplier. "
-                            "MATERIALS: metallurgy/alloys. "
-                            "ADDITIVE: 3D printing. "
-                            "PEER: a generalist engineer with NO clear single "
-                            "specialty — use this (do NOT guess a specialty) when "
-                            "the title/snippet doesn't clearly point to one above. "
-                            "ALUMNI_ACADEMIC: academic/PhD/research/student."
+                        "enum": list(focus_area_names(profile)),
+                        "description": " ".join(
+                            f"{fa.name}: {fa.api_desc}." for fa in profile.focus_areas
                         ),
                     },
                     "hook_signal": {
@@ -182,65 +166,79 @@ def _classify_contact(
     if not isinstance(data, dict):
         return Persona.PEER_ENGINEER, FocusArea.PEER, None
     return apply_classification(
-        data.get("persona"), data.get("focus_area"), data.get("hook_signal")
+        data.get("persona"), data.get("focus_area"), data.get("hook_signal"), profile=profile
     )
 
 
-# Persona / focus enum semantics for the host-token `build_classify_context`
-# (#50) — a compact echo of the API classify tool schema's descriptions above.
-# (Kept separate, not refactored into the tool schema, because that schema's
-# exact prompt wording is accuracy-validated at persona 100% / focus 100% (#5)
-# and not worth perturbing; if either drifts, reconcile them here.)
+# Persona enum semantics for the host-token `build_classify_context` (#50) — a
+# compact echo of the API classify tool schema's descriptions above. (Kept
+# separate, not refactored into the tool schema, because that schema's exact
+# prompt wording is accuracy-validated at persona 100% / focus 100% (#5) and
+# not worth perturbing; if either drifts, reconcile them here.) Personas are
+# structural (role shape, not domain) so they stay code-owned; the focus
+# options come from the active profile's taxonomy (#61).
 _PERSONA_OPTIONS: dict[str, str] = {
     "RECRUITER": "HR / recruiting",
     "SENIOR_MANAGER": "Director/VP/Manager — AND Senior/Staff/Principal ICs (senior tone)",
     "PEER_ENGINEER": "junior / mid-level Engineer / Analyst IC",
     "ALUMNI": "Student / PhD / Research / University",
 }
-_FOCUS_OPTIONS: dict[str, str] = {
-    "COMPOSITE_DESIGN": "composites / carbon fiber",
-    "STRUCTURAL_ANALYSIS": "stress / loads / FEA / airframe",
-    "MANUFACTURING": "production / quality / MRB / supplier",
-    "MATERIALS": "metallurgy / alloys",
-    "ADDITIVE": "3D printing",
-    "PEER": "generalist engineer, NO clear specialty — use this, do NOT guess one",
-    "ALUMNI_ACADEMIC": "academic / PhD / research / student",
-}
+
+
+def _focus_options(profile: Profile) -> dict[str, str]:
+    """Host-path focus labels + hints from the profile's taxonomy."""
+    return {fa.name: fa.description for fa in profile.focus_areas}
 
 
 def apply_classification(
     raw_persona: str | None,
     raw_focus: str | None,
     raw_hook_signal: str | None,
-) -> tuple[Persona, FocusArea, str | None]:
+    profile: Profile | None = None,
+) -> tuple[Persona, str, str | None]:
     """Deterministic post-processing of a raw classification. Pure, no LLM.
 
     Shared by the API tool-call path (`_classify_contact`) and the host-token
-    path (#50): enum-coerce with safe defaults, enforce the non-engineer focus
+    path (#50): coerce labels with safe defaults, enforce the non-engineer focus
     convention (ALUMNI→ALUMNI_ACADEMIC, RECRUITER→PEER; issue #5 / FINDER_AUDIT
     D3 — done in code because the model ignored the prompt rule on strong topic
     signals), and trim the hook signal to the ceiling (dropping an empty one).
+
+    The focus label is validated against the active profile's taxonomy (#61);
+    an unknown label falls back to PEER (the pre-#61 enum-coercion behavior).
+    When the resolved label is a :class:`FocusArea` member (always true for the
+    default profile) the enum instance is returned, so existing identity checks
+    and DB writes are byte-identical; custom-profile areas come back as plain
+    strings.
     """
+    if profile is None:
+        profile = load_profile()
     try:
         persona = Persona(raw_persona or "PEER_ENGINEER")
     except ValueError:
         persona = Persona.PEER_ENGINEER
-    try:
-        focus_area = FocusArea(raw_focus or "PEER")
-    except ValueError:
-        focus_area = FocusArea.PEER
+    focus_area: str = raw_focus or "PEER"
+    if focus_area not in focus_area_names(profile):
+        focus_area = "PEER"
 
     if persona is Persona.ALUMNI:
-        focus_area = FocusArea.ALUMNI_ACADEMIC
+        focus_area = "ALUMNI_ACADEMIC"
     elif persona is Persona.RECRUITER:
-        focus_area = FocusArea.PEER
+        focus_area = "PEER"
+
+    try:
+        focus_area = FocusArea(focus_area)
+    except ValueError:
+        pass  # a custom-profile area — stays a plain string
 
     raw_signal = (raw_hook_signal or "").strip()
     hook_signal = _trim_hook_signal(raw_signal) if raw_signal else None
     return persona, focus_area, hook_signal
 
 
-def build_classify_context(candidate: ContactCandidate, company_slug: str) -> dict:
+def build_classify_context(
+    candidate: ContactCandidate, company_slug: str, profile: Profile | None = None
+) -> dict:
     """Structured grounding for host-model classification of one candidate. No LLM.
 
     The host model (or the `networking-classifier` subagent) returns
@@ -248,13 +246,15 @@ def build_classify_context(candidate: ContactCandidate, company_slug: str) -> di
     canonicalizes — so the host path lands on exactly the same labels as the API
     path.
     """
+    if profile is None:
+        profile = load_profile()
     return {
         "full_name": candidate.full_name,
         "title": candidate.title or "Unknown",
         "company": company_slug,
         "snippet": candidate.snippet or "",
         "persona_options": _PERSONA_OPTIONS,
-        "focus_options": _FOCUS_OPTIONS,
+        "focus_options": _focus_options(profile),
         "instruction": (
             "Classify persona + focus_area from the title and snippet, then "
             "extract ONE specific hook_signal (≤ 80 chars) from the snippet — a "
@@ -332,6 +332,7 @@ def _generate_hook(
     candidate: ContactCandidate,
     hook_signal: str | None = None,
     company_news: str | None = None,
+    profile: Profile | None = None,
 ) -> str:
     """Deterministic hook per DESIGN §6, augmented with Layer-1 signals.
 
@@ -341,9 +342,9 @@ def _generate_hook(
              from the LinkedIn snippet, accepted only when it passes the
              ``is_acceptable_hook`` whitelist (news-shaped extractions
              are rejected, AUDIT-A4).
-    Tier 1 — UIUC alumni signal in title or URL.
+    Tier 1 — shared-school signal in title or URL (profile.school_signals).
     Tier 2 — shared employer (word-boundary match on title).
-    Tier 3 — title-keyword specialty bucket.
+    Tier 3 — title-keyword specialty bucket (profile focus-area hooks).
     Tier 3.5 — title-derived hook ("your work as <title>") so the drafter
              always has a real anchor before GENERIC (AUDIT-A5).
     Tier 4 — ``GENERIC`` sentinel. The drafter / marketer treat this as
@@ -353,6 +354,8 @@ def _generate_hook(
     recorded in ``shared_signals`` as phrasing material only (AUDIT-A4).
     """
     del company_news  # never a hook; kept in the signature for callers
+    if profile is None:
+        profile = load_profile()
 
     title_lower = (candidate.title or "").lower()
     url_lower = (candidate.linkedin_url or "").lower()
@@ -362,38 +365,27 @@ def _generate_hook(
     if hook_signal and is_acceptable_hook(hook_signal):
         return hook_signal
 
-    # Tier 1: UIUC alumni signal
-    for sig in _UIUC_SIGNALS:
+    # Tier 1: shared-school signal
+    for sig in profile.school_signals:
         if sig in title_lower or sig in url_lower:
-            return "we share a UIUC background"
+            return f"we share a {profile.school_name} background"
 
     # Tier 2: Shared employer — word-boundary match on the title OR the company
     # slug. D11: a current employee titled "Structures Engineer" (no employer in
     # the title) still trips it via slug=boeing. Slug dashes → spaces so a
     # multi-word employer ("general-electric") matches.
     slug_words = (candidate.company_slug or "").lower().replace("-", " ")
-    for emp in _SHARED_EMPLOYERS:
+    for emp in profile.shared_employers:
         pat = r"\b" + re.escape(emp) + r"\b"
         if re.search(pat, title_lower) or re.search(pat, slug_words):
-            label = emp.upper() if emp == "ge" else emp.title()
+            # Short names are acronyms ("ge" → "GE"), the rest title-case.
+            label = emp.upper() if len(emp) <= 3 else emp.title()
             return f"you also spent time at {label}"
 
-    # Tier 3: Title specialty
-    if any(k in title_lower for k in ["composite", "carbon fiber", "fiber reinforced"]):
-        return "your composites work"
-    if any(
-        k in title_lower for k in ["structural", "structures", "stress", "loads", "fea", "airframe"]
-    ):
-        return "your structures work"
-    if any(
-        k in title_lower
-        for k in ["quality", "mrb", "supplier", "manufacturing engineer", "production"]
-    ):
-        return "your manufacturing and quality background"
-    if any(k in title_lower for k in ["materials", "metallurgy", "alloy", "coating"]):
-        return "your materials science background"
-    if any(k in title_lower for k in ["additive", "3d print"]):
-        return "your additive manufacturing work"
+    # Tier 3: Title specialty — the profile's per-focus-area hooks, in order.
+    for fa in profile.focus_areas:
+        if fa.hook and any(k in title_lower for k in fa.hook_keywords):
+            return fa.hook
 
     # Tier 3.5: title-derived hook — always prefer the contact's real
     # title over GENERIC so the drafter has something true to anchor on
@@ -651,6 +643,7 @@ def ingest_contacts(
     hunter_provider: HunterProvider | None = None,
     apollo_provider: ApolloProvider | None = None,
     company_news: str | None = None,
+    target_focus: str | None = None,
 ) -> list[ContactCandidate]:
     """Source-agnostic ingest: enrich → classify → hook → save.
 
@@ -670,7 +663,12 @@ def ingest_contacts(
     For Serper-discovered candidates (no persona/email/hook pre-set) this is
     byte-for-byte the previous behavior. Writes one ``contacts`` row per
     candidate; does NOT transition company state (the caller owns that).
+
+    *target_focus* is the run's target focus area (Application mode resolves it
+    from a posting's function/keywords, #61); when set, contacts whose
+    focus_area matches it score the ranker's team-match signal.
     """
+    profile = load_profile()
     company_domain = _company_domain(company_id, company_slug)
     # Per-batch exhaustion flags shared across candidates: once a provider hits
     # its monthly cap we skip it for the rest of the batch (Hunter → Apollo).
@@ -700,13 +698,13 @@ def ingest_contacts(
             # guesses are discarded — the forced labels win).
             if candidate.snippet and not candidate.hook:
                 _, _, hook_signal = _classify_contact(
-                    candidate, company_slug, anthropic_client
+                    candidate, company_slug, anthropic_client, profile=profile
                 )
             else:
                 hook_signal = None
         else:
             cls_persona, cls_focus, hook_signal = _classify_contact(
-                candidate, company_slug, anthropic_client
+                candidate, company_slug, anthropic_client, profile=profile
             )
             persona = forced_persona or cls_persona
             focus_area = candidate.focus_area or cls_focus
@@ -716,6 +714,7 @@ def ingest_contacts(
             candidate,
             hook_signal=hook_signal,
             company_news=company_news,
+            profile=profile,
         )
 
         enriched_candidate = ContactCandidate(
@@ -749,8 +748,9 @@ def ingest_contacts(
 
         # Referral-likelihood ranking (#11): deterministic, explainable. Score the
         # enriched candidate, log the per-signal breakdown (acceptance: "per-signal
-        # contributions logged"), and persist score + reasons for the gate to order on.
-        rank = rank_contact(enriched_candidate)
+        # contributions logged"), and persist score + reasons for the gate to order
+        # on. target_focus (#61) adds the team-match signal when the run has one.
+        rank = rank_contact(enriched_candidate, target_focus=target_focus)
         _LOG.info(
             "rank %s = %d (%s)", candidate.full_name, rank.total, rank.summary()
         )
@@ -770,8 +770,10 @@ def ingest_contacts(
                     company_id,
                     candidate.full_name,
                     candidate.title,
-                    persona.value,
-                    focus_area.value,
+                    str(persona),
+                    # str() covers both a FocusArea member and a custom-profile
+                    # area label (#61) — identical text either way.
+                    str(focus_area),
                     candidate.linkedin_url,
                     email_result.email,
                     int(email_result.verified),
@@ -852,6 +854,7 @@ def find_contacts(
     anthropic_client=None,
     location: str | None = None,
     role_keywords: list[str] | None = None,
+    target_focus: str | None = None,
 ) -> list[ContactCandidate]:
     """Run the 5-phase Finder pipeline for *company_slug*.
 
