@@ -126,6 +126,14 @@ Versioning: [Semantic Versioning](https://semver.org/)
   acceptance "import layer at 95% branch incl. malformed-input paths" met.
 
 ### Fixed
+- **Drafter/critic contradiction on "came across" (issue #65, found in
+  validation).** The voice guide and every persona template deliberately model
+  "came across {a specific thing}" as honest context-setting ("came across your
+  hiring post for {Role}"), but the critic's `scan_ai_tells` flagged *any* "I came
+  across" as a cold-open tell → an automatic `CRITIC_HOLD` on a draft written to
+  spec. Narrowed the tell to "stumbled upon" only (the genuine cliché); the
+  generic company version ("I came across your company") stays hard-failed by the
+  guardrail forbidden-phrase list. The scanner and the voice guide now agree.
 - **Host-token run loop stalled at draft→approve (issue #50, found in
   validation).** The `network_run_host plan` state machine keyed the `draft` step
   solely off the company being `SELECTED`, but nothing advances a company
