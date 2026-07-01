@@ -158,8 +158,14 @@ _AI_TELL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("filler opener (hope-this-finds-you)", re.compile(
         r"\bi hope (?:this (?:message|email|note|letter) )?finds you\b"
         r"|\bi hope (?:you(?:'re| are)|things are)[^.!?]{0,20}\bwell\b", re.I)),
-    ("cold-open (came-across/stumbled-upon)", re.compile(
-        r"\bi (?:came across|stumbled (?:up)?on)\b", re.I)),
+    # "stumbled upon/on" only — NOT "came across". The voice guide and every
+    # persona template deliberately model "came across {a specific thing}" as
+    # honest context-setting ("came across your hiring post for {Role}"), so
+    # flagging it here contradicted the drafter and held good drafts (#65). The
+    # generic company version ("I came across your company") is still hard-failed
+    # by the guardrail forbidden-phrase list.
+    ("cold-open (stumbled-upon)", re.compile(
+        r"\bi stumbled (?:up)?on\b", re.I)),
     ("reaching-out cliché", re.compile(
         r"\bi (?:wanted to reach out|am reaching out to"
         r"|am writing to (?:express|inquire|introduce))\b", re.I)),

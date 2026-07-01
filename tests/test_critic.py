@@ -274,10 +274,20 @@ class TestScanAITells:
 
     def test_detects_multiple_tells(self):
         body = (
-            "I hope this finds you well. I came across your profile. As a "
-            "passionate engineer, I would love the opportunity to connect."
+            "As a results-driven engineer, I would love the opportunity to "
+            "connect and delve into synergies with your team."
         )
         assert len(scan_ai_tells(body)) >= 3
+
+    def test_came_across_is_not_a_tell(self):
+        # #65: the voice guide + persona templates endorse "came across {specific
+        # thing}" as honest context-setting; scan_ai_tells must not hold it. (The
+        # generic "your company" version stays caught by the guardrail hard-fail.)
+        assert scan_ai_tells("I came across your hiring post for the loads role.") == []
+        assert scan_ai_tells("I came across your profile while researching composites.") == []
+
+    def test_stumbled_upon_is_still_a_tell(self):
+        assert any("cold-open" in t for t in scan_ai_tells("I stumbled upon your profile."))
 
     def test_known_ai_drafts_all_flagged(self):
         for _label, draft in _AI_DRAFTS:
@@ -306,7 +316,7 @@ class TestAntiAIDetectionGate:
             {dim: 5 for dim in RUBRIC_DIMENSIONS}
         )
         result = critique_draft(
-            body="I came across your profile and wanted to reach out.",
+            body="I wanted to reach out and connect about your structures team.",
             contact=_contact(),
             channel="COLD_EMAIL",
             source_facts="Did X.",
@@ -355,12 +365,12 @@ class TestAntiAIDetectionGate:
             {dim: 5 for dim in RUBRIC_DIMENSIONS}
         )
         result = critique_draft(
-            body="I came across your profile.",
+            body="I stumbled upon your profile.",
             contact=_contact(),
             channel="COLD_EMAIL",
             source_facts="Did X.",
             anthropic_client=client,
-            subject="I came across your profile",
+            subject="I stumbled upon your profile",
         )
         # Same tell in body + subject -> surfaced once (dedup), not duplicated.
         assert len([i for i in result.issues if "cold-open" in i]) == 1
