@@ -6,6 +6,8 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-30
+
 ### Added
 - **Host-token default-flow orchestration — `/network-run` (issue #50).** Makes
   the host-token path the **default** for the full pipeline; the Anthropic-API
@@ -87,6 +89,26 @@ Versioning: [Semantic Versioning](https://semver.org/)
   `networking-drafter` subagent that does the writing on host tokens. The
   existing API path is unchanged (kept as the headless fallback). Seam fully
   covered; the inversion + command rewiring tracks under #50 (v0.9.0).
+- **Phase A exit-gate harness (issue #20, P0 — partial).** New
+  `src/eval/exit_gate.py` measures whether the *whole* Phase A loop connects on
+  live data: Gate 1 = the Finder quality bar (the #10 scorecard PASS + contacts
+  ranked); Gate 2 = loop completeness (reach → follow-up → continue → outcome
+  each produced its artifact). Pure `evaluate_exit_gate` aggregator +
+  `ExitGateReport.render_markdown` (100% covered) + a `run_exit_gate_trial` live
+  entrypoint (isolated DB, real APIs — production state untouched). The
+  *documented live run* that finalizes #20's acceptance is pending (blocked on
+  Anthropic API credit at build time); **#20 stays open** until it lands.
+- **Reply-aware next-move drafting (issue #19, A8).** The hardest moment —
+  "they replied, now what?" — now has a drafter. `/network-nextmove <id>
+  "<their reply>"` classifies the next move from the reply text + recorded
+  outcome (deterministic, goal-advancing precedence: take the intro →
+  `THANK_INTRO`, sponsorship mention → `SPONSORSHIP_QUESTION`, open to talk →
+  `SCHEDULE_CALL`, hiring/roles → `REFERRAL_ASK`; warm reply defaults to a call)
+  and drafts it in voice through the same humanize → `hard_check` → critic gates
+  as a cold message. `--move` / `--channel` override the heuristic; the printed
+  `[QUALITY_CODE]` flags anything not `OK`. Pure `classify_next_move` +
+  `draft_next_move` in the drafter; CLI at 100%, drafter additions fully
+  branch-covered.
 
 ### Changed
 - **Import-layer hardening (issue #24, audit + tech-debt).** Two findings from
@@ -103,27 +125,18 @@ Versioning: [Semantic Versioning](https://semver.org/)
   existing-company reuse, client build, draft-on-import all now covered);
   acceptance "import layer at 95% branch incl. malformed-input paths" met.
 
-### Added
-- **Phase A exit-gate harness (issue #20, P0 — partial).** New
-  `src/eval/exit_gate.py` measures whether the *whole* Phase A loop connects on
-  live data: Gate 1 = the Finder quality bar (the #10 scorecard PASS + contacts
-  ranked); Gate 2 = loop completeness (reach → follow-up → continue → outcome
-  each produced its artifact). Pure `evaluate_exit_gate` aggregator +
-  `ExitGateReport.render_markdown` (100% covered) + a `run_exit_gate_trial` live
-  entrypoint (isolated DB, real APIs — production state untouched). The
-  *documented live run* that finalizes #20's acceptance is pending (blocked on
-  Anthropic API credit at build time); #20 stays open until it lands.
-- **Reply-aware next-move drafting (issue #19, A8).** The hardest moment —
-  "they replied, now what?" — now has a drafter. `/network-nextmove <id>
-  "<their reply>"` classifies the next move from the reply text + recorded
-  outcome (deterministic, goal-advancing precedence: take the intro →
-  `THANK_INTRO`, sponsorship mention → `SPONSORSHIP_QUESTION`, open to talk →
-  `SCHEDULE_CALL`, hiring/roles → `REFERRAL_ASK`; warm reply defaults to a call)
-  and drafts it in voice through the same humanize → `hard_check` → critic gates
-  as a cold message. `--move` / `--channel` override the heuristic; the printed
-  `[QUALITY_CODE]` flags anything not `OK`. Pure `classify_next_move` +
-  `draft_next_move` in the drafter; CLI at 100%, drafter additions fully
-  branch-covered.
+### Coverage
+- Repo at **98.85%** line+branch (gate `fail_under=98`); **1135 tests** green,
+  ruff clean. The whole host-token surface — find→classify→ingest, drafting,
+  next-move, critic, and the default `/network-run` orchestration — plus the
+  folded-in #24/#20/#19 work all land at ≥98% per the Definition of Done (#1).
+
+### Notes
+- **Tag held pending validation.** The code for #50 (host-token architecture) is
+  complete and merged, but the git tag `v0.9.0` is deliberately not cut yet:
+  #50's manual in-Claude end-to-end validation (no API credit needed) and #20's
+  live exit-gate run (blocked on Anthropic credit) are still open. Tag once both
+  land.
 
 ## [0.8.0] - 2026-06-29
 
