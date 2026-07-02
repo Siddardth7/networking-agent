@@ -6,6 +6,8 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-02
+
 ### Added
 - **`/network-coach` + explain-as-it-works (ROADMAP B3 P3, #78 — closes the
   onboarding epic #75).** The coaching layer that turns the tool into a coach
