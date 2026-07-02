@@ -12,6 +12,7 @@ import json
 import pytest
 
 import src.core.config as config_module
+from src.core.errors import ProfileError
 from src.core.profile import (
     FocusAreaDef,
     Profile,
@@ -185,6 +186,64 @@ class TestLoadProfile:
         )
         # Every entry malformed → the default taxonomy survives.
         assert load_profile().focus_areas == Profile().focus_areas
+
+    def test_env_var_selects_named_profile(self, tmp_config, monkeypatch):
+        # NETWORKING_AGENT_PROFILE makes a named profile the active one for
+        # ALL no-ref callers (drafter, guardrails, config) — review finding 1.
+        (tmp_config / "profiles").mkdir()
+        (tmp_config / "profiles" / "swe.yaml").write_text(
+            "name: swe-profile\nschool_name: MIT\n", encoding="utf-8"
+        )
+        monkeypatch.setenv("NETWORKING_AGENT_PROFILE", "swe")
+        assert load_profile().name == "swe-profile"
+        # An explicit ref still wins over the env var.
+        (tmp_config / "profiles" / "other.yaml").write_text(
+            "name: other-profile\n", encoding="utf-8"
+        )
+        assert load_profile("other").name == "other-profile"
+
+    def test_env_var_naming_missing_profile_raises(self, tmp_config, monkeypatch):
+        monkeypatch.setenv("NETWORKING_AGENT_PROFILE", "ghost")
+        with pytest.raises(FileNotFoundError, match="ghost"):
+            load_profile()
+
+    def test_invalid_yaml_raises_clean_profile_error(self, tmp_config):
+        # Review finding 2: a typo'd profile.yaml must surface as ProfileError,
+        # not a raw yaml.YAMLError traceback out of every entry point.
+        (tmp_config / "profile.yaml").write_text(
+            'school_name: "unclosed\nrole_keywords: [\n', encoding="utf-8"
+        )
+        with pytest.raises(ProfileError, match="not valid YAML"):
+            load_profile()
+
+    def test_explicit_empty_lists_are_honored(self, tmp_config):
+        # Review finding 3: `shared_employers: []` means "no employer hooks",
+        # NOT "give me the aerospace defaults".
+        (tmp_config / "profile.yaml").write_text(
+            "shared_employers: []\nidentity_markers: []\nschool_signals: []\n",
+            encoding="utf-8",
+        )
+        p = load_profile()
+        assert p.shared_employers == ()
+        assert p.identity_markers == ()
+        assert p.school_signals == ()
+        # And the empty lists actually disable the behaviors.
+        from src.agents.finder import _generate_hook
+        from src.agents.guardrails import detect_redundant_intro
+        from src.core.schemas import ContactCandidate
+
+        boeing_alum = ContactCandidate(
+            full_name="A", company_slug="boeing", title="Nurse",
+            linkedin_url="https://x/in/uiuc-grad",
+        )
+        # Tier 1 (uiuc URL) and Tier 2 (boeing slug) are disabled → falls
+        # through to the Tier-3.5 title-derived hook.
+        assert _generate_hook(boeing_alum) == "your work as Nurse"
+        assert not detect_redundant_intro("UIUC and UIUC and aerospace engineering twice")
+
+    def test_explicit_empty_focus_areas_means_structural_only(self, tmp_config):
+        (tmp_config / "profile.yaml").write_text("focus_areas: []\n", encoding="utf-8")
+        assert focus_area_names(load_profile()) == ("PEER", "ALUMNI_ACADEMIC")
 
     def test_explicit_structural_area_is_not_duplicated(self, tmp_config):
         (tmp_config / "profile.yaml").write_text(
@@ -452,6 +511,23 @@ class TestJobsHostPlanTargetFocus:
         })
         assert rc == 1
         assert "ghost" in out["error"]
+
+    def test_plan_malformed_named_profile_errors_cleanly(self, tmp_config, tmp_db, capsys):
+        # Review finding 2 at the plan verb: invalid YAML in a named profile →
+        # JSON error + rc 1, not a raw traceback.
+        (tmp_config / "profiles").mkdir()
+        (tmp_config / "profiles" / "broken.yaml").write_text(
+            'name: "unclosed\nrole_keywords: [\n', encoding="utf-8"
+        )
+        rc, out = self._plan(tmp_db, capsys, {
+            "schema": "application-feed/v1",
+            "profile_ref": "broken",
+            "applications": [{
+                "job_id": "j4", "company": "Acme", "role_title": "Engineer",
+            }],
+        })
+        assert rc == 1
+        assert "not valid YAML" in out["error"]
 
     def test_ranker_scores_target_focus_match(self):
         from src.agents.ranker import rank_contact

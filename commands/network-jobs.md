@@ -35,6 +35,13 @@ Feed path (git-ignored, mirrors the Chrome producer contract):
    resolved against that profile's focus taxonomy (`null` when ambiguous — the
    rank signal is simply skipped).
 
+   **If `profile` in the plan output is anything other than `default`, prefix
+   EVERY subsequent command in this flow (discover / ingest / link / draft /
+   critic) with `NETWORKING_AGENT_PROFILE=<profile_ref>`** — that env var is
+   how the named profile stays active for classification labels, hooks,
+   drafting identity, and guardrails; without it those stages fall back to the
+   default profile.
+
 2. **For each posting** in `postings`:
 
    a. **Role-biased discover (HTTP — no LLM)** — pass the posting's

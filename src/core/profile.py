@@ -20,10 +20,13 @@ config-dir convention) rather than rebuilding what they hold.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+
+from src.core.errors import ProfileError
 
 logger = logging.getLogger(__name__)
 
@@ -201,12 +204,19 @@ def load_profile(ref: str | None = None) -> Profile:
     """Load the profile for *ref*.
 
     Inputs: optional profile ref (an Application feed's ``profile_ref``).
+    When *ref* is None, the ``NETWORKING_AGENT_PROFILE`` env var supplies it —
+    that is how a NAMED profile stays active across the WHOLE pipeline
+    (classify, draft, guardrails, and config all call ``load_profile()`` with
+    no ref): prefix the run's commands with ``NETWORKING_AGENT_PROFILE=<ref>``.
+
     Output: a :class:`Profile`. The default ref with no ``profile.yaml`` on
     disk returns the built-in default (zero regression). A **named** ref whose
-    file is missing raises ``FileNotFoundError`` — silently drafting as the
-    wrong person is worse than failing loudly. Reads the filesystem; no other
-    side effects.
+    file is missing raises ``FileNotFoundError``; a file that is not valid
+    YAML raises :class:`ProfileError` — silently drafting as the wrong person
+    is worse than failing loudly. Reads the filesystem; no other side effects.
     """
+    if not ref:
+        ref = os.environ.get("NETWORKING_AGENT_PROFILE") or None
     path = profile_path(ref)
     if not path.exists():
         if ref and ref != "default":
@@ -215,8 +225,11 @@ def load_profile(ref: str | None = None) -> Profile:
                 "create it (see config/profile.example.yaml) or fix the ref"
             )
         return Profile()
-    with path.open(encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
+    try:
+        with path.open(encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except yaml.YAMLError as exc:
+        raise ProfileError(f"profile file {path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         logger.warning("profile file %s is not a mapping; using defaults", path)
         return Profile()
@@ -228,8 +241,11 @@ def _profile_from_dict(data: dict, name: str) -> Profile:
     defaults = Profile()
 
     def _tuple(key: str, fallback: tuple[str, ...]) -> tuple[str, ...]:
+        # None/absent → fall back; an EXPLICIT empty list is honored (a user
+        # setting `shared_employers: []` means "no employer hooks", not
+        # "give me the aerospace defaults").
         raw = data.get(key)
-        if not raw:
+        if raw is None:
             return fallback
         return tuple(str(item) for item in raw)
 
@@ -249,9 +265,21 @@ def _profile_from_dict(data: dict, name: str) -> Profile:
 
 
 def _parse_focus_areas(raw: object) -> tuple[FocusAreaDef, ...]:
-    """Parse the YAML focus_areas list; append missing structural areas."""
-    if not raw or not isinstance(raw, list):
+    """Parse the YAML focus_areas list; append missing structural areas.
+
+    Absent/non-list → the default taxonomy. An EXPLICIT empty list means "no
+    domain specialties" → just the structural areas (PEER, ALUMNI_ACADEMIC),
+    never the aerospace defaults. A non-empty list whose entries are ALL
+    malformed keeps the defaults (a broken file should not silently strip
+    the taxonomy).
+    """
+    if raw is None or not isinstance(raw, list):
         return _DEFAULT_FOCUS_AREAS
+    structural_only = tuple(
+        fa for fa in _DEFAULT_FOCUS_AREAS if fa.name in STRUCTURAL_FOCUS_AREAS
+    )
+    if not raw:
+        return structural_only
     areas: list[FocusAreaDef] = []
     for item in raw:
         if not isinstance(item, dict) or not item.get("name"):

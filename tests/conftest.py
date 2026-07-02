@@ -13,3 +13,6 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("NETWORKING_AGENT_NO_DOTENV", "1")
+# A developer's active named profile must not leak into hermetic tests
+# (profile-selection tests set it explicitly via monkeypatch).
+os.environ.pop("NETWORKING_AGENT_PROFILE", None)

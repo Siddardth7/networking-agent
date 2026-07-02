@@ -6,6 +6,25 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Fixed
+- **Profile follow-ups from the #61 post-merge code review (PR #71 findings 1–3).**
+  (1) A **named** `profile_ref` now works past the `plan` verb:
+  `load_profile()` honors a `NETWORKING_AGENT_PROFILE` env var as its default
+  ref, so prefixing the run's commands activates the named profile for every
+  no-ref caller (classification labels, hooks, drafting identity, guardrails,
+  config role-keyword fallback) — previously only plan-time resolution used
+  it and downstream stages silently fell back to the default profile.
+  `/network-jobs` documents the prefix. (2) A profile file that isn't valid
+  YAML now raises a clean `ProfileError` ("profile file … is not valid YAML")
+  instead of leaking a raw `yaml.YAMLError` traceback out of every entry
+  point via `load_config`; `network_jobs_host plan` reports it as a JSON
+  error. (3) Explicit empty lists in profile.yaml are honored instead of
+  silently falling back to the aerospace defaults: `shared_employers: []`
+  disables employer hooks (no more fabricated "you also spent time at Boeing"
+  for a non-aerospace user), same for `identity_markers`/`school_signals`/
+  `role_keywords`; `focus_areas: []` means "no domain specialties" — just the
+  structural PEER/ALUMNI_ACADEMIC areas.
+
 ### Added
 - **Profile-driven generalization — the agent drafts as a *profile*, not a
   hardcoded person (Phase B P4, issue #61; closes the Application epic #57).**
