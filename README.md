@@ -11,9 +11,9 @@ It finds the right people at a target company, drafts outreach in *your* voice (
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
-![Version](https://img.shields.io/badge/version-0.4.0-orange.svg)
-![Tests](https://img.shields.io/badge/tests-562%20passing-brightgreen.svg)
-![Coverage](https://img.shields.io/badge/coverage-~90%25-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-0.10.0-orange.svg)
+![Tests](https://img.shields.io/badge/tests-1270%20passing-brightgreen.svg)
+![Coverage](https://img.shields.io/badge/coverage-98.9%25-brightgreen.svg)
 ![Built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-8A2BE2.svg)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
 
@@ -31,7 +31,7 @@ The one thing that still works: a **warm referral**. Referred candidates are hir
 
 **Networking Agent automates the *right* way to do this** — deep personalization, the right contacts, one company at a time — instead of the spray-and-pray that's now actively penalized.
 
-> 🛰️ **Current focus:** tuned for aerospace / space-tech job seekers today. Full generalization (any field, guided onboarding) is on the [roadmap](#-roadmap) toward v1.0.
+> 🧭 **Any field.** The agent is profile-driven: `/network-setup` interviews you and builds your profile, voice, and resume library — a backend engineer, a nurse, and an aerospace stress analyst all run the same pipeline with different profiles.
 
 ---
 
@@ -72,7 +72,7 @@ Three agents, one state machine (`NEW → FOUND → SELECTED → DRAFTED → APP
 
 ## 🚀 Quick start
 
-> **Prerequisites:** Python 3.11+ · Claude Code with plugin support · an Anthropic API key (Serper is optional/free; Hunter is opt-in).
+> **Prerequisites:** Python 3.11+ · Claude Code with plugin support · a discovery key (free Serper tier or Apify). No Anthropic API key needed — the default flow runs on your Claude session's own tokens; a key only enables the headless `--api` fallback. Hunter/Apollo email enrichment is opt-in.
 
 ```bash
 # 1. Install the plugin
@@ -85,8 +85,13 @@ claude --plugin-dir ./networking-agent
 #    resume library (any field, not just aerospace):
 /network-setup
 
-# 3. Go
-/network-run spacex
+# 3. Go — Campaign mode (build a bench at a target company)…
+/network-run spacex          # aerospace example
+/network-run stripe          # …but any field works: SWE,
+/network-run mayo-clinic     # nursing, finance, whatever your profile says
+
+# …or Application mode (referrals for specific postings you're applying to)
+/network-jobs runs/applications/2026-07-02-feed.json
 ```
 
 Prefer manual setup? Copy `config/default.yaml` → `~/.networking-agent/config.yaml`
@@ -162,12 +167,9 @@ Faults that survive their regen are `SOFT_FLAG`ged — visible but approvable. T
 
 ## 🗺️ Roadmap
 
-Currently **v0.4.0** shipped; flexible-input + producer contract on `main`. The plan is two phases, with your live campaign as the proving ground:
+Currently **v0.10.0** shipped. Phase A (harden: all input sources, Finder accuracy scorecards, referral-likelihood ranking, email channel, reply → follow-up → conversation loop) and most of Phase B (host-token architecture — no API topup; Application mode — per-job-posting referrals; profile-driven generalization; guided onboarding + coaching) are done. What remains before **v1.0 public release** is the B4 polish pass: live validation on non-aerospace profiles and contributor docs.
 
-- **Phase A — harden (v0.5 → v0.8.5):** all input sources, the Finder brought to the Drafter's quality bar (audit + accuracy scorecard), warm-path/referral-likelihood ranking, the email channel, and the reply → follow-up → conversation loop.
-- **Phase B — generalize (v0.9 → v1.0):** de-hardcode to config, a generic taxonomy, a guided onboarding wizard + coaching, and a public open-source release anyone in any field can adopt.
-
-📖 Full version ladder and rationale: **[docs/ROADMAP.md](docs/ROADMAP.md)** · market thesis: **[docs/MARKET_GAP_AND_FEATURE_IDEAS](docs/MARKET_GAP_AND_FEATURE_IDEAS_2026-06-21.md)**.
+📖 Full version ladder and rationale: **[docs/ROADMAP.md](docs/ROADMAP.md)** · market thesis: **[docs/MARKET_GAP_AND_FEATURE_IDEAS](docs/MARKET_GAP_AND_FEATURE_IDEAS_2026-06-21.md)** · want to help? **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ---
 

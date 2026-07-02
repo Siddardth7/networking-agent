@@ -7,6 +7,17 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Public docs polish (B4, #83).** New `CONTRIBUTING.md` (dev setup, the
+  coverage/lint bar CI enforces, issue/PR conventions, the live-smoke how-to,
+  and the architecture ground rules: host-token inversion, profile-driven
+  never person-driven, no silent caps, fact discipline, migration rules).
+  README: stale badges fixed (v0.4.0/562 tests/~90% → v0.10.0/1270/98.9%),
+  the "tuned for aerospace" banner replaced with the profile-driven reality,
+  prerequisites corrected for the host-token era (no Anthropic key needed —
+  a discovery key is the only hard requirement), multi-domain quick-start
+  examples, roadmap section brought current, CONTRIBUTING linked.
+  `.claude-plugin/plugin.json` description rewritten listing-quality and
+  field-agnostic (was "aerospace/space job networking") + homepage added.
 - **Opt-in live-API smoke tests (#26 — the test-realism audit item).**
   `tests/test_live_smoke.py`: everything else in the suite is mocked, so
   nothing caught provider contract drift until a real run broke. Three
