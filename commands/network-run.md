@@ -31,9 +31,9 @@ python -m src.cli.network_run_host plan <slug>
 | `next` | What you do |
 |---|---|
 | `discover` | Preflight `/network-check`, then run `/network-find-here <slug>` (discover → classify each candidate via the `networking-classifier` subagent → ingest). Advances the company to `FOUND`. |
-| `select` | `items` is the rank-ordered contacts. Present them; ask which to draft for. Persist the choice: `network_run_host select <slug> --ids 1,3,5`. Advances to `SELECTED`. |
+| `select` | `items` is the rank-ordered contacts. Present them **with a one-line why each** — coach mode (#78): read the contact's `rank_reasons` (the per-signal score breakdown, e.g. "confirmed alumnus, 1st-degree connection") and hook back in plain language, so the user learns the strategy while choosing. Ask which to draft for. Persist the choice: `network_run_host select <slug> --ids 1,3,5`. Advances to `SELECTED`. |
 | `draft` | `items` is the SELECTED contacts. For each, for each channel (`LINKEDIN_CONNECTION`, `LINKEDIN_POST_CONNECTION`, `COLD_EMAIL`): run `/network-draft-here` (context → `networking-drafter` subagent → save) to get a `draft_id`, then **immediately** `/network-critic-here` on that `draft_id` (context → `networking-critic` subagent → apply). Critiquing inline avoids re-enumerating drafts. |
-| `approve` | Run `/network-approve <slug>` — the interactive marketer loop (`APPROVE` / `SKIP` / `REVISE`), which writes the `.md` artifact on full approval. |
+| `approve` | Run `/network-approve <slug>` — the interactive marketer loop (`APPROVE` / `SKIP` / `REVISE`), which writes the `.md` artifact on full approval. When presenting a draft, name its ask angle and hook source in one line (coach mode, #78) — "this one asks about hiring climate; the hook is her 787 stress work from the profile snippet" — so the review teaches, not just gates. |
 | `done` | Nothing to do; outreach_log entries are pending manual send. |
 
 The loop is fully **resumable**: the planner reads persisted state, so a run
@@ -60,6 +60,10 @@ Claude rates (see `docs/COSTS.md`); the default host path costs no API credit.
 
 ## Notes
 
+- **Coach mode (#78)**: the user may not know why the agent works this way —
+  explain choices in one line as you present them, using data already on the
+  rows (`rank_reasons`, the hook text, the assigned ask angle). For the full
+  strategy conversation, point them at `/network-coach`.
 - State lives in `~/.networking-agent/state.db`; run `/network-status` to inspect.
 - The agent never touches LinkedIn — discovery is off-platform and the human sends.
 - Both paths converge on the same DB rows and the same Markdown artifact.

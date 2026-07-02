@@ -7,6 +7,19 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **`/network-coach` + explain-as-it-works (ROADMAP B3 P3, #78 — closes the
+  onboarding epic #75).** The coaching layer that turns the tool into a coach
+  for people who don't know how to network (Tier-2 idea #4). `/network-coach`
+  is the strategy playbook grounded in this repo's actual mechanics — the
+  ranker's real weights (confirmed alumni 40 pts vs recruiter 20), the hook
+  ladder, the one-ask guardrail + per-company ask rotation, the 280-char cap,
+  follow-up cadence (2 touches, 4–7-day gap, approved-and-unanswered only),
+  Tue–Thu 9am local send windows, the #19 reply→next-move precedence table,
+  and the Campaign-vs-Application front-door choice — never generic advice.
+  Explain-as-it-works: `/network-run` (select + approve steps) and
+  `/network-jobs` (report step) now tell the host to give a one-line WHY per
+  candidate/draft using data already on the rows (`rank_reasons`, hook text,
+  assigned ask angle). Docs-only; no behavior change outside the commands.
 - **`/network-setup` guided onboarding wizard (ROADMAP B3 P2, #77).** A
   conversational interview on host tokens that builds ANY user's config —
   no aerospace assumptions. The host model interviews one section at a time

@@ -133,6 +133,8 @@ quality:
 
 | Command | Description |
 |---|---|
+| `/network-setup` | **Guided onboarding** — an interview that builds your profile, voice, and resume library (any field). |
+| `/network-coach` | The strategy, explained — why alumni-first, why one ask, what to do with each reply. |
 | `/network-check` | Preflight — verifies keys, DB integrity, config permissions, and `voice.md`. |
 | `/network-run <slug>` | Full pipeline (find → select → draft → approve → artifact), resumes from state. |
 | `/network-find <slug>` | Discover + classify contacts only; stops before drafting. |

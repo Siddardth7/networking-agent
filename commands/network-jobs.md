@@ -88,7 +88,10 @@ Feed path (git-ignored, mirrors the Chrome producer contract):
    same-req contacts get distinct ask angles (`assign_ask_angles` already takes an
    arbitrary id list — just scope the ids to the posting).
 
-4. **Report** the per-posting counts (linked / unresolved) back to the user.
+4. **Report** the per-posting counts (linked / unresolved) back to the user —
+   and coach as you go (#78): for each posting's top candidates, one line on
+   WHY (their `rank_reasons` + whether `target_focus` matched the role's
+   team). For the strategy conversation, `/network-coach`.
 
 ## Status rollup (`--status`, #60)
 
