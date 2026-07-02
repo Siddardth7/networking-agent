@@ -41,6 +41,7 @@ from src.agents.applications import (
 )
 from src.agents.finder import _get_or_create_company
 from src.core.db import init_db
+from src.core.errors import ProfileError
 from src.core.profile import load_profile, resolve_target_focus
 from src.core.schemas import ContactCandidate
 
@@ -65,7 +66,7 @@ def run_plan(args: argparse.Namespace) -> int:
 
     try:
         profile = load_profile(report.get("profile_ref"))
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ProfileError) as exc:
         print(json.dumps({"error": str(exc)}))
         return 1
 
