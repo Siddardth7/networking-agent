@@ -1,7 +1,10 @@
 {
   "name": "networking-agent",
   "version": "0.10.0",
-  "description": "Autonomous 3-agent outreach pipeline: Finder discovers contacts, Drafter generates personalized messages, Marketer runs approval loop. Distributable Claude Code plugin for aerospace/space job networking.",
-  "author": {"name": "Siddardth Pathipaka"},
-  "license": "MIT"
+  "description": "Referral-first job networking on your own Claude tokens: guided onboarding for any field (/network-setup), a Finder that discovers + ranks the right people at a target company or for a specific job posting, a Drafter that writes outreach in YOUR voice under strict anti-fabrication guardrails, a critic quality gate, follow-up scheduling, and a coaching layer that explains the strategy as it works.",
+  "author": {
+    "name": "Siddardth Pathipaka"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Siddardth7/networking-agent"
 }
