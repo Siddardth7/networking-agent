@@ -7,6 +7,24 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **`/network-setup` guided onboarding wizard (ROADMAP B3 P2, #77).** A
+  conversational interview on host tokens that builds ANY user's config —
+  no aerospace assumptions. The host model interviews one section at a time
+  and the #76 bridge validates/writes: status-aware (fresh vs update mode;
+  overwrites are backed up), config scaffold with keys kept OUT of the chat
+  (manual edit / env vars only), profile interview (identity lines, school +
+  signals — with read-it-aloud guidance since `school_name` lands verbatim in
+  the hook phrase — employers, identity markers, target roles, and a
+  host-PROPOSED focus taxonomy refined with the user), voice doc built from
+  `voice.example.md` with the validated mechanics kept verbatim and only the
+  `[CUSTOMIZE]` sections interviewed, pasted resume → provenanced
+  `resume_library.yaml` under strict fact discipline (type never inflated,
+  no invented metrics, keywords are contact-title-shaped), finishing with the
+  `network_check` doctor and pointers at both front doors. README quick start
+  now leads with `/network-setup`. E2E-validated in-Claude with a synthetic
+  ICU-nurse persona: wizard-built files drive classify options, Tier-1/2/3
+  hooks, the taxonomy resolver, the +10 rank signal, and achievement matching
+  end to end (epic #75 exit criteria).
 - **Onboarding setup bridge — ships dark (ROADMAP B3 P1, #76).** New
   `src/cli/network_setup_host.py`, the deterministic verbs the upcoming
   `/network-setup` wizard (#77) will drive: `status` (per-user-file JSON —
