@@ -13,8 +13,8 @@ from datetime import datetime
 from src.agents.ranker import rank_contact
 from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
-from src.core.profile import Profile, focus_area_names, load_profile
-from src.core.schemas import ContactCandidate, EmailResult, FocusArea, Persona
+from src.core.profile import Profile, coerce_focus_label, focus_area_names, load_profile
+from src.core.schemas import ContactCandidate, EmailResult, Persona
 from src.core.slug import canonical_linkedin_url
 from src.providers.apify import ApifyProvider
 from src.providers.apollo import ApolloProvider
@@ -158,13 +158,13 @@ def _classify_contact(
 
     tool_block = next((b for b in response.content if b.type == "tool_use"), None)
     if tool_block is None:
-        return Persona.PEER_ENGINEER, FocusArea.PEER, None
+        return Persona.PEER_ENGINEER, "PEER", None
 
     data = tool_block.input
     # Malformed tool output (non-dict input) falls back to safe defaults
     # instead of raising AttributeError mid-pipeline (AUDIT-A20).
     if not isinstance(data, dict):
-        return Persona.PEER_ENGINEER, FocusArea.PEER, None
+        return Persona.PEER_ENGINEER, "PEER", None
     return apply_classification(
         data.get("persona"), data.get("focus_area"), data.get("hook_signal"), profile=profile
     )
@@ -204,12 +204,11 @@ def apply_classification(
     D3 — done in code because the model ignored the prompt rule on strong topic
     signals), and trim the hook signal to the ceiling (dropping an empty one).
 
-    The focus label is validated against the active profile's taxonomy (#61);
-    an unknown label falls back to PEER (the pre-#61 enum-coercion behavior).
-    When the resolved label is a :class:`FocusArea` member (always true for the
-    default profile) the enum instance is returned, so existing identity checks
-    and DB writes are byte-identical; custom-profile areas come back as plain
-    strings.
+    The focus label is validated against the active profile's taxonomy (#61,
+    via the shared :func:`coerce_focus_label`); an unknown label falls back to
+    PEER (the pre-#61 enum-coercion behavior). Labels are plain strings
+    throughout — the FocusArea enum survives only as the default taxonomy's
+    label definitions.
     """
     if profile is None:
         profile = load_profile()
@@ -217,19 +216,12 @@ def apply_classification(
         persona = Persona(raw_persona or "PEER_ENGINEER")
     except ValueError:
         persona = Persona.PEER_ENGINEER
-    focus_area: str = raw_focus or "PEER"
-    if focus_area not in focus_area_names(profile):
-        focus_area = "PEER"
+    focus_area = coerce_focus_label(raw_focus, profile)
 
     if persona is Persona.ALUMNI:
         focus_area = "ALUMNI_ACADEMIC"
     elif persona is Persona.RECRUITER:
         focus_area = "PEER"
-
-    try:
-        focus_area = FocusArea(focus_area)
-    except ValueError:
-        pass  # a custom-profile area — stays a plain string
 
     raw_signal = (raw_hook_signal or "").strip()
     hook_signal = _trim_hook_signal(raw_signal) if raw_signal else None
@@ -690,8 +682,12 @@ def ingest_contacts(
         forced_persona = candidate.persona or (
             Persona.ALUMNI if candidate.alumni_confirmed else None
         )
-        if forced_persona is not None and candidate.focus_area is not None:
-            persona, focus_area = forced_persona, candidate.focus_area
+        # Source-supplied focus is validated against the active taxonomy here
+        # (ContactCandidate.focus_area is a free string since #61) — a label
+        # no profile defines falls through to the classifier, never to the DB.
+        forced_focus = coerce_focus_label(candidate.focus_area, profile, default=None)
+        if forced_persona is not None and forced_focus is not None:
+            persona, focus_area = forced_persona, forced_focus
             # D7: persona/focus are settled, but a rich snippet still holds a
             # Tier-0 hook. When no explicit hook was supplied, run the
             # classifier purely to mine its hook_signal (its persona/focus
@@ -707,7 +703,7 @@ def ingest_contacts(
                 candidate, company_slug, anthropic_client, profile=profile
             )
             persona = forced_persona or cls_persona
-            focus_area = candidate.focus_area or cls_focus
+            focus_area = forced_focus or cls_focus
 
         # Honor a source-supplied hook; otherwise generate one.
         hook = candidate.hook if candidate.hook else _generate_hook(
@@ -771,9 +767,7 @@ def ingest_contacts(
                     candidate.full_name,
                     candidate.title,
                     str(persona),
-                    # str() covers both a FocusArea member and a custom-profile
-                    # area label (#61) — identical text either way.
-                    str(focus_area),
+                    focus_area,
                     candidate.linkedin_url,
                     email_result.email,
                     int(email_result.verified),

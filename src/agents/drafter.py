@@ -32,7 +32,7 @@ from src.agents.shared import (
 )
 from src.core.config import HAIKU_MODEL, load_config, voice_doc_path
 from src.core.db import get_connection, with_writer
-from src.core.profile import Profile, load_profile
+from src.core.profile import Profile, coerce_focus_label, load_profile
 from src.core.schemas import Channel, NextMove, Outcome, Persona
 
 __all__ = [
@@ -129,19 +129,6 @@ class Draft:
     # CRITIC_HOLD verdict was issued — the calibration knob depends on
     # this being durable, not just present in the model response.
     critic_trace: str | None = None
-
-
-def _coerce_focus_label(raw: object) -> str:
-    """Validate a stored focus_area against the active profile's taxonomy (#61).
-
-    Unknown/None labels fall back to "PEER" (the pre-#61 enum-coercion
-    behavior); a custom profile's own labels pass through so its resume
-    library matches on them.
-    """
-    from src.core.profile import focus_area_names
-
-    label = str(raw) if raw is not None else ""
-    return label if label in focus_area_names(load_profile()) else "PEER"
 
 
 def _load_persona_template(persona: Persona) -> str:
@@ -386,10 +373,6 @@ def _alumni_ask_angles(school_name: str) -> tuple[str, str, str, str, str]:
         "who on the team would be the right person to talk to about the work",
     )
 
-
-# The default profile's pool — kept as a module constant because the pool for a
-# run is rebuilt from the active profile inside assign_ask_angles.
-_ALUMNI_ASK_ANGLES: tuple[str, str, str, str, str] = _alumni_ask_angles(Profile().school_name)
 
 _PEER_ASK_ANGLES: tuple[str, str, str, str, str] = (
     "what the day-to-day engineering work on their team is actually like",
@@ -874,7 +857,7 @@ def _draft_all_channels_for_contact(
     except (ValueError, TypeError):
         persona = Persona.PEER_ENGINEER
 
-    focus_area = _coerce_focus_label(contact["focus_area"])
+    focus_area = coerce_focus_label(contact["focus_area"])
 
     library = load_resume_library(library_path)
     bullets = match_achievements(
@@ -1309,7 +1292,7 @@ def build_draft_context(
         persona = Persona(contact["persona"])
     except (ValueError, TypeError):
         persona = Persona.PEER_ENGINEER
-    focus_area = _coerce_focus_label(contact["focus_area"])
+    focus_area = coerce_focus_label(contact["focus_area"])
 
     library = load_resume_library(library_path)
     bullets = match_achievements(focus_area, contact.get("title") or "", library, top_n=3)

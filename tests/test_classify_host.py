@@ -32,27 +32,27 @@ class TestApplyClassification:
     def test_engineer_passthrough(self):
         p, f, h = apply_classification("PEER_ENGINEER", "COMPOSITE_DESIGN", "led wing-box team")
         assert p is Persona.PEER_ENGINEER
-        assert f is FocusArea.COMPOSITE_DESIGN
+        assert f == FocusArea.COMPOSITE_DESIGN
         assert h == "led wing-box team"
 
     def test_alumni_focus_forced(self):
         # ALUMNI always lands on ALUMNI_ACADEMIC regardless of the model's guess.
         _, f, _ = apply_classification("ALUMNI", "COMPOSITE_DESIGN", "")
-        assert f is FocusArea.ALUMNI_ACADEMIC
+        assert f == FocusArea.ALUMNI_ACADEMIC
 
     def test_recruiter_focus_forced(self):
         _, f, _ = apply_classification("RECRUITER", "MANUFACTURING", "")
-        assert f is FocusArea.PEER
+        assert f == FocusArea.PEER
 
     def test_invalid_persona_defaults(self):
         p, f, _ = apply_classification("BOGUS", "NOPE", None)
         assert p is Persona.PEER_ENGINEER
-        assert f is FocusArea.PEER
+        assert f == FocusArea.PEER
 
     def test_none_persona_defaults(self):
         p, f, _ = apply_classification(None, None, None)
         assert p is Persona.PEER_ENGINEER
-        assert f is FocusArea.PEER
+        assert f == FocusArea.PEER
 
     def test_empty_hook_signal_is_none(self):
         _, _, h = apply_classification("PEER_ENGINEER", "PEER", "   ")

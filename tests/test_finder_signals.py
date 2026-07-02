@@ -56,7 +56,7 @@ class TestPersonaFocusOverride:
         )
         persona, focus, _ = _classify_contact(self._cand(), "x", client)
         assert persona is Persona.ALUMNI
-        assert focus is FocusArea.ALUMNI_ACADEMIC  # overridden, not COMPOSITE_DESIGN
+        assert focus == FocusArea.ALUMNI_ACADEMIC  # overridden, not COMPOSITE_DESIGN
 
     def test_recruiter_forced_to_peer_focus(self):
         client = Mock()
@@ -65,7 +65,7 @@ class TestPersonaFocusOverride:
         )
         persona, focus, _ = _classify_contact(self._cand(), "x", client)
         assert persona is Persona.RECRUITER
-        assert focus is FocusArea.PEER  # overridden, not MANUFACTURING
+        assert focus == FocusArea.PEER  # overridden, not MANUFACTURING
 
     def test_engineer_focus_preserved(self):
         client = Mock()
@@ -74,7 +74,7 @@ class TestPersonaFocusOverride:
         )
         persona, focus, _ = _classify_contact(self._cand(), "x", client)
         assert persona is Persona.PEER_ENGINEER
-        assert focus is FocusArea.COMPOSITE_DESIGN  # NOT overridden
+        assert focus == FocusArea.COMPOSITE_DESIGN  # NOT overridden
 
     def test_senior_manager_focus_preserved(self):
         client = Mock()
@@ -82,7 +82,7 @@ class TestPersonaFocusOverride:
             "SENIOR_MANAGER", "STRUCTURAL_ANALYSIS"
         )
         _, focus, _ = _classify_contact(self._cand(), "x", client)
-        assert focus is FocusArea.STRUCTURAL_ANALYSIS  # NOT overridden
+        assert focus == FocusArea.STRUCTURAL_ANALYSIS  # NOT overridden
 
 
 # ---------------------------------------------------------------------------
