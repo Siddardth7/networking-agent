@@ -7,6 +7,20 @@ Versioning: [Semantic Versioning](https://semver.org/)
 ## [Unreleased]
 
 ### Added
+- **Live E2E validation on a non-aerospace profile — PASS (B4, #84).**
+  `docs/TRIAL_B4_NONAEROSPACE_2026-07-02.md`: a synthetic backend-SWE persona
+  (Georgia Tech, ex-Stripe) built via the `/network-setup` flow ran the real
+  pipeline against Cloudflare on live Serper discovery + host-token
+  classify/draft/critic in an isolated HOME. 3/3 real engineers discovered
+  with the custom taxonomy, Tier-0 hooks from live snippets, the #61
+  `target_focus` rank signal (+10) firing on live data for the first time,
+  a 264-char draft passing the gate first try, critic OK with trace
+  persisted. **Defect found + fixed**: the wizard never created custom
+  persona templates, so a non-aerospace user's draft prompts carried the
+  built-in aerospace identity alongside their own voice doc — `/network-setup`
+  gains step 3.5 (adapt the four persona templates, write to
+  `~/.networking-agent/templates/`, set `templates_dir`); verified live that
+  the leakage disappears.
 - **Public docs polish (B4, #83).** New `CONTRIBUTING.md` (dev setup, the
   coverage/lint bar CI enforces, issue/PR conventions, the live-smoke how-to,
   and the architecture ground rules: host-token inversion, profile-driven

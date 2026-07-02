@@ -105,6 +105,28 @@ Interview for the `[CUSTOMIZE]` parts only:
 
 Show the full file, then `write voice` (same stdin pattern as above).
 
+## 3.5 Persona templates → templates/ (skip only for aerospace users)
+
+The four persona templates (`recruiter.md`, `senior_manager.md`,
+`peer_engineer.md`, `alumni.md`) tell the drafter WHO it writes as and the
+per-persona strategy. **The built-ins are voiced for the original aerospace
+user** — without this step, a non-aerospace user's draft prompts carry the
+wrong identity (found live in the B4 trial: the voice doc said one person,
+the persona template another).
+
+For each of the four files in `src/templates/personas/`: keep the strategy
+skeleton (the 4-part guidance, the rotate-the-ask rules, the tone bullets)
+and adapt ONLY the identity line, the recipient framing ("at an
+aerospace/space company" → their industry), and field-specific examples.
+Write them to `~/.networking-agent/templates/` and add to profile.yaml:
+
+```yaml
+templates_dir: ~/.networking-agent/templates
+```
+
+(Include it in the step-2 profile write, or re-run `write profile`.) A file
+you don't create falls back to the built-in — so do all four.
+
 ## 4. Resume → resume_library.yaml
 
 Ask the user to **paste their resume text or a project list**. Convert it to
