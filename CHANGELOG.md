@@ -6,6 +6,20 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-02
+
+**Public release — the Phase-B exit gate.** No functional changes since
+0.10.5; this release declares the bar met: a stranger in any field can
+install the plugin, self-onboard through `/network-setup`, and run
+referral-first outreach on their own Claude session's tokens — profile-driven
+identity and taxonomy (#61), two front doors (company Campaigns and
+per-posting Application mode, #57), a drafter under hard anti-fabrication
+guardrails with a critic gate, capped follow-ups and reply-aware next moves,
+and a coaching layer that explains the strategy as it works (#75). Validated
+end to end on a live non-aerospace profile
+(`docs/TRIAL_B4_NONAEROSPACE_2026-07-02.md`). 1,270 hermetic tests + 3
+opt-in live smoke tests at 98.97% line+branch coverage.
+
 ## [0.10.5] - 2026-07-02
 
 ### Added

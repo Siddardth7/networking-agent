@@ -152,7 +152,8 @@ Tier-3 hooks, and the ranker's `target_focus` (resolved from free-form
   → role/req targeting shipped via Application mode (#57/#61); the
   early-applicant timing signal stays a post-1.0 candidate.
 
-**Phase B exit gate = v1.0 = PUBLIC RELEASE (dev/CLI, open-source):** a stranger
+**Phase B exit gate = v1.0 = PUBLIC RELEASE (dev/CLI, open-source): ✅ REACHED
+2026-07-02 (tag v1.0.0).** The original bar: a stranger
 in any field can install (via the plugin/CLI), self-onboard, and run it
 successfully.
 
