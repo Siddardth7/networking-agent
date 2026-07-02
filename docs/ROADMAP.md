@@ -127,12 +127,15 @@ taxonomy drives the classifier schema (API + host), the achievement matcher,
 Tier-3 hooks, and the ranker's `target_focus` (resolved from free-form
 `function`/`target_keywords` via `resolve_target_focus`).
 
-### B3 · Guided onboarding + coaching *(v0.10.0)*
+### B3 · Guided onboarding + coaching *(v0.10.0)* ✅ SHIPPED (epic #75)
 - **Setup wizard** that builds *any* user's profile — voice.md, resume_library,
   target roles, school, focus areas, employers. The "fully generic" goal.
+  → `/network-setup` (host-driven interview) + the `network_setup_host`
+  bridge (validated writes, backups); README quick start leads with it.
 - **Coaching layer** — the agent explains the strategy as it works (why
   alumni-first, why one ask, what to say on reply). Tool → coach for people who
-  don't know how to network. (Tier-2 #4.)
+  don't know how to network. (Tier-2 #4.) → `/network-coach` playbook +
+  one-line whys in `/network-run` and `/network-jobs`.
 
 ### B4 · Public polish *(v0.10.5)*
 - At least one **live-API smoke test** (everything is mocked today).
