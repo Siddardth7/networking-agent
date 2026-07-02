@@ -6,6 +6,8 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-07-02
+
 ### Added
 - **Live E2E validation on a non-aerospace profile — PASS (B4, #84).**
   `docs/TRIAL_B4_NONAEROSPACE_2026-07-02.md`: a synthetic backend-SWE persona
