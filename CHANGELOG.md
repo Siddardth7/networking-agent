@@ -6,6 +6,23 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Onboarding setup bridge — ships dark (ROADMAP B3 P1, #76).** New
+  `src/cli/network_setup_host.py`, the deterministic verbs the upcoming
+  `/network-setup` wizard (#77) will drive: `status` (per-user-file JSON —
+  config.yaml unfilled REPLACE_ME keys, profile validity + focus areas via
+  the real #61 loader, voice size with truncation warning, resume library
+  project/bullet counts via the real `ResumeLibrary` model; errors as
+  messages, never tracebacks), `scaffold` (the existing
+  `write_default_config` skeleton, never overwrites), and
+  `write profile|voice|resume` (stdin → validate with the runtime
+  loaders → timestamped `.bak` of any existing file → write the raw text so
+  user comments survive; invalid content refused with the validator's
+  message and the existing file untouched; unknown profile keys flagged as
+  typo warnings). config.yaml stays scaffold-only — API keys remain a manual
+  edit the doctor verifies. No behavior change; nothing calls the bridge
+  until P2. Design: `docs/ONBOARDING_DESIGN_2026-07-02.md` (epic #75).
+
 ## [0.9.5] - 2026-07-02
 
 ### Changed
