@@ -81,20 +81,19 @@ claude plugin install https://github.com/Siddardth7/networking-agent
 #    …or run it locally from a clone:
 claude --plugin-dir ./networking-agent
 
-# 2. Create your config
-mkdir -p ~/.networking-agent
-cp config/default.yaml   ~/.networking-agent/config.yaml
-cp config/voice.example.md ~/.networking-agent/voice.md   # describe your tone
-chmod 600 ~/.networking-agent/config.yaml                  # required
+# 2. Onboard — a guided interview builds your profile, voice, and
+#    resume library (any field, not just aerospace):
+/network-setup
 
-# 3. Add your Anthropic key to ~/.networking-agent/config.yaml, then verify
-/network-check
-
-# 4. Go
+# 3. Go
 /network-run spacex
 ```
 
-`/network-check` tells you exactly what's missing **before** you spend any API credits.
+Prefer manual setup? Copy `config/default.yaml` → `~/.networking-agent/config.yaml`
+(`chmod 600`), fill your keys, and adapt `config/profile.example.yaml`,
+`config/voice.example.md`, and `config/resume_library.example.yaml` next to it.
+Either way, `/network-check` tells you exactly what's missing **before** you
+spend any API credits.
 
 <details>
 <summary><b>⚙️ Configuration details</b></summary>
