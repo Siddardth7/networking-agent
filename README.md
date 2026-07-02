@@ -2,205 +2,408 @@
 
 # 🤝 Networking Agent
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=3500&pause=800&center=true&vCenter=true&width=720&lines=Skip+the+ATS+black+hole.;Land+interviews+through+referrals%2C+not+spam.;Your+voice.+The+right+people.+One+company+a+day." alt="Typing tagline" />
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=3500&pause=800&center=true&vCenter=true&width=720&lines=Skip+the+ATS+black+hole.;Land+interviews+through+referrals%2C+not+spam.;Your+voice.+The+right+people.+Any+field." alt="Skip the ATS black hole. Land interviews through referrals, not spam." />
 
-**An autonomous, 3-agent networking pipeline for job seekers — built as a Claude Code plugin.**
-It finds the right people at a target company, drafts outreach in *your* voice (not generic AI mush), runs it through a quality gate, and walks you through approval — all from slash commands.
+### The referral engine for your job search — built as a Claude Code plugin.
+
+It finds the **right people** at a company (or for a specific job posting), ranks them by
+who's actually likely to help, drafts outreach in **your voice** under hard anti-fabrication
+guardrails, and coaches you through every reply — **on your own Claude tokens. No API bill.**
 
 <br/>
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+[![CI](https://github.com/Siddardth7/networking-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Siddardth7/networking-agent/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Siddardth7/networking-agent?color=brightgreen)](https://github.com/Siddardth7/networking-agent/releases)
+[![License](https://img.shields.io/github/license/Siddardth7/networking-agent?color=blue)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)
 ![Tests](https://img.shields.io/badge/tests-1270%20passing-brightgreen.svg)
 ![Coverage](https://img.shields.io/badge/coverage-98.9%25-brightgreen.svg)
-![Built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-8A2BE2.svg)
-![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
+[![Built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-8A2BE2.svg)](https://claude.com/claude-code)
 
-[Why it exists](#-why-it-exists) · [Features](#-features) · [How it works](#-how-it-works) · [Quick start](#-quick-start) · [Commands](#-commands) · [Roadmap](#-roadmap) · [Docs](#-documentation)
+**[Why](#-the-problem)** · **[See it work](#-see-it-work)** · **[Quick start](#-quick-start-3-commands)** · **[How it works](#-how-it-works)** · **[Commands](#-command-reference)** · **[Trust](#%EF%B8%8F-why-you-can-trust-the-drafts)** · **[FAQ](#-faq)**
+
+<sub>⭐ If this saves you one cold application, star it — it helps other job seekers find it.</sub>
 
 </div>
 
 ---
 
-## 💡 Why it exists
+## 💡 The problem
 
-The job funnel is flooded with AI-generated noise — applications surged **45.5%** while postings *dropped*, popular roles draw **200–400 applicants in 48 hours**, and recruiters now spot generic AI outreach in ~20 seconds and reject it. Mass-applying is a losing game.
+The job funnel is drowning in AI noise. Applications surged **45.5%** while postings *dropped*.
+Popular roles draw **200–400 applicants in 48 hours**. Recruiters spot generic AI outreach in
+**~20 seconds** and bin it. Mass-applying is a losing game — and the tools that "help" you
+mass-apply are making it worse.
 
-The one thing that still works: a **warm referral**. Referred candidates are hired at **~28.5% vs ~2.7%** for cold applicants — roughly **10×**. And a *personalized* connection note gets **72% more replies** than a generic one. The rule that wins is **"5 personalized messages to the right people beat 50 generic ones."**
+What still works is embarrassingly old-fashioned: **a warm referral.**
 
-**Networking Agent automates the *right* way to do this** — deep personalization, the right contacts, one company at a time — instead of the spray-and-pray that's now actively penalized.
+<div align="center">
 
-> 🧭 **Any field.** The agent is profile-driven: `/network-setup` interviews you and builds your profile, voice, and resume library — a backend engineer, a nurse, and an aerospace stress analyst all run the same pipeline with different profiles.
+| | 📨 Cold application | 🤝 Warm referral |
+|---|:---:|:---:|
+| Hire rate | ~2.7% | **~28.5%** (≈10×) |
+| Reply rate to generic notes | baseline | **+72%** when personalized |
+| What recruiters do with it | auto-triage | actually read it |
+
+</div>
+
+**The winning rule: 5 personalized messages to the right people beat 50 generic ones.**
+That's the entire design philosophy of this agent — it automates the *right* way to network,
+not the spray-and-pray that's now actively penalized.
+
+> [!NOTE]
+> **Works for any field.** The agent is profile-driven: a guided interview builds *your*
+> profile, voice, and resume library. A backend engineer, an ICU nurse, and an aerospace
+> stress analyst run the same pipeline with different profiles. (Proven in a
+> [live end-to-end trial](docs/TRIAL_B4_NONAEROSPACE_2026-07-02.md).)
 
 ---
 
-## ✨ Features
+## 🎬 See it work
 
-| | |
-|---|---|
-| 🎯 **Finds the right people** | Discovers contacts at a target company and classifies them by persona (alumni · hiring manager · peer · recruiter) — alumni-first, because they reply 60–80% of the time. |
-| ✍️ **Your voice, not generic AI** | A validated **4-part message model** (Intro → Source → Hook → Close), specialized per persona, grounded in your résumé and `voice.md`. |
-| 🔄 **Ask-rotation** | Several contacts at the same company get **different** questions (sponsorship, who-to-talk-to, culture, transition…) so a batch reads as real outreach, not one copied script. |
-| 🧹 **Humanizer + quality gate** | A deterministic tell-stripper plus **hard guardrails + a Sonnet critic** catch fabrication, placeholders, over-length notes, and AI tics before anything reaches you. |
-| 📥 **Bring leads from anywhere** | Source-agnostic import — **Apollo, Apify, a Cowork + Chrome capture, or a hand-made CSV/JSON** all normalize into one pipeline. `/network-import leads.csv --draft`. |
-| 🔒 **Local-first & private** | Your keys, a local SQLite DB, `chmod 600` config enforcement, and one-command GDPR purge. Nothing leaves your machine beyond contact discovery. |
-| 💸 **Free-tier friendly** | Zero-cost defaults (no paid email lookups), search caching, and ~**$0.15–0.30 per company** in Claude usage. |
+Everything happens in your Claude Code session. Here's the real flow, condensed
+(the candidates, ranks, and draft below are from the actual live validation trial):
 
----
+**1 · Onboard once — a conversation, not a config file**
 
-## 🛠 How it works
+```text
+you    ❯ /network-setup
 
-```mermaid
-flowchart LR
-    subgraph IN [" Inputs "]
-      A[🔍 Serper search]
-      B[📄 Apollo / Apify / CSV]
-      C[🌐 Cowork + Chrome capture]
-    end
-    IN --> F[🧭 Finder<br/>classify · hook]
-    F --> D[✍️ Drafter<br/>4-part voice · ask-rotation · humanizer]
-    D --> Q{🛡️ Quality gate<br/>guardrails + critic}
-    Q --> M[✅ Marketer<br/>approval loop]
-    M --> O[(📨 Outreach artifact)]
+agent  ◆ Nothing configured yet — let's build your profile.
+         What field are you in, and what roles are you hunting?
+
+you    ❯ Backend engineering — distributed systems roles.
+
+agent  ◆ Proposing a focus taxonomy for your field:
+           BACKEND  ·  distributed systems / APIs / services
+           INFRA    ·  infrastructure / platform / SRE
+         Look right? We'll also capture your school, past employers,
+         and target titles — they become your warm-signal detectors.
+         …
+         ✔ profile.yaml           written (backed up on every change)
+         ✔ voice.md               written — drafts will sound like YOU
+         ✔ resume_library.yaml    written — the only facts drafts may use
+         ✔ /network-check         all green
 ```
 
-Three agents, one state machine (`NEW → FOUND → SELECTED → DRAFTED → APPROVED → SENT`).
-`/network-run` always resumes from the current state, so it's safe to re-run after an interruption.
+**2 · Run a company — ranked people, with reasons**
+
+```text
+you    ❯ /network-run cloudflare
+
+agent  ◆ Discovered & classified 3 people. Ranked by referral likelihood:
+
+         1. John Knudson — Distributed Systems Engineering        [17 pts]
+            why: focus matches your target role (+10) · engineer who
+            can refer (+5) · reachable (+2)
+            hook: "prior Senior Backend Engineer at Agora"
+
+         2. Daniel Rivas — Systems Engineer, 8+ yrs distributed    [17 pts]
+         3. Jose I.     — Systems Engineer, backend-lean           [17 pts]
+
+         Who should I draft for?
+```
+
+**3 · Drafts in your voice — gated, explained, yours to approve**
+
+```text
+agent  ◆ Draft for John (LinkedIn note · 264/280 chars):
+
+         │ Hi John, I'm finishing my MS CS at Georgia Tech (distributed
+         │ systems) and came across your profile — the path from senior
+         │ backend at Agora to distributed-systems work at Cloudflare
+         │ caught my eye. Would value connecting and hearing what the
+         │ work is actually like.
+
+         ✔ guardrails OK  ·  ✔ critic OK  ·  every fact traced to your resume
+         The ask is rotated: John gets "what's the work like", Daniel gets
+         "how did you break in" — a batch never reads as one copied script.
+
+         APPROVE · SKIP · REVISE ?
+```
+
+**4 · They replied? The agent knows the next move**
+
+```text
+you    ❯ /network-outcome 1 REPLIED --notes "says they're hiring on his team"
+
+agent  ◆ Reply mentions hiring → next move: REFERRAL_ASK.
+         This is the moment the thread was building toward. Draft ready —
+         one ask, thanks first, in your voice. (/network-coach explains why.)
+```
+
+> [!TIP]
+> Applying to **specific postings**? `/network-jobs feed.json` is the second front door:
+> it finds referral candidates **per job posting**, links them to each `job_id`, and answers
+> *"do I have a referral for this req yet?"* while you decide to apply or drop.
 
 ---
 
-## 🚀 Quick start
+## 🚀 Quick start (3 commands)
 
-> **Prerequisites:** Python 3.11+ · Claude Code with plugin support · a discovery key (free Serper tier or Apify). No Anthropic API key needed — the default flow runs on your Claude session's own tokens; a key only enables the headless `--api` fallback. Hunter/Apollo email enrichment is opt-in.
+> **Prerequisites:** Python 3.11+ · [Claude Code](https://claude.com/claude-code) ·
+> one discovery key ([Serper](https://serper.dev) free tier is plenty, or Apify).
+> **No Anthropic API key needed** — the pipeline runs on your Claude session's own tokens.
 
 ```bash
-# 1. Install the plugin
+# 1 · Install
 claude plugin install https://github.com/Siddardth7/networking-agent
-
-#    …or run it locally from a clone:
-claude --plugin-dir ./networking-agent
-
-# 2. Onboard — a guided interview builds your profile, voice, and
-#    resume library (any field, not just aerospace):
+```
+```text
+# 2 · Onboard (guided interview — any field, ~10 minutes)
 /network-setup
-
-# 3. Go — Campaign mode (build a bench at a target company)…
-/network-run spacex          # aerospace example
-/network-run stripe          # …but any field works: SWE,
-/network-run mayo-clinic     # nursing, finance, whatever your profile says
-
-# …or Application mode (referrals for specific postings you're applying to)
-/network-jobs runs/applications/2026-07-02-feed.json
+```
+```text
+# 3 · Go
+/network-run stripe                  # Campaign mode: build a bench at a company
+/network-jobs my-postings.json       # Application mode: referrals per job posting
 ```
 
-Prefer manual setup? Copy `config/default.yaml` → `~/.networking-agent/config.yaml`
-(`chmod 600`), fill your keys, and adapt `config/profile.example.yaml`,
-`config/voice.example.md`, and `config/resume_library.example.yaml` next to it.
-Either way, `/network-check` tells you exactly what's missing **before** you
-spend any API credits.
+That's genuinely it. `/network-check` (the doctor) runs at the end of setup and tells you
+exactly what's missing **before** anything spends a credit.
 
 <details>
-<summary><b>⚙️ Configuration details</b></summary>
+<summary><b>⚙️ Manual setup & configuration reference</b></summary>
+<br/>
+
+Prefer files over interviews? Copy and adapt:
+
+```bash
+mkdir -p ~/.networking-agent
+cp config/default.yaml              ~/.networking-agent/config.yaml   # then: chmod 600
+cp config/profile.example.yaml      ~/.networking-agent/profile.yaml
+cp config/voice.example.md          ~/.networking-agent/voice.md
+cp config/resume_library.example.yaml ~/.networking-agent/resume_library.yaml
+```
 
 ```yaml
 # ~/.networking-agent/config.yaml
 keys:
-  anthropic_api_key: "sk-ant-..."
-  serper_api_key: "..."          # free tier is plenty
-  hunter_api_key: "..."          # optional — only for cold-email lookups
+  serper_api_key: "..."            # discovery — free tier is plenty
+  apify_api_key: "..."             # optional richer discovery lane
+  anthropic_api_key: "sk-ant-..."  # optional — ONLY for the headless --api fallback
+  hunter_api_key: "..."            # optional — cold-email lookups (off by default)
 
 providers:
   serper_monthly_limit: 100
-  search_cache_ttl_days: 14      # repeat runs on a company are free
+  search_cache_ttl_days: 14        # re-running a company is free
 
 pipeline:
   finder_limit: 5
-  enable_email_enrichment: false # opt-in; off = zero Hunter spend
+  enable_email_enrichment: false   # opt-in; off = zero Hunter spend
 
 quality:
   linkedin_char_limit: 280
   email_word_limit: 150
   enable_critic: true
-  opener_max_repeats: 2
   enable_ask_rotation: true
 ```
 
-**Environment variables** (`ANTHROPIC_API_KEY`, `SERPER_API_KEY`, `HUNTER_API_KEY`) take precedence over the file if you prefer not to write keys to disk.
+Environment variables (`SERPER_API_KEY`, `APIFY_API_KEY`, `ANTHROPIC_API_KEY`,
+`HUNTER_API_KEY`) take precedence over the file.
 
-**🔐 Trust model:** the full text of `voice.md` and your `resume_library.yaml` bullets is embedded verbatim in every drafting prompt — treat them like code you wrote. Only use voice templates you've read and trust.
+**🔐 Trust model:** the full text of `voice.md` and your resume bullets is embedded verbatim
+in every drafting prompt — treat them like code you wrote. Only use templates you've read.
 
 </details>
-
----
-
-## 🧩 Commands
-
-| Command | Description |
-|---|---|
-| `/network-setup` | **Guided onboarding** — an interview that builds your profile, voice, and resume library (any field). |
-| `/network-coach` | The strategy, explained — why alumni-first, why one ask, what to do with each reply. |
-| `/network-check` | Preflight — verifies keys, DB integrity, config permissions, and `voice.md`. |
-| `/network-run <slug>` | Full pipeline (find → select → draft → approve → artifact), resumes from state. |
-| `/network-find <slug>` | Discover + classify contacts only; stops before drafting. |
-| `/network-import <file>` | **Import leads from any source** (Apollo/Apify/Cowork/CSV) and optionally `--draft`. |
-| `/network-draft <slug>` | Generate drafts for selected contacts. |
-| `/network-approve <slug>` | Enter the approval loop. |
-| `/network-status [slug]` | Pipeline state for one company or all. |
-| `/network-dry-run <slug>` | Simulate a run — no API calls, no writes. |
-| `/network-providers` | Show API quota usage / remaining credits. |
-| `/network-purge [slug]` | Delete stored data (GDPR) for one company or all. |
-
----
-
-## 🛡️ Quality gate
-
-Every draft passes three layers before it can be approved:
-
-1. **Generation-fault regen** — blocklist phrases, placeholder tokens, multi-asks, repeated intros, and over-used openers each trigger one corrective regeneration.
-2. **Hard guardrails (deterministic)** — fabricated metrics, surviving placeholders, and over-length messages are `HARD_FAIL`ed (and redacted) — unapprovable without `--force`.
-3. **Critic (Sonnet)** — six rubric dimensions; a draft is held (`CRITIC_HOLD`) only on a severe or multiply-weak score, with a persisted `Held because:` reason.
-
-Faults that survive their regen are `SOFT_FLAG`ged — visible but approvable. Tune everything under `quality:` in `config.yaml`.
-
----
-
-## 🗺️ Roadmap
-
-**v1.0 shipped** — the public release. Phase A (harden: all input sources, Finder accuracy scorecards, referral-likelihood ranking, email channel, reply → follow-up → conversation loop) and Phase B (host-token architecture — no API topup; Application mode — per-job-posting referrals; profile-driven generalization; guided onboarding + coaching; public polish with live validation) are complete. Post-1.0 candidates (early-applicant timing, non-dev surfaces) are tracked in the roadmap doc.
-
-📖 Full version ladder and rationale: **[docs/ROADMAP.md](docs/ROADMAP.md)** · market thesis: **[docs/MARKET_GAP_AND_FEATURE_IDEAS](docs/MARKET_GAP_AND_FEATURE_IDEAS_2026-06-21.md)** · want to help? **[CONTRIBUTING.md](CONTRIBUTING.md)**.
-
----
-
-## 📚 Documentation
-
-Everything lives in **[`docs/`](docs/README.md)** (indexed): the roadmap, sourcing research, the source-agnostic input design, the Cowork + Chrome producer contract, cost breakdown, and trial scorecards.
-
----
-
-## 💸 Cost
-
-All AI calls use `claude-haiku-4-5` (Sonnet for the critic). **~$0.15–0.30 per company** with free-tier defaults; re-running the same company is essentially free (search responses are cached). See **[docs/COSTS.md](docs/COSTS.md)**.
-
----
 
 <details>
 <summary><b>🩺 Troubleshooting</b></summary>
+<br/>
 
-- **`ANTHROPIC_API_KEY not set or invalid`** → set it in `config.yaml` under `keys.anthropic_api_key` or export it; verify at [console.anthropic.com](https://console.anthropic.com).
-- **`config.yaml permissions too open (expected 600)`** → `chmod 600 ~/.networking-agent/config.yaml`.
-- **`Serper/Hunter quota exhausted`** → check `/network-providers`; use `/network-dry-run` to test without spend.
-- **`voice.md not found`** → `cp config/voice.example.md ~/.networking-agent/voice.md` (the run continues with a neutral tone otherwise).
-- **`DB integrity check failed`** → the SQLite DB is at `~/.networking-agent/state.db`; `/network-purge` to clear a company, or delete `state.db` to reset everything.
+- **`config.yaml permissions too open (expected 600)`** → `chmod 600 ~/.networking-agent/config.yaml`
+- **`Serper/Hunter quota exhausted`** → `/network-providers` shows remaining credits; `/network-dry-run` tests without spend
+- **`voice.md not found`** → run `/network-setup`, or `cp config/voice.example.md ~/.networking-agent/voice.md`
+- **Drafts carry the wrong identity** → your profile needs its own persona templates: re-run `/network-setup` (step 3.5 writes them)
+- **`DB integrity check failed`** → state lives in `~/.networking-agent/state.db`; `/network-purge <slug>` clears a company, deleting the file resets everything
 
 </details>
 
 ---
 
+## 🛠 How it works
+
+**One engine, two front doors, and a human hand on the send button.**
+
+```mermaid
+flowchart LR
+    subgraph doors [" Two front doors "]
+      R["🏢 /network-run<br/><i>a company</i>"]
+      J["📋 /network-jobs<br/><i>your job postings</i>"]
+    end
+    subgraph engine [" The engine — deterministic Python + your Claude tokens "]
+      F["🧭 Finder<br/>discover · classify · hook"]
+      RK["📊 Ranker<br/>referral likelihood,<br/>every point explained"]
+      D["✍️ Drafter<br/>your voice · 4-part model<br/>ask-rotation"]
+      G{"🛡️ Quality gate<br/>guardrails + critic"}
+    end
+    Y["🧑 YOU<br/>review · approve · send"]
+    L["🔁 Reply loop<br/>outcomes · follow-ups ×2<br/>next-move drafts"]
+    R --> F
+    J --> F
+    F --> RK --> D --> G --> Y --> L
+    L -.->|coached by /network-coach| Y
+```
+
+The architecture inverts the usual agent design: **your Claude session's model does the
+judgment** (classify, draft, critique) while deterministic Python does everything that must
+never hallucinate — discovery HTTP, dedup, ranking math, guardrail regexes, scheduling,
+persistence. A state machine (`NEW → FOUND → SELECTED → DRAFTED → APPROVED`) makes every
+run resumable: interrupt anywhere, `/network-run` picks up exactly where it left off.
+
+| | |
+|---|---|
+| 🎯 **Ranked, not scraped** | Deterministic referral-likelihood scoring: confirmed alumni **+40**, 1st-degree **+30**, recruiter **+20**, on-the-target-team **+10**… every point comes with its reason attached. |
+| ✍️ **Your voice, enforced** | A validated 4-part model (Intro → Source → Hook → Close) with a hard **specificity gate**: a hook either names something real from *their* profile or gets omitted. No filler, ever. |
+| 🚫 **Fabrication is impossible-by-design** | Drafts may only state facts from your provenance-tagged resume library. Coursework is never dressed up as employment. Invented metrics are `HARD_FAIL`ed. |
+| 🔄 **Ask-rotation** | Five alumni at one company get five *different* questions — sponsorship, culture, who-to-talk-to, their transition — so short replies compose into the full picture. |
+| 🔁 **The whole loop** | Capped follow-ups (2 touches, 4–7-day gap), timezone-aware send windows (Tue–Thu ~9am *their* time), reply classification → next-move drafts. |
+| 🎓 **A coach, not just a tool** | `/network-coach` explains the strategy in terms of the agent's real mechanics, and the pipeline gives one-line whys as it presents each candidate and draft. |
+| 📥 **Leads from anywhere** | Apollo, Apify, browser captures, hand-made CSV/JSON — everything normalizes into one pipeline: `/network-import leads.csv --draft`. |
+| 🔒 **Local-first & private** | Your keys, a local SQLite DB, `chmod 600` enforced, one-command GDPR purge. The agent **never touches LinkedIn** — discovery is off-platform and *you* send. |
+
+---
+
+## 🧩 Command reference
+
+<details open>
+<summary><b>Getting started</b></summary>
+
+| Command | What it does |
+|---|---|
+| `/network-setup` | 🧙 Guided onboarding — builds your profile, voice, persona templates, and resume library. Re-runnable; every overwrite is backed up. |
+| `/network-coach` | 🎓 The strategy, explained — why alumni-first, why one ask, what each reply means. |
+| `/network-check` | 🩺 The doctor — verifies keys, DB, permissions, and config before you spend anything. |
+
+</details>
+
+<details open>
+<summary><b>The two front doors</b></summary>
+
+| Command | What it does |
+|---|---|
+| `/network-run <slug>` | 🏢 **Campaign mode** — full pipeline for a company: find → rank → select → draft → critic → approve. Resumes from state. |
+| `/network-jobs <feed.json>` | 📋 **Application mode** — per-posting referral candidates linked to each `job_id`; `--status` answers "referral for this req yet?". |
+
+</details>
+
+<details>
+<summary><b>Pipeline pieces (run any stage on its own)</b></summary>
+
+| Command | What it does |
+|---|---|
+| `/network-find <slug>` | Discover + classify contacts, stop before drafting. |
+| `/network-import <file>` | Import leads from any source; `--draft` to draft immediately. |
+| `/network-draft <slug>` | Draft for selected contacts. |
+| `/network-approve <slug>` | The approval loop (APPROVE / SKIP / REVISE) → outreach artifact. |
+| `/network-dry-run <slug>` | Simulate a full run — zero API calls, zero writes. |
+
+</details>
+
+<details>
+<summary><b>After you send</b></summary>
+
+| Command | What it does |
+|---|---|
+| `/network-outcome <id> <OUTCOME>` | Record what happened (replied / intro / sponsorship / declined); `--report` for the funnel. |
+| `/network-nextmove <id>` | They replied — classify the reply and draft the right next move. |
+| `/network-followups` | Schedule capped follow-ups (2 max, 4–7-day gap) for approved, unanswered outreach. |
+| `/network-timing` | Best send window per contact, in *their* timezone. |
+| `/network-status [slug]` | Pipeline state, one company or all. |
+| `/network-providers` | Quota / credits remaining per provider. |
+| `/network-purge [slug]` | Delete stored data (GDPR) — one company or everything. |
+
+</details>
+
+---
+
+## 🛡️ Why you can trust the drafts
+
+Every message passes three layers before you ever see it:
+
+1. **Corrective regeneration** — blocklisted phrases, placeholder tokens, multi-asks,
+   repeated self-intros, and over-used openers each trigger one targeted rewrite.
+2. **Hard guardrails (deterministic)** — fabricated metrics, surviving placeholders, and
+   over-length notes are `HARD_FAIL`ed and redacted. Unapprovable without `--force`.
+3. **The critic** — a six-dimension rubric (specificity, grounded facts, one-ask, tone,
+   relevance, economy) plus a curated **AI-tell scanner**; anything that smells generated
+   is held with a persisted *"Held because:"* reason.
+
+And the numbers behind the badge row: **1,270 hermetic tests** at **98.9% line+branch
+coverage** (CI-gated), opt-in **live-API smoke tests** against the real providers, live
+accuracy scorecards (persona classification **100%**, focus **100%**, ranking **100%
+pairwise concordance**), and a [live end-to-end trial on a non-aerospace
+profile](docs/TRIAL_B4_NONAEROSPACE_2026-07-02.md).
+
+---
+
+## ❓ FAQ
+
+<details>
+<summary><b>Does this spam people on LinkedIn for me?</b></summary>
+<br/>
+No — by design. The agent never touches LinkedIn. It finds people off-platform, writes
+drafts, and <b>you</b> review and send every message. It also refuses to write generic
+notes: if there's nothing specific to say to someone, the draft gets <i>shorter</i>, not
+padded. The whole thesis is anti-spam.
+</details>
+
+<details>
+<summary><b>What does it cost to run?</b></summary>
+<br/>
+The default flow costs <b>no API money</b> — classification, drafting, and critique run on
+your Claude session's own tokens. Discovery uses a free-tier Serper key (100 searches/mo,
+cached so re-runs are free) or Apify. Optional extras: Hunter/Apollo email enrichment
+(off by default) and a headless <code>--api</code> mode (~$0.15–0.30/company —
+<a href="docs/COSTS.md">breakdown</a>).
+</details>
+
+<details>
+<summary><b>I'm not an engineer. Will it work for my field?</b></summary>
+<br/>
+Yes. <code>/network-setup</code> interviews you and proposes a focus taxonomy for
+<i>your</i> field — the classifier, hooks, ranking, and drafts all follow your profile.
+The live validation trial ran a backend engineer; the wizard docs walk through a nurse.
+Nothing about any field is hardcoded.
+</details>
+
+<details>
+<summary><b>Will recruiters/contacts be able to tell it's AI?</b></summary>
+<br/>
+That's the problem this project obsesses over. Drafts are grounded in your real resume
+facts and voice doc, pass a deterministic AI-tell scanner (the phrases everyone
+recognizes are blocklisted), get one specific detail from the recipient's actual profile
+or say less, and are capped at human lengths. Then <b>you</b> approve and send — so the
+final judgment is always yours.
+</details>
+
+<details>
+<summary><b>Where does my data live?</b></summary>
+<br/>
+On your machine: a local SQLite DB and YAML/markdown files under
+<code>~/.networking-agent/</code> (config enforced to <code>chmod 600</code>).
+<code>/network-purge</code> deletes everything about a company — or everything, period.
+</details>
+
+---
+
+## 🗺️ Roadmap & docs
+
+**v1.0 shipped** — Phase A (hardening: input sources, Finder accuracy scorecards,
+referral ranking, email channel, the reply loop) and Phase B (host-token architecture,
+Application mode, profile-driven generalization, guided onboarding + coaching, public
+polish with live validation) are complete. Post-1.0 candidates (early-applicant timing,
+non-dev surfaces) live in the roadmap.
+
+📖 **[docs/](docs/README.md)** — the full index: [ROADMAP](docs/ROADMAP.md) ·
+[market thesis](docs/MARKET_GAP_AND_FEATURE_IDEAS_2026-06-21.md) ·
+[cost breakdown](docs/COSTS.md) · design docs & trial scorecards.
+
 ## 🤝 Contributing
 
-Issues and PRs welcome. The project is in active development toward a public v1.0 — see the [roadmap](docs/ROADMAP.md) for where it's headed. Run the suite with `pytest` (562 tests, ~90% coverage) and lint with `ruff check`.
+PRs welcome — **[CONTRIBUTING.md](CONTRIBUTING.md)** has the dev setup, the CI bar
+(98% branch-coverage gate, ruff), and the architecture ground rules. Good first
+contribution: an example profile for a field we don't cover yet.
 
 ## 📄 License
 
@@ -208,5 +411,9 @@ MIT — see [LICENSE](LICENSE).
 
 <div align="center">
 <br/>
-<sub>Built with ❤️ and <a href="https://claude.com/claude-code">Claude Code</a> · Started to help friends land interviews.</sub>
+
+**If this helped you skip even one cold application, [⭐ star the repo](https://github.com/Siddardth7/networking-agent) — it's how other job seekers find it.**
+
+<sub>Built with ❤️ and <a href="https://claude.com/claude-code">Claude Code</a> · started to help friends land interviews.</sub>
+
 </div>

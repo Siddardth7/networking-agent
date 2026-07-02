@@ -6,6 +6,18 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed
+- **README rebuilt to launch quality.** Interactive walkthrough with real
+  session transcripts (grounded in the B4 live trial — the wizard interview,
+  a ranked-with-reasons run, a gated draft, a reply → next-move), a
+  cold-vs-referral comparison table, dynamic badges (CI status / latest
+  release / license pulled live from GitHub — the stale-badge problem can't
+  recur), an upgraded architecture diagram showing the two front doors +
+  human-sends + reply loop, a complete grouped command reference
+  (collapsible), a "why you can trust the drafts" section, and an FAQ
+  covering the questions a stranger actually asks (is this spam? what does
+  it cost? not-an-engineer? will they tell it's AI? where's my data?).
+
 ## [1.0.0] - 2026-07-02
 
 **Public release — the Phase-B exit gate.** No functional changes since
