@@ -6,6 +6,19 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Opt-in live-API smoke tests (#26 — the test-realism audit item).**
+  `tests/test_live_smoke.py`: everything else in the suite is mocked, so
+  nothing caught provider contract drift until a real run broke. Three
+  doubly-gated tests (must set `NETWORKING_AGENT_LIVE_SMOKE=1` AND have the
+  provider's key — CI always skips): a real Serper LinkedIn-profile search
+  parsed through `SerperProvider` into `ContactCandidate`s (1 credit — the
+  highest-value contract in the repo), the free Apify `users/me` auth check,
+  and a 1-token Anthropic Haiku ping (credit exhaustion skips with "key OK",
+  never false-alarms as drift). Shape assertions only; quota writes go to a
+  schema'd temp DB. First live run: Serper + Anthropic PASS against the real
+  services.
+
 ## [0.10.0] - 2026-07-02
 
 ### Added
