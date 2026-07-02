@@ -11,7 +11,7 @@ It finds the right people at a target company, drafts outreach in *your* voice (
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
-![Version](https://img.shields.io/badge/version-0.10.0-orange.svg)
+![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)
 ![Tests](https://img.shields.io/badge/tests-1270%20passing-brightgreen.svg)
 ![Coverage](https://img.shields.io/badge/coverage-98.9%25-brightgreen.svg)
 ![Built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-8A2BE2.svg)
@@ -167,7 +167,7 @@ Faults that survive their regen are `SOFT_FLAG`ged — visible but approvable. T
 
 ## 🗺️ Roadmap
 
-Currently **v0.10.0** shipped. Phase A (harden: all input sources, Finder accuracy scorecards, referral-likelihood ranking, email channel, reply → follow-up → conversation loop) and most of Phase B (host-token architecture — no API topup; Application mode — per-job-posting referrals; profile-driven generalization; guided onboarding + coaching) are done. What remains before **v1.0 public release** is the B4 polish pass: live validation on non-aerospace profiles and contributor docs.
+**v1.0 shipped** — the public release. Phase A (harden: all input sources, Finder accuracy scorecards, referral-likelihood ranking, email channel, reply → follow-up → conversation loop) and Phase B (host-token architecture — no API topup; Application mode — per-job-posting referrals; profile-driven generalization; guided onboarding + coaching; public polish with live validation) are complete. Post-1.0 candidates (early-applicant timing, non-dev surfaces) are tracked in the roadmap doc.
 
 📖 Full version ladder and rationale: **[docs/ROADMAP.md](docs/ROADMAP.md)** · market thesis: **[docs/MARKET_GAP_AND_FEATURE_IDEAS](docs/MARKET_GAP_AND_FEATURE_IDEAS_2026-06-21.md)** · want to help? **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
