@@ -6,6 +6,8 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-07-02
+
 ### Changed
 - **Profile cleanup — the remaining #61 review findings (4–8).** (4)
   `load_profile` now caches parsed profiles keyed on the file's mtime — the
