@@ -137,12 +137,20 @@ Tier-3 hooks, and the ranker's `target_focus` (resolved from free-form
   don't know how to network. (Tier-2 #4.) → `/network-coach` playbook +
   one-line whys in `/network-run` and `/network-jobs`.
 
-### B4 · Public polish *(v0.10.5)*
+### B4 · Public polish *(v0.10.5)* ✅ SHIPPED (#26/#83/#84)
 - At least one **live-API smoke test** (everything is mocked today).
+  → `tests/test_live_smoke.py` (opt-in, doubly gated; Serper + Anthropic
+  PASS live).
 - README `<your-username>` fix, multi-domain examples, `CONTRIBUTING` guide,
-  plugin listing.
+  plugin listing. → CONTRIBUTING.md; README badges/prereqs/examples brought
+  current + multi-domain; plugin.json field-agnostic.
 - **Validate end-to-end on a non-aerospace, non-UIUC profile.**
+  → `docs/TRIAL_B4_NONAEROSPACE_2026-07-02.md` — PASS on live discovery
+  (backend-SWE persona vs Cloudflare); found + fixed the wizard's missing
+  persona-template step.
 - *Candidate:* role/req targeting + early-applicant combo (Tier-2 #7).
+  → role/req targeting shipped via Application mode (#57/#61); the
+  early-applicant timing signal stays a post-1.0 candidate.
 
 **Phase B exit gate = v1.0 = PUBLIC RELEASE (dev/CLI, open-source):** a stranger
 in any field can install (via the plugin/CLI), self-onboard, and run it
