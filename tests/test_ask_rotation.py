@@ -15,13 +15,18 @@ from unittest.mock import Mock
 import pytest
 
 from src.agents.drafter import (
-    _ALUMNI_ASK_ANGLES,
     _PEER_ASK_ANGLES,
+    _alumni_ask_angles,
     _build_prompt,
     assign_ask_angles,
     draft_for_contacts,
 )
 from src.core.db import init_db, with_writer
+from src.core.profile import Profile
+
+# The default profile's alumni pool — what assign_ask_angles uses when no
+# profile.yaml exists (the hermetic-test condition).
+_ALUMNI_ASK_ANGLES = _alumni_ask_angles(Profile().school_name)
 
 
 @pytest.fixture

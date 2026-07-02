@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "FocusAreaDef",
     "Profile",
+    "coerce_focus_label",
     "focus_area_names",
     "load_profile",
     "profile_path",
@@ -200,6 +201,10 @@ def profile_path(ref: str | None = None) -> Path:
     return config_dir() / "profiles" / f"{ref}.yaml"
 
 
+# (path → (st_mtime_ns, parsed Profile)); grows by one entry per profile file.
+_PROFILE_CACHE: dict[Path, tuple[int, Profile]] = {}
+
+
 def load_profile(ref: str | None = None) -> Profile:
     """Load the profile for *ref*.
 
@@ -225,6 +230,14 @@ def load_profile(ref: str | None = None) -> Profile:
                 "create it (see config/profile.example.yaml) or fix the ref"
             )
         return Profile()
+    # mtime-keyed cache: load_profile is called from per-contact/per-draft
+    # paths (drafter, guardrails, importer), so without this a single run
+    # re-reads and re-parses the same YAML dozens of times. An edited file
+    # (new mtime) is picked up on the next call — no restart needed.
+    mtime = path.stat().st_mtime_ns
+    cached = _PROFILE_CACHE.get(path)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
     try:
         with path.open(encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
@@ -233,7 +246,9 @@ def load_profile(ref: str | None = None) -> Profile:
     if not isinstance(data, dict):
         logger.warning("profile file %s is not a mapping; using defaults", path)
         return Profile()
-    return _profile_from_dict(data, name=ref or "default")
+    profile = _profile_from_dict(data, name=ref or "default")
+    _PROFILE_CACHE[path] = (mtime, profile)
+    return profile
 
 
 def _profile_from_dict(data: dict, name: str) -> Profile:
@@ -305,6 +320,28 @@ def _parse_focus_areas(raw: object) -> tuple[FocusAreaDef, ...]:
         if sname not in present:
             areas.append(structural[sname])
     return tuple(areas)
+
+
+def coerce_focus_label(
+    value: object,
+    profile: Profile | None = None,
+    *,
+    default: str | None = "PEER",
+) -> str | None:
+    """Validate a raw focus label against *profile*'s taxonomy.
+
+    The ONE focus-label validator (post-#61 review): the drafter/dispatch load
+    path, the importer, and ``apply_classification`` all route through here.
+    Returns the canonical (upper-cased) label when it belongs to the taxonomy,
+    else *default* — "PEER" for load paths (the safe generalist bucket), or
+    ``None`` for the importer (so the classifier fills it).
+    """
+    if value is None:
+        return default
+    if profile is None:
+        profile = load_profile()
+    label = str(value).strip().upper()
+    return label if label in focus_area_names(profile) else default
 
 
 def resolve_target_focus(

@@ -6,6 +6,26 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed
+- **Profile cleanup — the remaining #61 review findings (4–8).** (4)
+  `load_profile` now caches parsed profiles keyed on the file's mtime — the
+  per-contact/per-draft callers (drafter, guardrails, importer) no longer
+  re-read and re-parse the YAML dozens of times per run; an edited file is
+  picked up on the next call. (5) One shared focus-label validator:
+  `profile.coerce_focus_label(value, profile, default=…)` replaces the three
+  parallel implementations (drafter `_coerce_focus_label`, importer
+  `_coerce_focus`, and the inline check in `apply_classification`); labels are
+  now case-normalized consistently on every path. (6) The enum/str shim is
+  gone: `apply_classification` returns plain taxonomy-label strings always
+  (they still compare equal to `FocusArea` members — StrEnum), instead of
+  canonicalizing default-profile labels back to enum instances. (7) A
+  source-supplied `focus_area` is validated against the active taxonomy at the
+  `ingest_contacts` boundary — a label no profile defines falls through to the
+  classifier instead of reaching the DB (restores the guarantee lost when the
+  pydantic field became a free string). (8) Deleted the dead module constant
+  `_ALUMNI_ASK_ANGLES` (production builds pools from the live profile; tests
+  call `_alumni_ask_angles` directly).
+
 ### Fixed
 - **Profile follow-ups from the #61 post-merge code review (PR #71 findings 1–3).**
   (1) A **named** `profile_ref` now works past the `plan` verb:

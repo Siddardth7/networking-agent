@@ -109,11 +109,11 @@ class TestDefaultProfileZeroRegression:
         assert p.identity_short == "MS AE at UIUC, composites"
 
     def test_default_alumni_ask_angle_names_uiuc(self):
-        from src.agents.drafter import _ALUMNI_ASK_ANGLES
+        from src.agents.drafter import _alumni_ask_angles
 
         assert (
             "how their own UIUC-to-industry transition went and what they'd do differently"
-            in _ALUMNI_ASK_ANGLES
+            in _alumni_ask_angles(Profile().school_name)
         )
 
 
@@ -125,6 +125,20 @@ class TestDefaultProfileZeroRegression:
 class TestLoadProfile:
     def test_no_file_returns_builtin_default(self, tmp_config):
         assert load_profile() == Profile()
+
+    def test_mtime_cache_hits_and_invalidates(self, tmp_config):
+        # Post-review cleanup: repeated loads of an unchanged file are served
+        # from the cache; an edit (new mtime) is picked up on the next call.
+        import os
+
+        path = tmp_config / "profile.yaml"
+        path.write_text("school_name: MIT\n", encoding="utf-8")
+        first = load_profile()
+        assert first.school_name == "MIT"
+        assert load_profile() is first  # cached object, no re-parse
+        path.write_text("school_name: Stanford\n", encoding="utf-8")
+        os.utime(path, ns=(1, 1))  # force a distinct mtime regardless of fs resolution
+        assert load_profile().school_name == "Stanford"
 
     def test_default_ref_aliases(self, tmp_config):
         assert profile_path() == tmp_config / "profile.yaml"
@@ -382,16 +396,18 @@ class TestProfileWiring:
         )
         persona, focus, _ = apply_classification("PEER_ENGINEER", "BACKEND", None)
         assert focus == "BACKEND"
-        assert not isinstance(focus, FocusArea)  # custom label stays a string
         # An old-taxonomy label is now unknown → safe PEER fallback.
         _, focus, _ = apply_classification("PEER_ENGINEER", "MATERIALS", None)
-        assert focus is FocusArea.PEER
+        assert focus == "PEER"
 
-    def test_apply_classification_default_returns_enum_instances(self, tmp_config):
+    def test_apply_classification_returns_plain_labels(self, tmp_config):
+        # Focus labels are plain strings pipeline-wide (post-review cleanup);
+        # they still compare equal to the FocusArea members (StrEnum).
         from src.agents.finder import apply_classification
 
         _, focus, _ = apply_classification("PEER_ENGINEER", "COMPOSITE_DESIGN", None)
-        assert focus is FocusArea.COMPOSITE_DESIGN
+        assert type(focus) is str
+        assert focus == FocusArea.COMPOSITE_DESIGN
 
     def test_drafter_fallback_identity_from_profile(self, tmp_config, monkeypatch):
         import src.agents.drafter as drafter_module
@@ -434,14 +450,18 @@ class TestProfileWiring:
         )
 
     def test_coerce_focus_label(self, tmp_config):
-        from src.agents.drafter import _coerce_focus_label
+        from src.core.profile import coerce_focus_label
 
         (tmp_config / "profile.yaml").write_text(
             "focus_areas:\n  - name: BACKEND\n    description: backend\n", encoding="utf-8"
         )
-        assert _coerce_focus_label("BACKEND") == "BACKEND"
-        assert _coerce_focus_label("MATERIALS") == "PEER"  # not in this taxonomy
-        assert _coerce_focus_label(None) == "PEER"
+        assert coerce_focus_label("BACKEND") == "BACKEND"
+        assert coerce_focus_label("backend") == "BACKEND"  # case-normalized
+        assert coerce_focus_label("MATERIALS") == "PEER"  # not in this taxonomy
+        assert coerce_focus_label(None) == "PEER"
+        # Importer contract: default=None so the classifier fills unknowns.
+        assert coerce_focus_label("MATERIALS", default=None) is None
+        assert coerce_focus_label(None, default=None) is None
 
     def test_build_classify_context_accepts_explicit_profile(self):
         from src.agents.finder import build_classify_context
@@ -451,14 +471,6 @@ class TestProfileWiring:
             ContactCandidate(full_name="A", company_slug="acme"), "acme", profile=_SWE
         )
         assert set(ctx["focus_options"]) == {"BACKEND", "INFRA"}
-
-    def test_importer_coerce_focus(self):
-        from src.agents.importer import _coerce_focus
-
-        names = ("BACKEND", "PEER")
-        assert _coerce_focus("backend", names) == "BACKEND"
-        assert _coerce_focus("unknown", names) is None
-        assert _coerce_focus(None, names) is None
 
 
 class TestJobsHostPlanTargetFocus:

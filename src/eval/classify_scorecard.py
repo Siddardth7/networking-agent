@@ -44,7 +44,8 @@ class LabeledContact(BaseModel):
 
 
 # A classifier under test: given a labeled contact's inputs, predict its labels.
-ClassifyFn = Callable[[LabeledContact], "tuple[Persona, FocusArea]"]
+# Predicted focus is a plain taxonomy label since #61 (FocusArea for gold).
+ClassifyFn = Callable[[LabeledContact], "tuple[Persona, str]"]
 
 
 @dataclass
@@ -138,7 +139,9 @@ def score_classifier(labeled: list[LabeledContact], classify_fn: ClassifyFn) -> 
         p_gold.append(lc.expected_persona.value)
         p_pred.append(pred_persona.value)
         f_gold.append(lc.expected_focus_area.value)
-        f_pred.append(pred_focus.value)
+        # str() covers both a FocusArea member (test-injected) and the plain
+        # label strings the live classifier returns since #61.
+        f_pred.append(str(pred_focus))
         if pred_persona != lc.expected_persona or pred_focus != lc.expected_focus_area:
             errors.append((lc, pred_persona, pred_focus))
     persona = _score_dimension("persona", p_gold, p_pred, [e.value for e in Persona])
@@ -205,7 +208,7 @@ def _build_live_classify_fn() -> ClassifyFn:  # pragma: no cover - live API
     cfg = load_config()
     client = get_anthropic_client(cfg.anthropic_api_key)
 
-    def classify(lc: LabeledContact) -> tuple[Persona, FocusArea]:
+    def classify(lc: LabeledContact) -> tuple[Persona, str]:
         cand = ContactCandidate(
             full_name=lc.full_name,
             title=lc.title,
