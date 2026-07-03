@@ -4,6 +4,9 @@ description: "Run preflight validation checks: SQLite version, DB integrity, sch
 
 # /network-check
 
+
+> **Shell note (Windows):** the commands below use the plugin's Python runner. In bash / WSL / Git-Bash use `"${CLAUDE_PLUGIN_ROOT}/bin/nag" …` exactly as written; in **native PowerShell** substitute the runner with `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" …` (same module and args).
+
 Run all preflight checks before using the networking agent. Validates your environment end-to-end.
 
 When this command is invoked, execute:

@@ -4,6 +4,9 @@ description: Draft the reply-aware next move using the HOST Claude's tokens (no 
 
 # /network-nextmove-here
 
+
+> **Shell note (Windows):** the commands below use the plugin's Python runner. In bash / WSL / Git-Bash use `"${CLAUDE_PLUGIN_ROOT}/bin/nag" …` exactly as written; in **native PowerShell** substitute the runner with `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" …` (same module and args).
+
 The host-token version of `/network-nextmove`: **you** (the host model) write the
 next move, so no `ANTHROPIC_API_KEY` topup is needed (issue #50). Sonnet is the
 right model, so delegate the writing to the `networking-nextmove` subagent.

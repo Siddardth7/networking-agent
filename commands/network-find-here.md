@@ -4,6 +4,9 @@ description: Find + classify contacts end-to-end on the HOST Claude's tokens (no
 
 # /network-find-here
 
+
+> **Shell note (Windows):** the commands below use the plugin's Python runner. In bash / WSL / Git-Bash use `"${CLAUDE_PLUGIN_ROOT}/bin/nag" …` exactly as written; in **native PowerShell** substitute the runner with `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" …` (same module and args).
+
 The end-to-end host-token Finder (issue #50). `/network-find` discovers contacts
 and classifies each with an **API** call; this runs the same discovery (HTTP, no
 LLM) and moves the persona/focus/hook judgment onto **your** (the host model's)

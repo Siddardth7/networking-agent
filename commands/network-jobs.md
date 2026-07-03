@@ -4,6 +4,9 @@ description: Application mode (#59/#60) — from a scored job feed, find per-pos
 
 # /network-jobs
 
+
+> **Shell note (Windows):** the commands below use the plugin's Python runner. In bash / WSL / Git-Bash use `"${CLAUDE_PLUGIN_ROOT}/bin/nag" …` exactly as written; in **native PowerShell** substitute the runner with `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" …` (same module and args).
+
 The **Application-mode** front door (Phase B). Where `/network-find-here` targets
 a *company*, this targets a *job posting*: it reads a scored application feed and,
 for each posting, finds the right referral candidates **on that role's team**,

@@ -4,6 +4,9 @@ description: Classify contacts on the HOST Claude's tokens (no API key) — the 
 
 # /network-classify-here
 
+
+> **Shell note (Windows):** the commands below use the plugin's Python runner. In bash / WSL / Git-Bash use `"${CLAUDE_PLUGIN_ROOT}/bin/nag" …` exactly as written; in **native PowerShell** substitute the runner with `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" …` (same module and args).
+
 The host-token version of the Finder's classify step (issue #50, **option a —
 two-phase flow**). Today `find_contacts` classifies each contact *inline* with an
 API call; this moves that judgment onto **your** (the host model's) tokens, via

@@ -4,6 +4,9 @@ description: Run the full networking pipeline for a company end-to-end on the HO
 
 # /network-run
 
+
+> **Shell note (Windows):** the commands below use the plugin's Python runner. In bash / WSL / Git-Bash use `"${CLAUDE_PLUGIN_ROOT}/bin/nag" …` exactly as written; in **native PowerShell** substitute the runner with `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" …` (same module and args).
+
 Run the end-to-end outreach pipeline for a target company. **By default this runs
 on host tokens** (issue #50): the deterministic Python bridges do discovery, gating,
 and persistence; **you** (the host model) do the writing/judgment via the `model:

@@ -4,6 +4,9 @@ description: "Import a leads file from any source (Apollo / Apify / Serper / Cow
 
 # /network-import
 
+
+> **Shell note (Windows):** the commands below use the plugin's Python runner. In bash / WSL / Git-Bash use `"${CLAUDE_PLUGIN_ROOT}/bin/nag" …` exactly as written; in **native PowerShell** substitute the runner with `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" …` (same module and args).
+
 Feed contacts into the pipeline from a file instead of the Serper Finder. Any
 source works — an Apollo export, an Apify scrape, a Claude Cowork + Claude-in-
 Chrome capture, or a list you compiled by hand. The importer normalizes every

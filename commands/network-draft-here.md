@@ -4,6 +4,9 @@ description: Draft outreach for SELECTED contacts using the HOST Claude's tokens
 
 # /network-draft-here
 
+
+> **Shell note (Windows):** the commands below use the plugin's Python runner. In bash / WSL / Git-Bash use `"${CLAUDE_PLUGIN_ROOT}/bin/nag" …` exactly as written; in **native PowerShell** substitute the runner with `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" …` (same module and args).
+
 Draft on **host tokens**. Unlike `/network-draft` (which runs the Python pipeline
 and calls the Anthropic API with a separate key), this command makes **you** —
 the host model — do the writing, so no `ANTHROPIC_API_KEY` topup is needed. This

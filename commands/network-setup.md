@@ -4,6 +4,9 @@ description: Guided onboarding (#77) — a conversational interview that builds 
 
 # /network-setup
 
+
+> **Shell note (Windows):** the commands below use the plugin's Python runner. In bash / WSL / Git-Bash use `"${CLAUDE_PLUGIN_ROOT}/bin/nag" …` exactly as written; in **native PowerShell** substitute the runner with `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" …` (same module and args).
+
 The onboarding wizard (ROADMAP B3). YOU (the host model) run the interview in
 conversation; the `network_setup_host` bridge validates and writes the files.
 Ask questions **one section at a time**, show each composed file to the user,

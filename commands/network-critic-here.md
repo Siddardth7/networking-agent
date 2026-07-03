@@ -4,6 +4,9 @@ description: Run the Layer-4 critic judgment over a saved draft on the HOST Clau
 
 # /network-critic-here
 
+
+> **Shell note (Windows):** the commands below use the plugin's Python runner. In bash / WSL / Git-Bash use `"${CLAUDE_PLUGIN_ROOT}/bin/nag" …` exactly as written; in **native PowerShell** substitute the runner with `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" …` (same module and args).
+
 The host-token version of the Finder/drafter's **critic** step (issue #50).
 `/network-draft-here` saves a draft with only the deterministic *safety* gate
 applied (humanize → hard_check); the critic — the **judgment** step that scores
