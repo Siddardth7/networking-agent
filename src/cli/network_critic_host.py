@@ -29,7 +29,7 @@ import sys
 
 from src.agents.critic import apply_critique, build_critique_context
 from src.agents.drafter import build_draft_context
-from src.core.db import get_connection, with_writer
+from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import Channel
 
 __all__ = ["run_critic_host"]
@@ -113,6 +113,7 @@ def run_apply(draft_id: int, scores_json: str) -> int:
 
 def run_critic_host(args: argparse.Namespace) -> int:
     """Dispatch the ``context`` / ``apply`` verbs."""
+    init_db()  # idempotent — safe if invoked before the DB was otherwise created
     if args.verb == "context":
         return run_context(args.draft_id)
     scores = args.scores if args.scores is not None else sys.stdin.read()

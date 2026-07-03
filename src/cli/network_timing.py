@@ -21,7 +21,7 @@ import sys
 from datetime import UTC, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from src.core.db import get_connection
+from src.core.db import get_connection, init_db
 
 __all__ = [
     "location_to_timezone",
@@ -186,6 +186,7 @@ def recommend_for_contacts(now: datetime | None = None) -> int:
 
 def run_timing(args: argparse.Namespace) -> int:
     """Dispatch — currently a single mode: recommend send times for all contacts."""
+    init_db()  # idempotent — safe if this is the first command a fresh user runs
     return recommend_for_contacts()
 
 

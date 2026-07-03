@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from src.core.db import get_connection, with_writer
+from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import Outcome
 
 __all__ = [
@@ -153,6 +153,7 @@ def report_outcomes() -> int:
 
 def run_outcome(args: argparse.Namespace) -> int:
     """Dispatch: ``--report`` rolls up, ``--list`` queries, else record an outcome."""
+    init_db()  # idempotent — safe if this is the first command a fresh user runs
     if getattr(args, "report", False):
         return report_outcomes()
     if getattr(args, "list", False):

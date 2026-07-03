@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from src.core.config import load_config
-from src.core.db import get_connection, with_writer
+from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import Outcome
 
 __all__ = [
@@ -221,6 +221,7 @@ def list_followups() -> int:
 
 def run_followups(args: argparse.Namespace) -> int:
     """Dispatch: ``--list`` queries; otherwise schedule due follow-ups."""
+    init_db()  # idempotent — safe if this is the first command a fresh user runs
     if getattr(args, "list", False):
         return list_followups()
     return schedule_followups()
