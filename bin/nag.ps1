@@ -73,6 +73,9 @@ if ($needBootstrap) {
 }
 
 # --- Run from the source tree (data files resolve package-relative) --------
+# Force UTF-8 stdio so the ✓/✗/⚠ status glyphs encode on Windows consoles,
+# which default to a legacy codepage (cp1252) and would raise UnicodeEncodeError.
+$env:PYTHONUTF8 = '1'
 Set-Location $root
 & $venvPy -m @args
 exit $LASTEXITCODE

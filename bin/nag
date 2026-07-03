@@ -57,5 +57,8 @@ if [ ! -x "$VENV/bin/python" ] || [ "$(cat "$STAMP" 2>/dev/null || true)" != "$c
 fi
 
 # --- Run from the source tree (data files resolve package-relative) --------
+# Force UTF-8 stdio so the ✓/✗/⚠ status glyphs encode everywhere (Windows
+# consoles default to a legacy codepage and would raise UnicodeEncodeError).
+export PYTHONUTF8=1
 cd "$ROOT"
 exec "$VENV/bin/python" -m "$@"
