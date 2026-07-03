@@ -166,6 +166,11 @@ exactly what's missing **before** anything spends a credit.
 > **No manual `pip install` or venv.** The first `/network-*` command you run bootstraps an
 > isolated Python environment at `~/.networking-agent/.venv` automatically (one-time, ~20s),
 > then reuses it. Works wherever Claude Code installed the plugin — no repo clone required.
+>
+> **Windows:** ships with both runners — `bin/nag` (bash: macOS/Linux/WSL/Git-Bash) and
+> `bin/nag.ps1` (native PowerShell). The commands reference `bin/nag`; on native PowerShell the
+> equivalent is `& "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1" src.cli.<module>`. Requires
+> Python 3.11+ on PATH (the `py` launcher is auto-detected).
 
 <details>
 <summary><b>⚙️ Manual setup & configuration reference</b></summary>

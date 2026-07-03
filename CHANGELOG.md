@@ -16,6 +16,9 @@ Versioning: [Semantic Versioning](https://semver.org/)
   when `requirements.txt` changes), so there's no manual `pip install`, no
   pre-existing venv, and no hardcoded paths. Removed the machine-specific
   `cd /Users/... && source .venv/bin/activate` line from `/network-check`.
+  Ships a PowerShell twin `bin/nag.ps1` for native Windows (probes the `py`
+  launcher for 3.11+, venv under `%USERPROFILE%\.networking-agent\.venv`);
+  the bash runner still covers macOS/Linux/WSL/Git-Bash.
 
 ### Changed
 - **README rebuilt to launch quality.** Interactive walkthrough with real
