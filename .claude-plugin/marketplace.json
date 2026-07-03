@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "networking-agent",
+  "description": "Referral-first job networking on your own Claude tokens.",
+  "owner": {
+    "name": "Siddardth Pathipaka",
+    "url": "https://github.com/Siddardth7"
+  },
+  "plugins": [
+    {
+      "name": "networking-agent",
+      "source": "./",
+      "description": "Finder + Drafter + critic + follow-up pipeline for referral-first job networking, on your own Claude tokens. /network-setup, /network-jobs, /network-run.",
+      "version": "1.0.0",
+      "category": "productivity"
+    }
+  ]
+}
