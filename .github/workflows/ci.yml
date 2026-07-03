@@ -17,3 +17,35 @@ jobs:
       - run: ruff check .
       # --cov-branch and fail_under live in pyproject; the gate fails the build.
       - run: pytest
+
+  windows-runner:
+    # Proves the plugin is portable on native Windows: bin/nag.ps1 must locate
+    # the source via $CLAUDE_PLUGIN_ROOT, bootstrap its own venv, install deps,
+    # run migrations, and execute a CLI module — with no manual setup.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Smoke-test bin/nag.ps1 (fresh bootstrap → run → reuse)
+        shell: pwsh
+        env:
+          CLAUDE_PLUGIN_ROOT: ${{ github.workspace }}
+        run: |
+          $nag = "$env:CLAUDE_PLUGIN_ROOT\bin\nag.ps1"
+
+          # 1. Cold start: network_status runs on an empty DB and exits 0 —
+          #    proves venv bootstrap + dep install + migrations + module exec.
+          & $nag src.cli.network_status
+          if ($LASTEXITCODE -ne 0) { throw "nag.ps1 network_status failed (exit $LASTEXITCODE)" }
+
+          # 2. network_check exits 1 on missing keys (expected in CI), so assert
+          #    it RAN by matching its header rather than gating on exit code.
+          $out = (& $nag src.cli.network_check 2>&1 | Out-String)
+          Write-Host $out
+          if ($out -notmatch 'Setup Check') { throw "network_check did not execute" }
+
+          # 3. Second call must reuse the venv (no re-bootstrap message).
+          $again = (& $nag src.cli.network_status 2>&1 | Out-String)
+          if ($again -match 'preparing environment') { throw "venv was not reused on second call" }
