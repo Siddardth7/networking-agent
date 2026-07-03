@@ -20,11 +20,13 @@ if (-not $root -or -not (Test-Path (Join-Path $root 'requirements.txt'))) {
 $req = Join-Path $root 'requirements.txt'
 
 # --- Pick a Python 3.11+ (required, see pyproject.toml) ---------------------
-# Try the py launcher (standard on Windows) with explicit versions first, then
-# bare python/python3. Each candidate is [exe, prefix-args...].
+# Prefer real interpreters on PATH (`python`/`python3` — what the user/CI
+# configured), then fall back to the py launcher with explicit versions. The
+# version gate below skips anything < 3.11, so an old `python` is passed over.
+# Each candidate is [exe, prefix-args...].
 $candidates = @(
-    @('py', '-3.13'), @('py', '-3.12'), @('py', '-3.11'),
-    @('python'), @('python3')
+    @('python'), @('python3'),
+    @('py', '-3.13'), @('py', '-3.12'), @('py', '-3.11')
 )
 $verCheck = 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'
 $pyExe = $null
@@ -57,9 +59,16 @@ if (Test-Path $venvPy) {
 
 if ($needBootstrap) {
     [Console]::Error.WriteLine('networking-agent: preparing environment (first run or deps changed)...')
+    # PowerShell does NOT throw on a native exe's non-zero exit even under
+    # ErrorActionPreference=Stop, so every step is checked explicitly.
     & $pyExe @pyArgs '-m' 'venv' $venv
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $venvPy)) {
+        throw "networking-agent: venv creation failed (exit $LASTEXITCODE) at '$venv' using '$pyExe $pyArgs'."
+    }
     & $venvPy -m pip install -q --upgrade pip
+    if ($LASTEXITCODE -ne 0) { throw "networking-agent: pip self-upgrade failed (exit $LASTEXITCODE)." }
     & $venvPy -m pip install -q -r $req
+    if ($LASTEXITCODE -ne 0) { throw "networking-agent: dependency install failed (exit $LASTEXITCODE)." }
     Set-Content -LiteralPath $stamp -Value $curHash -NoNewline
 }
 
