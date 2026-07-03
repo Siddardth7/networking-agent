@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from src.core.db import get_connection, with_writer
+from src.core.db import get_connection, init_db, with_writer
 
 __all__ = ["run_status"]
 
@@ -239,6 +239,11 @@ def run_status(args: argparse.Namespace) -> int:
         args.response — Optional[str]  new response value
         args.notes    — Optional[str]  optional notes string
     """
+    # Ensure the schema exists — status may be the first command a fresh user
+    # runs, before /network-setup or /network-check has initialized the DB.
+    # init_db() is idempotent (migrations gate on user_version).
+    init_db()
+
     # --update mode
     if getattr(args, "update", None) is not None:
         response = getattr(args, "response", None)
