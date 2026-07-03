@@ -16,9 +16,24 @@ Versioning: [Semantic Versioning](https://semver.org/)
   when `requirements.txt` changes), so there's no manual `pip install`, no
   pre-existing venv, and no hardcoded paths. Removed the machine-specific
   `cd /Users/... && source .venv/bin/activate` line from `/network-check`.
-  Ships a PowerShell twin `bin/nag.ps1` for native Windows (probes the `py`
-  launcher for 3.11+, venv under `%USERPROFILE%\.networking-agent\.venv`);
-  the bash runner still covers macOS/Linux/WSL/Git-Bash.
+  Ships a PowerShell twin `bin/nag.ps1` for native Windows (prefers PATH
+  `python`/`python3`, falls back to the `py` launcher, venv under
+  `%USERPROFILE%\.networking-agent\.venv`); the bash runner still covers
+  macOS/Linux/WSL/Git-Bash. Both runners force `PYTHONUTF8=1` so status glyphs
+  encode on Windows consoles.
+- **Windows CI.** A `windows-latest` job smoke-tests `bin/nag.ps1` end-to-end
+  (cold bootstrap → run → venv reuse) on every push/PR, giving the Windows path
+  real coverage. It caught three cross-platform bugs now fixed (see below).
+
+### Fixed
+- **`/network-status` crashed on a cold database.** It queried the `companies`
+  table via `get_connection()` without ensuring migrations had run, so a fresh
+  user running it before `/network-setup` hit `no such table: companies`.
+  `run_status()` now calls the idempotent `init_db()` first — a cold DB shows
+  "No companies found" as intended.
+- **Unicode status glyphs (`✓/✗/⚠`) raised `UnicodeEncodeError` on Windows**
+  (cp1252 consoles). Fixed at the runner level via `PYTHONUTF8=1`, covering
+  every command's output.
 
 ### Changed
 - **README rebuilt to launch quality.** Interactive walkthrough with real
