@@ -17,15 +17,15 @@ the `networking-classifier` subagent (`model: sonnet`).
    candidate with its grounding (see `/network-find-here` for the full
    discover→classify→ingest loop):
    ```
-   python -m src.cli.network_import <file> --company "<Company>" --validate
+   "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_import <file> --company "<Company>" --validate
    # or, run discovery directly:
-   python -m src.cli.network_classify_host discover <slug> --limit <N>
+   "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_classify_host discover <slug> --limit <N>
    ```
 
 2. **Classify each (host tokens)** — for each candidate, build the grounding and
    delegate the judgment to the `networking-classifier` subagent:
    ```
-   python -m src.cli.network_classify_host context \
+   "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_classify_host context \
      --name "<name>" --title "<title>" --snippet "<snippet>" --company "<slug>"
    ```
    The subagent returns `{persona, focus_area, hook_signal}`.
@@ -34,7 +34,7 @@ the `networking-classifier` subagent (`model: sonnet`).
    labels the pipeline stores (applies the non-engineer focus override + trims the
    hook signal):
    ```
-   python -m src.cli.network_classify_host apply \
+   "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_classify_host apply \
      --persona <P> --focus <F> --hook-signal "<S>"
    ```
    → `{persona, focus_area, hook_signal}` ready to ingest.

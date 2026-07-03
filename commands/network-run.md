@@ -23,7 +23,7 @@ for CI / unattended runs.
 The planner is the driver. After **every** step, re-run it to get the next action:
 
 ```
-python -m src.cli.network_run_host plan <slug>
+"${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_run_host plan <slug>
 ```
 
 → `{company, state, next, items}`. Dispatch on `next`:

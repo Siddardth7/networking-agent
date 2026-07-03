@@ -21,7 +21,7 @@ right model, so delegate the writing to the `networking-nextmove` subagent.
 1. **Get the grounding** (deterministic — classifies the move, assembles voice +
    the reply, no LLM):
    ```
-   python -m src.cli.network_nextmove_host context <contact_id> "<reply>" [--move M] [--channel C] [--outcome O]
+   "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_nextmove_host context <contact_id> "<reply>" [--move M] [--channel C] [--outcome O]
    ```
    JSON includes `move` (the classified next move), `move_instruction`, the
    contact facts, `voice_doc`, `fact_discipline`, and `channel_constraints`.
@@ -33,7 +33,7 @@ right model, so delegate the writing to the `networking-nextmove` subagent.
 3. **Gate it** (deterministic humanize + `hard_check`; next moves are not
    persisted — they're printed for you to review and send):
    ```
-   printf '%s' "<the message body>" | python -m src.cli.network_nextmove_host gate <CHANNEL>
+   printf '%s' "<the message body>" | "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_nextmove_host gate <CHANNEL>
    ```
    Prints `{"quality_code", "body"}`. On `HARD_FAIL` (leaked placeholder,
    unapproved metric, or length), ask the subagent to fix it and re-gate.

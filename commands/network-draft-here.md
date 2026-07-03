@@ -24,7 +24,7 @@ the contact has an email**):
 
 1. **Get the grounding** (deterministic, no LLM):
    ```
-   python -m src.cli.network_draft_host context <contact_id> <CHANNEL>
+   "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_draft_host context <contact_id> <CHANNEL>
    ```
    This prints JSON: contact facts, `persona_template`, `voice_doc`,
    `approved_facts`, `fact_discipline`, and `channel_constraints`.
@@ -39,7 +39,7 @@ the contact has an email**):
    the draft, marking the contact `DRAFTED`):
    ```
    printf '%s' "<the message body>" | \
-     python -m src.cli.network_draft_host save <contact_id> <CHANNEL> --subject "<subject>"
+     "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_draft_host save <contact_id> <CHANNEL> --subject "<subject>"
    ```
    It prints `{"draft_id", "quality_code", "body", "subject"}`. If
    `quality_code` is `HARD_FAIL`, the message leaked a placeholder, stated an
@@ -49,7 +49,7 @@ the contact has an email**):
 ## Finding the contacts
 
 ```
-python -m src.cli.selection_gate <company-slug>   # lists SELECTED contacts + ids
+"${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.selection_gate <company-slug>   # lists SELECTED contacts + ids
 ```
 or query directly for `state = 'SELECTED'` contacts of the company.
 

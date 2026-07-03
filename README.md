@@ -146,8 +146,9 @@ agent  ◆ Reply mentions hiring → next move: REFERRAL_ASK.
 > **No Anthropic API key needed** — the pipeline runs on your Claude session's own tokens.
 
 ```bash
-# 1 · Install
-claude plugin install https://github.com/Siddardth7/networking-agent
+# 1 · Install (then restart Claude Code so the /network-* commands load)
+claude plugin marketplace add https://github.com/Siddardth7/networking-agent
+claude plugin install networking-agent@networking-agent
 ```
 ```text
 # 2 · Onboard (guided interview — any field, ~10 minutes)
@@ -161,6 +162,10 @@ claude plugin install https://github.com/Siddardth7/networking-agent
 
 That's genuinely it. `/network-check` (the doctor) runs at the end of setup and tells you
 exactly what's missing **before** anything spends a credit.
+
+> **No manual `pip install` or venv.** The first `/network-*` command you run bootstraps an
+> isolated Python environment at `~/.networking-agent/.venv` automatically (one-time, ~20s),
+> then reuses it. Works wherever Claude Code installed the plugin — no repo clone required.
 
 <details>
 <summary><b>⚙️ Manual setup & configuration reference</b></summary>

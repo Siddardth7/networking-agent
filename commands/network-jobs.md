@@ -24,7 +24,7 @@ Feed path (git-ignored, mirrors the Chrome producer contract):
 1. **Plan (deterministic — parse + persist postings)** — parse the feed, write
    each `applications` row, and get the per-posting work list:
    ```
-   python -m src.cli.network_jobs_host plan <feed.json>
+   "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_jobs_host plan <feed.json>
    ```
    → `{"profile": "<name>", "postings": [{job_id, company, company_slug,
    role_title, location, target_keywords, target_focus, precaptured_contacts},
@@ -47,7 +47,7 @@ Feed path (git-ignored, mirrors the Chrome producer contract):
    a. **Role-biased discover (HTTP — no LLM)** — pass the posting's
       `target_keywords` to bias discovery toward the role's team:
       ```
-      python -m src.cli.network_classify_host discover <company_slug> \
+      "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_classify_host discover <company_slug> \
           --limit <N> [--location "<location>"] \
           --keywords "<comma-joined target_keywords>"
       ```
@@ -62,7 +62,7 @@ Feed path (git-ignored, mirrors the Chrome producer contract):
       company; pass the posting's `target_focus` (when non-null) so contacts on
       the role's team score the ranker's team-match signal (#61):
       ```
-      echo "<payload>" | python -m src.cli.network_classify_host ingest <company_slug> \
+      echo "<payload>" | "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_classify_host ingest <company_slug> \
           --target-focus "<target_focus>"
       ```
 
@@ -71,7 +71,7 @@ Feed path (git-ignored, mirrors the Chrome producer contract):
       canonical URL / name — a contact already present from Campaign mode is
       linked, not duplicated):
       ```
-      echo "<candidates JSON>" | python -m src.cli.network_jobs_host link <job_id> <company_slug>
+      echo "<candidates JSON>" | "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_jobs_host link <job_id> <company_slug>
       ```
       → `{"job_id": "…", "linked": <N>, "unresolved": <M>}`.
 
@@ -80,7 +80,7 @@ Feed path (git-ignored, mirrors the Chrome producer contract):
    posting's `job_id` so the note names the specific role (a named-role ask
    out-converts a generic company ask):
    ```
-   python -m src.cli.network_draft_host context <contact_id> <CHANNEL> --job-id <job_id>
+   "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_draft_host context <contact_id> <CHANNEL> --job-id <job_id>
    ```
    → the grounding gains a `posting` block (`role_title`, `job_url`); the
    `networking-drafter` subagent names the role. **Ask-rotation groups by
@@ -102,9 +102,9 @@ reached → conversation → referral_asked → referred`, plus contact count an
 
 ```
 # all postings → the canonical status file
-python -m src.cli.network_jobs_host status > runs/applications/$(date +%F)-status.json
+"${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_jobs_host status > runs/applications/$(date +%F)-status.json
 # one posting
-python -m src.cli.network_jobs_host status --job-id <job_id>
+"${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_jobs_host status --job-id <job_id>
 ```
 → `{"postings": [{job_id, company, role_title, status, contacts, sponsorship}, …]}`.
 It's a read-only rollup, not a new state machine — the per-contact outcome (`#15`,

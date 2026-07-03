@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# networking-agent runner.
+#
+# Makes the plugin portable: bootstraps an isolated venv on first use, then
+# execs `python -m <module> [args...]` from the plugin's own source tree.
+# Works from any install location (Claude Code plugin cache or a dev clone),
+# with no pre-existing venv and no hardcoded paths.
+#
+# Usage:  bin/nag src.cli.network_check
+#         echo "<payload>" | bin/nag src.cli.network_classify_host ingest <slug>
+set -euo pipefail
+
+# --- Locate the plugin/repo root -------------------------------------------
+# Prefer the harness-provided var; fall back to this script's own location
+# ($ROOT/bin/nag) so a plain dev clone works too.
+ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+if [ -z "$ROOT" ] || [ ! -f "$ROOT/requirements.txt" ]; then
+  ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
+REQ="$ROOT/requirements.txt"
+
+# --- Pick a Python 3.11+ (required, see pyproject.toml) ---------------------
+# Probe common names, not just `python3` — on many machines `python3` is an
+# older system build while a newer python3.NN also exists on PATH.
+PY=""
+for cand in python3.13 python3.12 python3.11 python3 python; do
+  path="$(command -v "$cand" || true)"
+  [ -z "$path" ] && continue
+  if "$path" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+    PY="$path"; break
+  fi
+done
+if [ -z "$PY" ]; then
+  echo "networking-agent: Python 3.11+ required but none found on PATH." >&2
+  echo "  Install from https://www.python.org/downloads/ (or 'brew install python@3.12') and retry." >&2
+  exit 1
+fi
+
+# --- Bootstrap the isolated venv (idempotent) ------------------------------
+VENV="$HOME/.networking-agent/.venv"
+STAMP="$VENV/.requirements.sha256"
+
+req_hash() {
+  "$PY" - "$REQ" <<'PYEOF'
+import hashlib, sys
+print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
+PYEOF
+}
+
+cur="$(req_hash)"
+if [ ! -x "$VENV/bin/python" ] || [ "$(cat "$STAMP" 2>/dev/null || true)" != "$cur" ]; then
+  echo "networking-agent: preparing environment (first run or deps changed)…" >&2
+  "$PY" -m venv "$VENV"
+  "$VENV/bin/python" -m pip install -q --upgrade pip
+  "$VENV/bin/python" -m pip install -q -r "$REQ"
+  printf '%s\n' "$cur" > "$STAMP"
+fi
+
+# --- Run from the source tree (data files resolve package-relative) --------
+cd "$ROOT"
+exec "$VENV/bin/python" -m "$@"

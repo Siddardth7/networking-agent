@@ -15,7 +15,7 @@ specificity, single-ask discipline, tone, grounded facts, economy, and relevance
 
 1. **Ground (deterministic, no LLM)** — build the critique grounding for the draft:
    ```
-   python -m src.cli.network_critic_host context <draft_id>
+   "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_critic_host context <draft_id>
    ```
    → JSON: `recipient`, `channel`, `approved_facts`, the `draft`, the six-dimension
    `rubric`, and the `hold_rule`.
@@ -28,7 +28,7 @@ specificity, single-ask discipline, tone, grounded facts, economy, and relevance
 
 3. **Apply (deterministic)** — fold the scores into the verdict and persist it:
    ```
-   echo "<scores-json>" | python -m src.cli.network_critic_host apply <draft_id>
+   echo "<scores-json>" | "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_critic_host apply <draft_id>
    ```
    This runs the recalibrated hold rule (`evaluate_scores`) **and** the
    deterministic AI-tell backstop, writes the `critic_trace`, and downgrades the

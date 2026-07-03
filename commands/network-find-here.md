@@ -16,7 +16,7 @@ contacts with no Anthropic client. No `ANTHROPIC_API_KEY` topup needed.
    discovery for the company and emit each raw candidate with its classify
    grounding:
    ```
-   python -m src.cli.network_classify_host discover <slug> --limit <N> [--location "<L>"]
+   "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_classify_host discover <slug> --limit <N> [--location "<L>"]
    ```
    → a JSON list of `{"candidate": {…}, "context": {…}}`.
 
@@ -34,7 +34,7 @@ contacts with no Anthropic client. No `ANTHROPIC_API_KEY` topup needed.
    when enabled), saves one `contacts` row per candidate, and advances the
    company NEW→FOUND:
    ```
-   echo "<payload>" | python -m src.cli.network_classify_host ingest <slug>
+   echo "<payload>" | "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_classify_host ingest <slug>
    ```
    → `{"ingested": <N>, "contacts": ["<name>", …]}`.
 

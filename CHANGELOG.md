@@ -6,6 +6,17 @@ Versioning: [Semantic Versioning](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Portable plugin install — works for anyone, from any install location.**
+  Added `.claude-plugin/marketplace.json` so the repo is installable via
+  `claude plugin marketplace add <url>` + `install networking-agent@networking-agent`.
+  Added a `bin/nag` runner that every `/network-*` command now calls: it locates
+  the plugin via `${CLAUDE_PLUGIN_ROOT}` (with a dev-clone fallback) and bootstraps
+  an isolated venv at `~/.networking-agent/.venv` on first use (re-bootstraps only
+  when `requirements.txt` changes), so there's no manual `pip install`, no
+  pre-existing venv, and no hardcoded paths. Removed the machine-specific
+  `cd /Users/... && source .venv/bin/activate` line from `/network-check`.
+
 ### Changed
 - **README rebuilt to launch quality.** Interactive walkthrough with real
   session transcripts (grounded in the B4 live trial — the wizard interview,

@@ -83,8 +83,8 @@ The Cowork + Chrome producer writes captures to
 
 - CLI entry: `src/cli/network_import.py` → `run_import(args)`
   ```
-  python -m src.cli.network_import <file> --company "Joby Aviation" --draft
-  python -m src.cli.network_import <file> --validate
+  "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_import <file> --company "Joby Aviation" --draft
+  "${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_import <file> --validate
   ```
 - Importer: `src/agents/importer.py` → `import_contacts(path, company=…, draft=…)`
 - Validator: `validate_contacts_file(path)`

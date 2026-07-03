@@ -13,7 +13,7 @@ everything in these files must come from their answers or their pasted resume.
 ## 0. Where things stand
 
 ```
-python -m src.cli.network_setup_host status
+"${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_setup_host status
 ```
 
 → JSON per file: `config`, `profile`, `voice`, `resume_library` — each with
@@ -30,7 +30,7 @@ python -m src.cli.network_setup_host status
 ## 1. Config scaffold (keys stay out of the chat)
 
 ```
-python -m src.cli.network_setup_host scaffold
+"${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_setup_host scaffold
 ```
 
 Then tell the user to fill the `REPLACE_ME` keys by **editing the file
@@ -79,7 +79,7 @@ confirmation:
 
 ```
 cat > /tmp/profile.yaml <<'YAML' … YAML
-python -m src.cli.network_setup_host write profile < /tmp/profile.yaml
+"${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_setup_host write profile < /tmp/profile.yaml
 ```
 
 The bridge validates with the real runtime loader and flags unknown keys
@@ -154,7 +154,7 @@ filled.
 ## 5. Verify + hand off
 
 ```
-python -m src.cli.network_check
+"${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_check
 ```
 
 Walk through any ✗/⚠ lines with the user (unfilled keys are the usual one).

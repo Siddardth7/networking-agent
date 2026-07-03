@@ -6,16 +6,15 @@ description: "Run preflight validation checks: SQLite version, DB integrity, sch
 
 Run all preflight checks before using the networking agent. Validates your environment end-to-end.
 
-When this command is invoked, execute the following in a bash shell from the networking-agent repo directory:
+When this command is invoked, execute:
 
 ```bash
-cd /Users/sid/Documents/Claude/Projects/Networking\ Agent/networking-agent && source .venv/bin/activate && python -m src.cli.network_check
+"${CLAUDE_PLUGIN_ROOT}/bin/nag" src.cli.network_check
 ```
 
-If the repo is installed elsewhere, locate it with:
-```bash
-python -c "import src.cli.network_check; import inspect; print(inspect.getfile(src.cli.network_check))"
-```
+The `nag` runner bootstraps an isolated Python environment on first use, so this
+works from any install location with no manual venv setup. `${CLAUDE_PLUGIN_ROOT}`
+is set automatically by Claude Code for installed plugins.
 
 ## What this checks
 
