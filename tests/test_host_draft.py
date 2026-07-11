@@ -170,3 +170,53 @@ class TestSaveHostDraft:
         # An em-dash tell the humanizer normalizes — body should come back changed.
         out = save_host_draft(cid, Channel.COLD_EMAIL, "Hi Alice — I admire your work.")
         assert "—" not in out["body"] or out["quality_code"] == "OK"
+
+
+# --------------------------------------------------------------------------- #
+# company state advance (#98): SELECTED -> DRAFTED on the host path
+# --------------------------------------------------------------------------- #
+
+
+def _company_state(slug="acme") -> str:
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT state FROM companies WHERE slug = ?", (slug,)).fetchone()
+        return row["state"]
+    finally:
+        conn.close()
+
+
+def _seed_second_contact() -> int:
+    with with_writer() as conn:
+        co = conn.execute("SELECT id FROM companies WHERE slug='acme'").fetchone()["id"]
+        cur = conn.execute(
+            "INSERT INTO contacts (company_id, full_name, persona, focus_area, state) "
+            "VALUES (?, 'Bob Jones', 'PEER_ENGINEER', 'COMPOSITE_DESIGN', 'SELECTED')",
+            (co,),
+        )
+        return int(cur.lastrowid)
+
+
+class TestCompanyStateAdvance:
+    def test_advances_to_drafted_when_all_selected_drafted(self):
+        cid = _seed_contact()
+        assert _company_state() == "SELECTED"
+        save_host_draft(cid, Channel.COLD_EMAIL, "Hi Alice, I admire your composites work.")
+        assert _company_state() == "DRAFTED"
+
+    def test_stays_selected_until_last_contact_drafted(self):
+        c1 = _seed_contact()
+        c2 = _seed_second_contact()
+        # Draft the first contact only — a second contact is still SELECTED.
+        save_host_draft(c1, Channel.COLD_EMAIL, "Hi Alice, I admire your composites work.")
+        assert _company_state() == "SELECTED"
+        # Draft the last one — now the company advances.
+        save_host_draft(c2, Channel.COLD_EMAIL, "Hi Bob, I admire your composites work.")
+        assert _company_state() == "DRAFTED"
+
+    def test_does_not_regress_a_non_selected_company(self):
+        cid = _seed_contact()
+        with with_writer() as conn:
+            conn.execute("UPDATE companies SET state = 'APPROVED' WHERE slug = 'acme'")
+        save_host_draft(cid, Channel.COLD_EMAIL, "Hi Alice, I admire your composites work.")
+        assert _company_state() == "APPROVED"  # guarded to SELECTED — untouched

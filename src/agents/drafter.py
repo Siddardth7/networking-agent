@@ -828,15 +828,38 @@ def _insert_draft(
 
 
 def _mark_contact_drafted(contact_id: int, conn: sqlite3.Connection) -> None:
-    """Mark a contact as DRAFTED.
+    """Mark a contact as DRAFTED and advance its company SELECTED → DRAFTED once
+    no contact remains SELECTED (#98).
 
-    ``conn`` is required: the UPDATE runs on the supplied connection and the
+    Both the ``--api`` drafter (``_draft_all_channels_for_contact``) and the
+    host-token path (``save_host_draft``) route through here, so the company
+    transition happens on both — previously only contacts advanced on the host
+    path, leaving ``companies.state`` stuck at SELECTED.
+
+    ``conn`` is required: the UPDATEs run on the supplied connection and the
     caller manages the transaction. This helper deliberately does NOT open
     its own ``with_writer()`` block — see the atomicity note in
     ``_draft_all_channels_for_contact``.
     """
     conn.execute(
         "UPDATE contacts SET state = 'DRAFTED' WHERE id = ?",
+        (contact_id,),
+    )
+    # Advance the company only when it's still SELECTED and this contact was the
+    # last one left in SELECTED (all selected contacts now drafted). The
+    # `state = 'SELECTED'` guard makes it a no-op once advanced and never
+    # regresses a further-along company; idempotent under the serialized writer,
+    # so concurrent per-contact workers converge on the same result.
+    conn.execute(
+        """
+        UPDATE companies SET state = 'DRAFTED'
+        WHERE id = (SELECT company_id FROM contacts WHERE id = ?)
+          AND state = 'SELECTED'
+          AND NOT EXISTS (
+              SELECT 1 FROM contacts
+              WHERE company_id = companies.id AND state = 'SELECTED'
+          )
+        """,
         (contact_id,),
     )
 

@@ -26,6 +26,14 @@ Versioning: [Semantic Versioning](https://semver.org/)
   real coverage. It caught three cross-platform bugs now fixed (see below).
 
 ### Fixed
+- **Host-token drafting never advanced `companies.state` SELECTED → DRAFTED
+  (#98).** Contacts advanced to DRAFTED but the company row was left at
+  SELECTED, so `/network-status` misreported the company and any consumer keyed
+  on `companies.state` diverged from the `--api` path. The shared
+  `_mark_contact_drafted` helper (both the `--api` drafter and the host
+  `save_host_draft` route through it) now advances the company to DRAFTED once
+  no contact remains SELECTED — a single guarded, idempotent statement, so the
+  two paths converge on the same state.
 - **Discovery returned 0 contacts when `--location` was passed (#94).** Apify's
   `harvestapi` actor parses `searchQuery` as free text; appending a location
   string zeroed results and the `(A OR B OR C)` role clause diluted ranking to
