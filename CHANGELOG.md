@@ -26,6 +26,15 @@ Versioning: [Semantic Versioning](https://semver.org/)
   real coverage. It caught three cross-platform bugs now fixed (see below).
 
 ### Fixed
+- **Discovery diagnostics never surfaced — 0 results looked like a provider
+  failure (#96).** `_discover` logs per-provider counts, failures and
+  shortfalls, but the CLI installed no logging handler so they vanished. The
+  host-token `discover` entrypoint now installs a stderr handler
+  (`src.cli.configure_cli_logging`), emits a one-line shortfall WARNING (count,
+  company, keywords, location) when a run returns fewer than the limit, and the
+  Apify provider logs the exact resolved `searchQuery`/`currentJobTitles`/
+  `locations` it sent plus the raw item count — so a 0-result run shows *what*
+  was searched instead of an unexplained empty list.
 - **Discovery returned 0 contacts when `--location` was passed (#94).** Apify's
   `harvestapi` actor parses `searchQuery` as free text; appending a location
   string zeroed results and the `(A OR B OR C)` role clause diluted ranking to

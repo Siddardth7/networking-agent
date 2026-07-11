@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 
 from src.agents.finder import (
@@ -42,12 +43,14 @@ from src.agents.finder import (
     build_email_providers,
     ingest_contacts,
 )
-from src.cli import read_stdin_text
+from src.cli import configure_cli_logging, read_stdin_text
 from src.core.config import load_config
 from src.core.db import init_db, with_writer
 from src.core.schemas import ContactCandidate
 
 __all__ = ["run_classify_host"]
+
+_LOG = logging.getLogger("networking_agent.classify_host")
 
 
 def _split_keywords(raw: str | None) -> list[str]:
@@ -106,13 +109,20 @@ def run_discover(args: argparse.Namespace) -> int:
     # Application mode (#59): --keywords biases discovery toward a posting's role
     # team; falls back to the config-global role keywords (Campaign default).
     keywords = _split_keywords(getattr(args, "keywords", None)) or cfg.finder_role_keywords
+    company = slug.replace("-", " ")
     candidates = _discover(
         chain,
-        company=slug.replace("-", " "),
+        company=company,
         role_keywords=keywords,
         limit=args.limit,
         location=args.location,
     )
+    if len(candidates) < args.limit:
+        _LOG.warning(
+            "discovery: %d/%d contacts for company=%r keywords=%r location=%r "
+            "— see per-provider lines above for the cause (0 = empty, not necessarily failure)",
+            len(candidates), args.limit, company, keywords, args.location,
+        )
     print(json.dumps([
         {
             "candidate": c.model_dump(mode="json"),
@@ -235,4 +245,9 @@ if __name__ == "__main__":  # pragma: no cover
     p_apply.add_argument("--focus", default=None, help="focus_area")
     p_apply.add_argument("--hook-signal", dest="hook_signal", default=None)
 
+    # #96: install a stderr handler at the process entrypoint so the Finder's
+    # discovery diagnostics (per-provider counts, the resolved query, failures,
+    # shortfalls) surface — a 0-result run is no longer indistinguishable from a
+    # provider failure. Kept out of run_* so tests that call them stay hermetic.
+    configure_cli_logging()
     sys.exit(run_classify_host(parser.parse_args()))
