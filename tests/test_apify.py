@@ -107,9 +107,10 @@ def test_non_list_payload_returns_empty(qm: QuotaManager) -> None:
     assert provider.search_linkedin_profiles(company="ACME", role_keywords=[], limit=5) == []
 
 
-def test_search_query_broadens_across_keywords(qm: QuotaManager) -> None:
-    """FINDER_AUDIT D4: searchQuery uses the top keywords (OR-joined), not just
-    the first, so ranking isn't biased to a single role."""
+def test_search_query_is_plain_company_role_breadth_via_titles(qm: QuotaManager) -> None:
+    """Issue #94: searchQuery is the plain company (an `(A OR B)` clause dilutes
+    ranking to ~1 result). Role breadth (FINDER_AUDIT D4) moves to the full
+    `currentJobTitles` set, which post-filters server-side without diluting."""
     import json as _json
 
     captured: dict = {}
@@ -125,14 +126,19 @@ def test_search_query_broadens_across_keywords(qm: QuotaManager) -> None:
         role_keywords=["quality engineer", "stress engineer", "composites engineer"],
         limit=5,
     )
-    sq = captured["body"]["searchQuery"]
-    assert "quality engineer" in sq
-    assert "stress engineer" in sq  # not just the first keyword
-    assert " OR " in sq
+    body = captured["body"]
+    assert body["searchQuery"] == "Joby"  # plain company, no parens/OR
+    assert " OR " not in body["searchQuery"]
+    # All keywords preserved for ranking/filtering, via the structured field.
+    assert body["currentJobTitles"] == [
+        "quality engineer", "stress engineer", "composites engineer"
+    ]
 
 
-def test_location_appended_to_search_query(qm: QuotaManager) -> None:
-    """Issue #8: a location filter is folded into the semantic query."""
+def test_location_uses_structured_field_not_search_query(qm: QuotaManager) -> None:
+    """Issue #94: a location goes to the actor's structured `locations` filter,
+    never into searchQuery (appending it there zeroed results live), and the run
+    still returns candidates."""
     import json as _json
 
     captured: dict = {}
@@ -143,10 +149,28 @@ def test_location_appended_to_search_query(qm: QuotaManager) -> None:
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     provider = ApifyProvider(api_key="k", quota_manager=qm, http_client=client)
-    provider.search_linkedin_profiles(
+    result = provider.search_linkedin_profiles(
         company="Joby", role_keywords=["stress engineer"], limit=5, location="Dayton, OH"
     )
-    assert "Dayton, OH" in captured["body"]["searchQuery"]
+    assert captured["body"]["locations"] == ["Dayton, OH"]
+    assert "Dayton, OH" not in captured["body"]["searchQuery"]
+    assert len(result) > 0  # location-scoped discovery is non-empty (regression)
+
+
+def test_no_location_omits_structured_field(qm: QuotaManager) -> None:
+    """Without a location, no `locations` key is sent (nothing to filter on)."""
+    import json as _json
+
+    captured: dict = {}
+
+    def handler(request):
+        captured["body"] = _json.loads(request.content)
+        return httpx.Response(200, json=APIFY_FULL, request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    provider = ApifyProvider(api_key="k", quota_manager=qm, http_client=client)
+    provider.search_linkedin_profiles(company="Joby", role_keywords=[], limit=5)
+    assert "locations" not in captured["body"]
 
 
 def test_parse_item_no_name_returns_none() -> None:

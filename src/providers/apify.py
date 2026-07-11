@@ -140,27 +140,29 @@ class ApifyProvider(SearchProvider):
         *limit* canonical candidates. Raises ``QuotaExhausted`` at the budget
         cap; ``AuthError`` on a bad token (both surface to the caller, which
         falls back to the next discovery provider). *location*, when given, is
-        appended to the semantic query to bias results geographically.
+        passed via the actor's structured ``locations`` filter to bias results
+        geographically (issue #94 — appending it to the free-text query zeroed
+        results).
         """
         if self._quota_manager is not None:
             self._quota_manager.increment("apify", 1)
 
-        # Broaden semantic ranking across the top role keywords, not just the
-        # first (FINDER_AUDIT D4) — otherwise a composites/stress engineer can be
-        # ranked below "quality engineer" matches and truncated at the limit.
-        # `currentJobTitles` below still post-filters on the full keyword set.
-        search_query = (
-            f"{company} ({' OR '.join(role_keywords[:3])})" if role_keywords else company
-        )
-        if location:
-            search_query = f"{search_query} {location}"
+        # searchQuery stays a plain company name. Issue #94: the actor parses
+        # searchQuery as free text and an `(A OR B OR C)` role clause dilutes
+        # ranking (verified live: `caterpillar (thermal OR …)` → 1 result vs
+        # `caterpillar` → 10), while an appended location string zeroes results
+        # outright. Role breadth is carried by `currentJobTitles` (the full
+        # keyword set, post-filtered server-side) and location by the structured
+        # `locations` field — a ranking/geo signal, not a hard free-text term.
         body: dict = {
             "profileScraperMode": self._profile_mode,
-            "searchQuery": search_query,
+            "searchQuery": company,
             "maxItems": max(int(limit), 1),
         }
         if role_keywords:
             body["currentJobTitles"] = list(role_keywords)
+        if location:
+            body["locations"] = [location]
 
         params = {
             "token": self._api_key,
