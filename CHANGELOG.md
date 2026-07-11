@@ -26,6 +26,15 @@ Versioning: [Semantic Versioning](https://semver.org/)
   real coverage. It caught three cross-platform bugs now fixed (see below).
 
 ### Fixed
+- **Persona templates hardcoded the wrong sender identity (#99).** The built-in
+  persona templates embedded a specific name + aerospace discipline (plus school,
+  work-authorization, and target roles), so `persona_template` contradicted the
+  active user's `voice_doc` — a drafter following it literally would impersonate
+  the wrong person in the wrong field. The templates now carry persona SHAPE and
+  tactics only: the sender's identity comes from `voice_doc` (the authored source
+  of truth, already handed to the drafter), and the alumni school tactic fills a
+  `[[SCHOOL]]` placeholder from the active profile's `school_name` (default
+  "UIUC", so the default profile renders unchanged).
 - **Discovery returned 0 contacts when `--location` was passed (#94).** Apify's
   `harvestapi` actor parses `searchQuery` as free text; appending a location
   string zeroed results and the `(A OR B OR C)` role clause diluted ranking to

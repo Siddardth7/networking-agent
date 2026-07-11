@@ -140,8 +140,14 @@ def _load_persona_template(persona: Persona) -> str:
 
     Resolution order: the active profile's ``templates_dir`` (a custom
     profile's own persona voice) → the built-in ``src/templates/personas/``
-    (the default profile's aerospace-voiced templates, unchanged) → the
-    profile's ``fallback_identity`` line.
+    (persona SHAPE + tactics only) → the profile's ``fallback_identity`` line.
+
+    The built-in templates carry NO hardcoded sender identity (#99): the
+    sender's name/program/discipline come from the ``voice_doc`` (the authored
+    source of truth, also handed to the drafter), and the ``[[SCHOOL]]``
+    placeholder is filled from the active profile's ``school_name`` so a custom
+    profile's alumni tactic references its own school (default "UIUC" — the
+    default profile renders unchanged).
     """
     template_map = {
         Persona.RECRUITER: "recruiter.md",
@@ -151,14 +157,18 @@ def _load_persona_template(persona: Persona) -> str:
     }
     filename = template_map.get(persona, "peer_engineer.md")
     profile = load_profile()
+    text: str | None = None
     if profile.templates_dir:
         custom = Path(profile.templates_dir).expanduser() / filename
         if custom.exists():
-            return custom.read_text(encoding="utf-8")
-    path = _PERSONA_TEMPLATE_DIR / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8")
-    return f"Write outreach messages as {profile.fallback_identity}."
+            text = custom.read_text(encoding="utf-8")
+    if text is None:
+        path = _PERSONA_TEMPLATE_DIR / filename
+        if path.exists():
+            text = path.read_text(encoding="utf-8")
+    if text is None:
+        return f"Write outreach messages as {profile.fallback_identity}."
+    return text.replace("[[SCHOOL]]", profile.school_name)
 
 
 def _load_voice_doc() -> str:
