@@ -436,9 +436,32 @@ class TestProfileWiring:
         assert drafter_module._load_persona_template(Persona.PEER_ENGINEER) == (
             "CUSTOM PEER TEMPLATE"
         )
-        # A persona file the custom dir lacks falls back to the built-in.
+        # A persona file the custom dir lacks falls back to the built-in, with
+        # [[SCHOOL]] filled from the profile (default school → "UIUC").
         alumni = drafter_module._load_persona_template(Persona.ALUMNI)
-        assert "UIUC" in alumni  # the built-in aerospace-voiced template
+        assert "UIUC" in alumni
+
+    def test_persona_templates_carry_no_hardcoded_identity(self, tmp_config):
+        """#99: the built-in templates leak no sender name or fixed discipline."""
+        import src.agents.drafter as drafter_module
+        from src.core.schemas import Persona
+
+        banned = ("Pathipaka", "Siddardth", "aerospace", "STEM OPT", "Illini", "MS in AE")
+        for persona in Persona:
+            text = drafter_module._load_persona_template(persona)
+            for token in banned:
+                assert token not in text, f"{persona} template leaks {token!r}"
+
+    def test_alumni_template_school_from_profile(self, tmp_config):
+        """#99: a custom profile's school flows into the alumni template."""
+        import src.agents.drafter as drafter_module
+        from src.core.schemas import Persona
+
+        (tmp_config / "profile.yaml").write_text("school_name: Georgia Tech\n", encoding="utf-8")
+        alumni = drafter_module._load_persona_template(Persona.ALUMNI)
+        assert "Georgia Tech" in alumni
+        assert "UIUC" not in alumni
+        assert "[[SCHOOL]]" not in alumni  # placeholder fully interpolated
 
     def test_alumni_ask_angle_school_from_profile(self, tmp_config):
         from src.agents.drafter import _alumni_ask_angles
