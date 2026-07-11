@@ -15,7 +15,7 @@ from src.core.config import HAIKU_MODEL, get_anthropic_client, load_config
 from src.core.db import get_connection, init_db, with_writer
 from src.core.profile import Profile, coerce_focus_label, focus_area_names, load_profile
 from src.core.schemas import ContactCandidate, EmailResult, Persona
-from src.core.slug import canonical_linkedin_url
+from src.core.slug import canonical_linkedin_url, slugify
 from src.providers.apify import ApifyProvider
 from src.providers.apollo import ApolloProvider
 from src.providers.base import SearchProvider
@@ -626,6 +626,20 @@ def _resolve_email(
     )
 
 
+def _employer_matches(employer: str, company_slug: str) -> bool:
+    """True if *employer* plausibly IS the target company (#97).
+
+    Normalizes both to slug-alphanumerics and checks either-way containment, so
+    "Caterpillar Inc." matches slug "caterpillar" while "Optunity Ltd" doesn't.
+    Lenient by design — the goal is to catch clear mismatches (people who've
+    moved on) without dropping real employees whose employer string is decorated
+    with a suffix.
+    """
+    e = slugify(employer).replace("-", "")
+    t = (company_slug or "").replace("-", "")
+    return bool(e) and bool(t) and (t in e or e in t)
+
+
 def ingest_contacts(
     candidates: list[ContactCandidate],
     company_id: int,
@@ -666,6 +680,23 @@ def ingest_contacts(
     # its monthly cap we skip it for the rest of the batch (Hunter → Apollo).
     email_state = {"hunter_exhausted": False, "apollo_exhausted": False}
     enriched: list[tuple[ContactCandidate, EmailResult]] = []
+
+    # #97: discovery is semantic, so it surfaces people who match the query but
+    # have left the target company. Drop any candidate whose KNOWN current
+    # employer doesn't match the target before we file them under it (and before
+    # spending an email lookup on them). Unknown employer (Serper, file imports)
+    # is never dropped — we only act on a clear mismatch.
+    on_company: list[ContactCandidate] = []
+    for candidate in candidates:
+        emp = candidate.current_employer
+        if emp and not _employer_matches(emp, company_slug):
+            _LOG.warning(
+                "ingest: dropping %s — current employer %r != target %r",
+                candidate.full_name, emp, company_slug,
+            )
+            continue
+        on_company.append(candidate)
+    candidates = on_company
 
     for candidate in candidates:
         email_result = _resolve_email(

@@ -26,6 +26,15 @@ Versioning: [Semantic Versioning](https://semver.org/)
   real coverage. It caught three cross-platform bugs now fixed (see below).
 
 ### Fixed
+- **Off-company candidates were filed under the target company (#97).** Semantic
+  discovery surfaces people who match the query but have since left the target;
+  `ingest` force-reslugged every candidate to the target, so the drafter then
+  addressed them as current employees (a factually wrong message). `_parse_item`
+  now captures the candidate's current employer (Apify `currentPosition.company
+  Name`), and `ingest_contacts` drops any candidate whose KNOWN current employer
+  doesn't match the target (lenient slug containment, so "Caterpillar Inc."
+  still matches "caterpillar"; unknown employers are never dropped). The host
+  `ingest` output reports `off_company_dropped` and each drop is logged.
 - **Discovery returned 0 contacts when `--location` was passed (#94).** Apify's
   `harvestapi` actor parses `searchQuery` as free text; appending a location
   string zeroed results and the `(A OR B OR C)` role clause diluted ranking to

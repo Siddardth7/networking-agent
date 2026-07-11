@@ -182,9 +182,12 @@ def run_ingest(args: argparse.Namespace) -> int:
     # Mirror find_contacts' terminal transition so the company advances NEW→FOUND.
     with with_writer() as conn:
         conn.execute("UPDATE companies SET state = 'FOUND' WHERE id = ?", (company_id,))
+    # #97: ingest_contacts drops candidates whose current employer != target;
+    # surface the count on stdout so the host user sees it without a log handler.
     print(json.dumps({
         "ingested": len(saved),
         "contacts": [c.full_name for c in saved],
+        "off_company_dropped": len(prepared) - len(saved),
     }))
     return 0
 
