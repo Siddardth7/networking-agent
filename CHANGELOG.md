@@ -26,6 +26,13 @@ Versioning: [Semantic Versioning](https://semver.org/)
   real coverage. It caught three cross-platform bugs now fixed (see below).
 
 ### Fixed
+- **Discovery returned 0 contacts when `--location` was passed (#94).** Apify's
+  `harvestapi` actor parses `searchQuery` as free text; appending a location
+  string zeroed results and the `(A OR B OR C)` role clause diluted ranking to
+  ~1 hit. `ApifyProvider.search_linkedin_profiles` now sends the plain company
+  as `searchQuery`, carries role breadth via the structured `currentJobTitles`
+  array, and biases geography via the structured `locations` field — so a
+  location-scoped run returns candidates instead of dead-ending at step 1.
 - **Host-token stdin CLIs crashed on a UTF-8 BOM from PowerShell pipes (#95).**
   Windows PowerShell prepends a UTF-8 BOM when piping to a native process, so
   every documented `… | nag …` call failed with `invalid JSON on stdin:
