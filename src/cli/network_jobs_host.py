@@ -40,6 +40,7 @@ from src.agents.applications import (
     upsert_application,
 )
 from src.agents.finder import _get_or_create_company
+from src.cli import read_stdin_text
 from src.core.db import init_db
 from src.core.errors import ProfileError
 from src.core.profile import load_profile, resolve_target_focus
@@ -101,7 +102,7 @@ def run_link(args: argparse.Namespace) -> int:
         print(json.dumps({"error": "missing job_id or slug"}))
         return 1
     try:
-        items = json.loads(sys.stdin.read())
+        items = json.loads(read_stdin_text())
     except json.JSONDecodeError as exc:
         print(json.dumps({"error": f"invalid JSON on stdin: {exc}"}))
         return 1

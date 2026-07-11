@@ -26,6 +26,13 @@ Versioning: [Semantic Versioning](https://semver.org/)
   real coverage. It caught three cross-platform bugs now fixed (see below).
 
 ### Fixed
+- **Host-token stdin CLIs crashed on a UTF-8 BOM from PowerShell pipes (#95).**
+  Windows PowerShell prepends a UTF-8 BOM when piping to a native process, so
+  every documented `… | nag …` call failed with `invalid JSON on stdin:
+  Unexpected UTF-8 BOM`. All six stdin-reading bridges (`network_classify_host`,
+  `network_draft_host`, `network_critic_host`, `network_setup_host`,
+  `network_jobs_host`, `network_nextmove_host`) now read through a shared
+  `src.cli.read_stdin_text()` helper that strips a leading BOM.
 - **`/network-status` crashed on a cold database.** It queried the `companies`
   table via `get_connection()` without ensuring migrations had run, so a fresh
   user running it before `/network-setup` hit `no such table: companies`.
