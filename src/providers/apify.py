@@ -75,6 +75,10 @@ def _parse_item(item: dict, company_slug: str) -> ContactCandidate | None:
     url = (item.get("linkedinUrl") or item.get("profileUrl") or "").strip() or None
     about = (item.get("about") or item.get("summary") or "").strip() or None
     location = _nested_str(item, "location", "linkedinText")
+    # The person's CURRENT employer (currentPosition.companyName in Full mode /
+    # currentPositions[0].companyName in Short). #97: lets ingest drop people the
+    # semantic search matched who have since left the target company.
+    current_employer = _pos_field(item, "companyName")
 
     return ContactCandidate(
         full_name=full_name,
@@ -83,6 +87,7 @@ def _parse_item(item: dict, company_slug: str) -> ContactCandidate | None:
         company_slug=company_slug,
         snippet=about,
         location=location,
+        current_employer=current_employer,
     )
 
 

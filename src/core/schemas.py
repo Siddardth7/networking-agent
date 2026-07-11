@@ -150,6 +150,12 @@ class ContactCandidate(BaseModel):
     #   generates one via _generate_hook. `location`: campaign/site context.
     hook: str | None = None
     location: str | None = None
+    # The candidate's CURRENT employer as reported by the source (e.g. Apify's
+    # currentPosition.companyName). Discovery is semantic, so it surfaces people
+    # who match the query but have moved on; `ingest_contacts` uses this to drop
+    # candidates whose current employer != the target company instead of filing
+    # them under it (issue #97). None = unknown → not dropped (e.g. Serper).
+    current_employer: str | None = None
     # Producer-supplied campaign/provenance signals (Cowork+Chrome producer,
     # docs/CHROME_PRODUCER_CONTRACT.md). All optional and recorded in
     # shared_signals for the reviewer. `alumni_confirmed` (sourced via the
