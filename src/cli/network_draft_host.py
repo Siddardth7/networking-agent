@@ -22,6 +22,7 @@ import json
 import sys
 
 from src.agents.drafter import build_draft_context, save_host_draft
+from src.cli import read_stdin_text
 from src.core.schemas import Channel
 
 __all__ = ["run_draft_host"]
@@ -72,7 +73,7 @@ def run_draft_host(args: argparse.Namespace) -> int:
     if args.verb == "context":
         return run_context(args.contact_id, args.channel, getattr(args, "job_id", None))
     # save: body comes from --body or, by default, stdin (safe for newlines).
-    body = args.body if args.body is not None else sys.stdin.read()
+    body = args.body if args.body is not None else read_stdin_text()
     return run_save(args.contact_id, args.channel, body, args.subject)
 
 

@@ -21,6 +21,7 @@ import json
 import sys
 
 from src.agents.drafter import build_next_move_context, gate_host_text
+from src.cli import read_stdin_text
 from src.core.schemas import Channel, NextMove
 
 __all__ = ["run_nextmove_host"]
@@ -77,7 +78,7 @@ def run_nextmove_host(args: argparse.Namespace) -> int:
     """Dispatch the ``context`` / ``gate`` verbs."""
     if args.verb == "context":
         return run_context(args)
-    body = args.body if args.body is not None else sys.stdin.read()
+    body = args.body if args.body is not None else read_stdin_text()
     return run_gate(args.channel, body)
 
 

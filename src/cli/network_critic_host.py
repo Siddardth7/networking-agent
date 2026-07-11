@@ -29,6 +29,7 @@ import sys
 
 from src.agents.critic import apply_critique, build_critique_context
 from src.agents.drafter import build_draft_context
+from src.cli import read_stdin_text
 from src.core.db import get_connection, init_db, with_writer
 from src.core.schemas import Channel
 
@@ -116,7 +117,7 @@ def run_critic_host(args: argparse.Namespace) -> int:
     init_db()  # idempotent — safe if invoked before the DB was otherwise created
     if args.verb == "context":
         return run_context(args.draft_id)
-    scores = args.scores if args.scores is not None else sys.stdin.read()
+    scores = args.scores if args.scores is not None else read_stdin_text()
     return run_apply(args.draft_id, scores)
 
 

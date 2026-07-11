@@ -37,6 +37,7 @@ import yaml
 from pydantic import ValidationError
 
 from src.agents.achievement_matcher import ResumeLibrary
+from src.cli import read_stdin_text
 from src.core.config import (
     _resolve_config_path,
     resume_library_path,
@@ -233,7 +234,7 @@ def _backup(path: Path) -> str | None:
 def run_write(args: argparse.Namespace) -> int:
     """Validate stdin content for *target*, back up any existing file, write."""
     path_fn, validate = _WRITE_TARGETS[args.target]
-    content = sys.stdin.read()
+    content = read_stdin_text()
     error, warnings = validate(content)
     if error is not None:
         print(json.dumps({"error": error}))

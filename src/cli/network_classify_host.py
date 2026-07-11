@@ -42,6 +42,7 @@ from src.agents.finder import (
     build_email_providers,
     ingest_contacts,
 )
+from src.cli import read_stdin_text
 from src.core.config import load_config
 from src.core.db import init_db, with_writer
 from src.core.schemas import ContactCandidate
@@ -136,7 +137,7 @@ def run_ingest(args: argparse.Namespace) -> int:
         print(json.dumps({"error": "missing slug"}))
         return 1
     try:
-        items = json.loads(sys.stdin.read())
+        items = json.loads(read_stdin_text())
     except json.JSONDecodeError as exc:
         print(json.dumps({"error": f"invalid JSON on stdin: {exc}"}))
         return 1
