@@ -12,6 +12,8 @@ the QuotaManager ("apify") is the coarse $-budget guard.
 
 from __future__ import annotations
 
+import logging
+
 import httpx
 
 from src.core.schemas import ContactCandidate
@@ -21,6 +23,8 @@ from src.providers.quota_manager import QuotaManager
 from src.providers.retry import with_retry
 
 __all__ = ["ApifyProvider"]
+
+_LOG = logging.getLogger("networking_agent.apify")
 
 # Tilde form of the Actor id for the REST path (username~actor-name).
 _APIFY_ACTOR = "harvestapi~linkedin-profile-search"
@@ -174,6 +178,13 @@ class ApifyProvider(SearchProvider):
 
         response = with_retry(_do_request)
         items = response.json()
+        # #96: surface the exact query sent + raw item count so a 0-result run
+        # shows *what* was searched, not just an empty list.
+        _LOG.info(
+            "apify: searchQuery=%r currentJobTitles=%r locations=%r → %d items",
+            body["searchQuery"], body.get("currentJobTitles"), body.get("locations"),
+            len(items) if isinstance(items, list) else 0,
+        )
         if not isinstance(items, list):
             return []
 
